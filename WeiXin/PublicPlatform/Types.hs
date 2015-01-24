@@ -1,6 +1,7 @@
 module WeiXin.PublicPlatform.Types where
 
 import ClassyPrelude
+import Data.SafeCopy
 
 
 newtype Token = Token { unToken :: Text }
@@ -16,7 +17,8 @@ newtype Nonce = Nonce { unNounce :: Text }
                     deriving (Show, Eq)
 
 newtype AccessToken = AccessToken { unAccessToken :: Text }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, Typeable)
+$(deriveSafeCopy 0 'base ''AccessToken)
 
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }

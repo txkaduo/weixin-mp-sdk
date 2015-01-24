@@ -19,9 +19,11 @@ library
   exposed-modules:     WeiXin.PublicPlatform.Error
                        WeiXin.PublicPlatform.Types
                        WeiXin.PublicPlatform.WS
+                       WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Data
+                       WeiXin.PublicPlatform.BgWork
 
   -- other-modules:       
   default-extensions:  NoImplicitPrelude
@@ -49,6 +51,12 @@ library
                      , exceptions
                      , http-client
                      , monad-logger
+                     , safecopy
+                     , acid-state
+                     , data-default
+                     , mtl
+                     , async
+                     , time
 
 
   -- hs-source-dirs:      

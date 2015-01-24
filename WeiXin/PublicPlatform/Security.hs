@@ -31,7 +31,7 @@ instance FromJSON AccessTokenResp where
 
 
 -- | Refresh/update access token from WeiXin server.
--- May throw: HttpException, WxppWsError, JSONError
+-- May throw: WxppWsCallError
 refreshAccessToken ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     WxppAppConfig -> m AccessTokenResp
@@ -41,9 +41,7 @@ refreshAccessToken wac = do
                         & param "appid" .~ [ unWxppAppID app_id ]
                         & param "secret" .~ [ unWxppAppSecret app_secret ]
     atk <- (liftIO $ getWith opts url)
-                >>= asWxppWsResponseNormal
-                >>= either throwM return
-                >>= return . view responseBody
+                >>= asWxppWsResponseNormal'
     $(logDebugS) wxppLogSource $ "access token has been refreshed."
     return atk
     where
