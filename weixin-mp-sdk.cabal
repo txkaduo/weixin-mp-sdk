@@ -17,6 +17,8 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
+                       WeiXin.PublicPlatform.Types
+                       WeiXin.PublicPlatform.WS
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Data
@@ -37,11 +39,20 @@ library
                      , yesod
                      , yesod-helpers >= 0.7.2
                      , text
+                     , aeson
                      , bytestring
                      , cryptohash
                      , base64-bytestring
                      , base16-bytestring
+                     , wreq
+                     , lens
+                     , exceptions
+                     , http-client
+                     , monad-logger
+
 
   -- hs-source-dirs:      
   default-language:    Haskell2010
+
+  ghc-options:         -Wall
 

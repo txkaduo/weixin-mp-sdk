@@ -1,6 +1,5 @@
 module WeiXin.PublicPlatform.Yesod.Site.Data where
 
-import ClassyPrelude
 import Yesod
 
 import WeiXin.PublicPlatform.Security

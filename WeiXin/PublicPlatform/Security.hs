@@ -1,19 +1,51 @@
-module WeiXin.PublicPlatform.Security where
+module WeiXin.PublicPlatform.Security
+    ( module WeiXin.PublicPlatform.Security
+    , module WeiXin.PublicPlatform.Types
+    ) where
 
 import ClassyPrelude
+import Network.Wreq
+import Control.Lens
 import qualified Crypto.Hash.SHA1           as SHA1
-import qualified Data.Text                  as T
-import Data.ByteString                      (ByteString)
+import Data.Aeson                           ( FromJSON(..)
+                                            , withObject, (.:))
+import Control.Monad.Logger                 (MonadLogger, logDebugS)
 
+import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.WS
 
-newtype Token = Token { unToken :: Text }
-
-newtype AesKey = AesKey { unAesKey :: ByteString }
-
-newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
-
-newtype Nonce = Nonce { unNounce :: Text }
 
 wxppSignature :: Token -> TimeStampS -> Nonce -> Text -> ByteString
 wxppSignature (Token token) (TimeStampS tt) (Nonce nn) msg =
     SHA1.hash $ encodeUtf8 $ mconcat $ sort [tt, nn, token, msg]
+
+data AccessTokenResp = AccessTokenResp
+                            AccessToken
+                            Int
+
+instance FromJSON AccessTokenResp where
+    parseJSON = withObject "AccessTokenResp" $ \obj -> do
+                    atk <- fmap AccessToken $ obj .: "access_token"
+                    expiry <- obj .: "expires_in"
+                    return $ AccessTokenResp atk expiry
+
+
+-- | Refresh/update access token from WeiXin server.
+-- May throw: HttpException, WxppWsError, JSONError
+refreshAccessToken ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    WxppAppConfig -> m AccessTokenResp
+refreshAccessToken wac = do
+    let url = wxppRemoteApiBaseUrl <> "/token"
+        opts = defaults & param "grant_type" .~ [ "client_credential" ]
+                        & param "appid" .~ [ unWxppAppID app_id ]
+                        & param "secret" .~ [ unWxppAppSecret app_secret ]
+    atk <- (liftIO $ getWith opts url)
+                >>= asWxppWsResponseNormal
+                >>= either throwM return
+                >>= return . view responseBody
+    $(logDebugS) wxppLogSource $ "access token has been refreshed."
+    return atk
+    where
+        app_id      = wxppConfigAppID wac
+        app_secret  = wxppConfigAppSecret wac

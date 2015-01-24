@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 module WeiXin.PublicPlatform.Yesod.Site
     ( module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
@@ -22,7 +23,7 @@ getSubHomeR = do
 
     let token = wxppSubToken foundation
 
-        check_sign token (tt, nn, sign) =
+        check_sign (tt, nn, sign) =
             if B16.encode sign0 == encodeUtf8 ( T.toLower sign )
                 then Right ()
                 else Left $ "invalid signature"
@@ -36,7 +37,7 @@ getSubHomeR = do
         nn <- liftM (fmap Nonce) $ reqGetParamE' "nonce"
         es <- reqGetParamE' "echostr"
         let dat = (,,) <$> tt <*> nn <*> sign
-            res = dat >>= paramErrorFromEither "signature" . check_sign token
+            res = dat >>= paramErrorFromEither "signature" . check_sign
         return $ res *> es
 
 
