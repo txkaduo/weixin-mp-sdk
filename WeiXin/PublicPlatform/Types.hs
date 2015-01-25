@@ -2,13 +2,18 @@ module WeiXin.PublicPlatform.Types where
 
 import ClassyPrelude
 import Data.SafeCopy
+import Data.Aeson
+import qualified Data.ByteString.Base64     as B64
+import qualified Data.ByteString.Char8      as C8
 
 
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq)
 
 newtype AesKey = AesKey { unAesKey :: ByteString }
-                    deriving (Show, Eq)
+                    deriving (Eq)
+instance Show AesKey where
+    show (AesKey bs) = "AesKey:" <> (C8.unpack $ B64.encode bs)
 
 newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
                     deriving (Show, Eq)
