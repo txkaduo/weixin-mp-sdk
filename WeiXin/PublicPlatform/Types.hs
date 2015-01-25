@@ -5,6 +5,8 @@ import Data.SafeCopy
 import Data.Aeson
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
+import Data.Byteable                        (toBytes)
+import Crypto.Cipher                        (AES256, makeKey, Key)
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 
@@ -12,14 +14,17 @@ import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq)
 
-newtype AesKey = AesKey { unAesKey :: ByteString }
+newtype AesKey = AesKey { unAesKey :: Key AES256 }
                     deriving (Eq)
 instance Show AesKey where
-    show (AesKey bs) = "AesKey:" <> (C8.unpack $ B64.encode bs)
+    show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
 
 instance FromJSON AesKey where
     parseJSON = fmap AesKey .
-                    (withText "AesKey" $ parseBase64ByteString "AesKey")
+                    (withText "AesKey" $ \t -> do
+                        bs <- parseBase64ByteString "AesKey" t
+                        either (fail . show) return $ makeKey bs
+                    )
 
 newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
                     deriving (Show, Eq)

@@ -57,6 +57,8 @@ library
                      , mtl
                      , async
                      , time
+                     , cryptocipher
+                     , byteable
 
 
   -- hs-source-dirs:      
