@@ -6,6 +6,8 @@ import Data.Aeson
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 
+import Yesod.Helpers.Aeson                  (parseBase64ByteString)
+
 
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq)
@@ -35,8 +37,20 @@ newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
 data WxppAppConfig = WxppAppConfig {
                     wxppConfigAppID         :: WxppAppID
                     , wxppConfigAppSecret   :: WxppAppSecret
+                    , wxppConfigAppToken    :: Token
+                    , wxppConfigAppAesKey   :: AesKey
                     }
                     deriving (Show, Eq)
+
+instance FromJSON WxppAppConfig where
+    parseJSON = withObject "WxppAppConfig" $ \obj -> do
+                    app_id <- fmap WxppAppID $ obj .: "app-id"
+                    secret <- fmap WxppAppSecret $ obj .: "secret"
+                    token <- fmap Token $ obj .: "token"
+                    aes_key <- fmap AesKey $
+                                obj .: "aes-key"
+                                    >>= parseBase64ByteString "AesKey"
+                    return $ WxppAppConfig app_id secret token aes_key
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
