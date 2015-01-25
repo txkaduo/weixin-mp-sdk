@@ -6,6 +6,7 @@ module WeiXin.PublicPlatform.Security
 import ClassyPrelude
 import Network.Wreq
 import Control.Lens
+import qualified Data.ByteString            as B
 import qualified Crypto.Hash.SHA1           as SHA1
 import Data.Aeson                           ( FromJSON(..)
                                             , withObject, (.:))
@@ -47,3 +48,25 @@ refreshAccessToken wac = do
     where
         app_id      = wxppConfigAppID wac
         app_secret  = wxppConfigAppSecret wac
+
+
+pkcs7PaddingEncode :: Int -> ByteString -> ByteString
+pkcs7PaddingEncode blk_size bs =
+    if pad_num <= 0
+        then bs
+        else bs <> (replicate pad_num $ fromIntegral pad_num)
+    where
+        blen    = length bs
+        pad_num = blen `rem` blk_size
+
+
+pkcs7PaddingDecode :: Int -> ByteString -> ByteString
+pkcs7PaddingDecode blk_size bs =
+    if null bs
+        then bs
+        else
+            let pad_num = fromIntegral $ B.last bs
+                pad_num' = if pad_num < 1 || pad_num > blk_size
+                                then 0
+                                else pad_num
+            in flip take bs $ length bs - pad_num'
