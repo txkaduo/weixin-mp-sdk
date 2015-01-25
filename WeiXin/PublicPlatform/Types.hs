@@ -17,6 +17,10 @@ newtype AesKey = AesKey { unAesKey :: ByteString }
 instance Show AesKey where
     show (AesKey bs) = "AesKey:" <> (C8.unpack $ B64.encode bs)
 
+instance FromJSON AesKey where
+    parseJSON = fmap AesKey .
+                    (withText "AesKey" $ parseBase64ByteString "AesKey")
+
 newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
                     deriving (Show, Eq)
 
@@ -39,6 +43,10 @@ data WxppAppConfig = WxppAppConfig {
                     , wxppConfigAppSecret   :: WxppAppSecret
                     , wxppConfigAppToken    :: Token
                     , wxppConfigAppAesKey   :: AesKey
+                    , wxppConfigAppBackupAesKeys  :: [AesKey]
+                        -- ^ 多个 aes key 是为了过渡时使用
+                        -- 加密时仅使用第一个
+                        -- 解密时则则所有都试一次
                     }
                     deriving (Show, Eq)
 
@@ -47,10 +55,13 @@ instance FromJSON WxppAppConfig where
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     token <- fmap Token $ obj .: "token"
-                    aes_key <- fmap AesKey $
-                                obj .: "aes-key"
-                                    >>= parseBase64ByteString "AesKey"
-                    return $ WxppAppConfig app_id secret token aes_key
+                    aes_key_lst <- obj .: "aes-key"
+                    case aes_key_lst of
+                        []      -> fail $ "At least one AesKey is required"
+                        (x:xs)  ->
+                            return $ WxppAppConfig app_id secret token
+                                        x
+                                        xs
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
