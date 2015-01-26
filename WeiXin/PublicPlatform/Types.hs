@@ -6,7 +6,8 @@ import Data.Aeson
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import Data.Byteable                        (toBytes)
-import Crypto.Cipher                        (AES256, makeKey, Key)
+import Crypto.Cipher                        (makeKey, Key)
+import Crypto.Cipher.AES                    (AES)
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 
@@ -14,7 +15,7 @@ import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq)
 
-newtype AesKey = AesKey { unAesKey :: Key AES256 }
+newtype AesKey = AesKey { unAesKey :: Key AES }
                     deriving (Eq)
 instance Show AesKey where
     show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)

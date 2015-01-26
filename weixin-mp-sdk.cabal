@@ -58,7 +58,11 @@ library
                      , async
                      , time
                      , cryptocipher
+                     , cipher-aes
                      , byteable
+                     , random
+                     , attoparsec
+                     , transformers
 
 
   -- hs-source-dirs:      
@@ -66,3 +70,26 @@ library
 
   ghc-options:         -Wall
 
+
+test-suite test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      tests
+  main-is:             test.hs
+  ghc-options:         -Wall
+  build-depends:       base
+                     , weixin-mp-sdk
+                     , classy-prelude
+                     , bytestring
+                     , cryptocipher
+                     , base64-bytestring
+
+  default-language:    Haskell2010
+
+  default-extensions:  NoImplicitPrelude
+                       DeriveDataTypeable
+                       OverloadedStrings
+                       QuasiQuotes
+                       TemplateHaskell
+                       TypeFamilies
+                       FlexibleInstances
+                       MultiParamTypeClasses
