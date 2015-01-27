@@ -42,7 +42,7 @@ testLikeJava = do
                 putStrLn afterAesEncrypt
                 exitFailure
 
-            dec_res <- wxppDecrypt appId aes_key encrypted
+            let dec_res = wxppDecrypt appId aes_key encrypted
             case dec_res of
                 Left err -> do
                     putStrLn $ "failed to wxppDecrypt: "
@@ -60,14 +60,14 @@ testLikeJava = do
                                 <> fromString err
                     exitFailure
         Right bs -> do
-            dec_res <- wxppDecrypt appId aes_key bs
+            let dec_res = wxppDecrypt appId aes_key bs
             case dec_res of
                 Left err -> do
                     putStrLn $ "failed to wxppDecrypt: " <> fromString err
                     exitFailure
                 Right msg_bs -> do
                     putStrLn $ decodeUtf8 msg_bs
-                    case wxppInMsgEntityFromLbsA $ LB.fromStrict msg_bs of
+                    case wxppInMsgEntityFromLbs $ LB.fromStrict msg_bs of
                         Left err -> do
                             putStrLn $ "failed to wxppMessageNoticeFromLbsA: " <> fromString err
                             exitFailure
