@@ -8,12 +8,7 @@ import WeiXin.PublicPlatform.Security
 data WxppSub = WxppSub {
                 wxppSubAppConfig    :: WxppAppConfig
                     -- ^ 所有配置信息
-                , wxppSubMsgHandler :: WxppAppConfig
-                                        -> WxppInMsgEntity
-                                        -> IO (Either String (Maybe WxppOutMsg))
-                    -- ^ 响应收到的服务器信息
-                    -- Left 用于表达错误
-                    -- Right Nothing 代表无需回复一个新信息
+                , wxppSubMsgHandler :: WxppInMsgHandler IO
                 }
 
 instance Show WxppSub where

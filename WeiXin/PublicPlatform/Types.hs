@@ -147,5 +147,12 @@ data WxppOutMsgEntity = WxppOutMsgEntity
                         deriving (Show, Eq)
 
 
+-- | 响应收到的服务器信息
+-- Left 用于表达错误
+-- Right Nothing 代表无需回复一个新信息
+type WxppInMsgHandler m = WxppAppConfig
+                            -> WxppInMsgEntity
+                            -> m (Either String (Maybe WxppOutMsg))
+
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
