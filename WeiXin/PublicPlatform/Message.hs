@@ -7,12 +7,14 @@ import qualified Data.ByteString.Base64     as B64
 import Text.XML
 import Text.XML.Cursor
 import Text.Hamlet.XML
+import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
 import Data.Time                            (NominalDiffTime)
 import Numeric                              (readDec, readFloat)
 
 import qualified Data.Text                  as T
+import qualified Data.Text.Lazy             as LT
 import WeiXin.PublicPlatform.Security
 
 
@@ -50,6 +52,40 @@ wxppInMsgEntityFromDocumentE app_id ak doc = do
         cursor = fromDocument doc
         decrypt t = (B64.decode $ encodeUtf8 t)
                             >>= wxppDecrypt app_id ak
+
+-- | call wxppInMsgEntityFromDocumentE with each of the AesKey
+wxppInMsgEntityFromDocumentET ::
+    WxppAppID
+    -> [AesKey]
+    -> Document
+    -> Either String (Maybe WxppInMsgEntity)
+        -- ^ 如果全部失败，取第一个错误
+        -- 如果有一个成功就直接返回成功
+        -- 如果失败、成功都没有（只出现在 AesKey 列表为空的情况）
+        -- 则为 Right Nothing
+wxppInMsgEntityFromDocumentET app_id ak_list doc =
+    case (fails, dones) of
+        ([],        []      )   -> Right Nothing
+        (_ ,        (done:_))   -> Right $ Just done
+        ((err:_),   _       )   -> Left err
+    where
+        (fails, dones) = partitionEithers $ flip map ak_list $
+                            \ak -> wxppInMsgEntityFromDocumentE app_id ak doc
+
+wxppInMsgEntityFromLbsET ::
+    WxppAppID
+    -> [AesKey]
+    -> LB.ByteString
+    -> Either String (Maybe WxppInMsgEntity)
+        -- ^ 如果全部失败，取第一个错误
+        -- 如果有一个成功就直接返回成功
+        -- 如果失败、成功都没有（只出现在 AesKey 列表为空的情况）
+        -- 则为 Right Nothing
+wxppInMsgEntityFromLbsET app_id ak_list lbs =
+    case parseLBS def lbs of
+        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Right doc   -> wxppInMsgEntityFromDocumentET app_id ak_list doc
+
 
 -- | get message from 'Encrypt' element if it exists,
 -- otherwise use wxppInMsgEntityFromDocument directly
@@ -209,10 +245,28 @@ wxppEventFromDocument doc = do
         cursor = fromDocument doc
 
 
+-- | 外发信息对应的未加密xml
 wxppOutMsgEntityToDocument :: WxppOutMsgEntity -> Document
 wxppOutMsgEntityToDocument me = Document (Prologue [] Nothing []) root []
     where
         root = wxppOutMsgEntityToElement me
+
+-- | 外发信息对应的加密xml
+wxppOutMsgEntityToDocumentE :: MonadIO m =>
+    WxppAppID
+    -> AesKey
+    -> WxppOutMsgEntity -> m (Either String Document)
+wxppOutMsgEntityToDocumentE app_id ak me = runExceptT $ do
+    encrypted_xml <- ExceptT $ wxppEncryptText app_id ak $
+                        LT.toStrict $ renderText def plain_xml
+    let root = Element "xml" mempty root_nodes
+        root_nodes = [xml|
+<ToUserName>#{unWxppOpenID $ wxppOutToUserName me}
+<Encrypt>#{encrypted_xml}
+|]
+    return $ Document (Prologue [] Nothing []) root []
+    where
+        plain_xml = wxppOutMsgEntityToDocument me
 
 wxppOutMsgEntityToElement :: WxppOutMsgEntity -> Element
 wxppOutMsgEntityToElement me = Element "xml" mempty $ common_nodes <> msg_nodes
