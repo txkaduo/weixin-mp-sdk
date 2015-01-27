@@ -20,8 +20,8 @@ import Data.Aeson                           ( FromJSON(..)
 import Crypto.Cipher                        ( makeIV, IV, cbcEncrypt
                                             , cbcDecrypt, cipherInit)
 import Crypto.Cipher.AES                    (AES)
-import Control.Monad.Logger                 (MonadLogger, logErrorS, logDebugS)
-import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
+import Control.Monad.Logger
+import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import System.Random                        (randomIO)
 import Data.Byteable                        (toBytes)
 import qualified Data.Attoparsec.ByteString as AttoB
