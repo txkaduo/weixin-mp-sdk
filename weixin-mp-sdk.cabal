@@ -65,6 +65,7 @@ library
                      , random
                      , attoparsec
                      , transformers
+                     , transformers-compat
                      , xml-conduit
                      , xml-hamlet
                      , wai

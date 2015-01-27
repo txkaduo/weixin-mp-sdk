@@ -8,7 +8,7 @@ import ClassyPrelude
 import Yesod
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
-import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
+import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , reqGetParamE'
                                             , paramErrorFromEither
@@ -94,12 +94,12 @@ postSubHomeR = do
                 my_name         = wxppInToUserName me
 
             err_or_resp <- runExceptT $ do
-                m_out_msg <-
+                m_out_msg <- ExceptT $
                         (try $ liftIO $ handle_msg app_config me)
-                            >>= either
-                                    (throwE . (show :: SomeException -> String))
-                                    return
-                            >>= either throwE return
+                            >>= return
+                                    . either
+                                        (Left . (show :: SomeException -> String))
+                                        id
 
                 fmap (fromMaybe "") $ forM m_out_msg $ \out_msg -> do
                     now <- liftIO getCurrentTime
