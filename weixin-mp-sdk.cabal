@@ -21,6 +21,7 @@ library
                        WeiXin.PublicPlatform.WS
                        WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
+                       WeiXin.PublicPlatform.Message
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
@@ -63,6 +64,8 @@ library
                      , random
                      , attoparsec
                      , transformers
+                     , xml-conduit
+                     , xml-hamlet
 
 
   -- hs-source-dirs:      
@@ -82,6 +85,9 @@ test-suite test
                      , bytestring
                      , cryptocipher
                      , base64-bytestring
+                     , data-default
+                     , xml-conduit
+                     , text
 
   default-language:    Haskell2010
 

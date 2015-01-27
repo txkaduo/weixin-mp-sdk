@@ -1,0 +1,309 @@
+module WeiXin.PublicPlatform.Message where
+
+import ClassyPrelude hiding (Element)
+import qualified Data.ByteString.Lazy       as LB
+import qualified Data.ByteString.Base64     as B64
+
+import Text.XML
+import Text.XML.Cursor
+import Text.Hamlet.XML
+import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
+                                            , utcTimeToPOSIXSeconds)
+import Data.Time                            (NominalDiffTime)
+import Numeric                              (readDec, readFloat)
+
+import qualified Data.Text                  as T
+import WeiXin.PublicPlatform.Security
+
+
+wxppInMsgEntityFromLbs :: LB.ByteString -> Either String WxppInMsgEntity
+wxppInMsgEntityFromLbs bs =
+    case parseLBS def bs of
+        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Right doc   -> wxppInMsgEntityFromDocument doc
+
+
+wxppInMsgEntityFromLbsA ::
+    WxppAppID
+    -> AesKey
+    -> LB.ByteString
+    -> Either String WxppInMsgEntity
+wxppInMsgEntityFromLbsA app_id ak bs =
+    case parseLBS def bs of
+        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Right doc   -> wxppInMsgEntityFromDocumentA app_id ak doc
+
+
+-- | get message from 'Encrypt' element
+wxppInMsgEntityFromDocumentE ::
+    WxppAppID
+    -> AesKey
+    -> Document
+    -> Either String WxppInMsgEntity
+wxppInMsgEntityFromDocumentE app_id ak doc = do
+    decrypted_xml <- get_ele_s "Encrypt" >>= decrypt
+    case parseLBS def $ LB.fromStrict decrypted_xml of
+        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Right ndoc  -> wxppInMsgEntityFromDocument ndoc
+    where
+        get_ele_s = getElementContent cursor
+        cursor = fromDocument doc
+        decrypt t = (B64.decode $ encodeUtf8 t)
+                            >>= wxppDecrypt app_id ak
+
+-- | get message from 'Encrypt' element if it exists,
+-- otherwise use wxppInMsgEntityFromDocument directly
+wxppInMsgEntityFromDocumentA ::
+    WxppAppID
+    -> AesKey
+    -> Document -> Either String WxppInMsgEntity
+wxppInMsgEntityFromDocumentA app_id ak doc = do
+    case getElementContentMaybe cursor "Encrypt" of
+        Nothing             -> wxppInMsgEntityFromDocument doc
+        Just encrypted_xml  -> do
+            decrypted_xml <- decrypt encrypted_xml
+            case parseLBS def $ LB.fromStrict decrypted_xml of
+                Left ex     -> fail $ "Failed to parse XML: " <> show ex
+                Right ndoc  -> wxppInMsgEntityFromDocument ndoc
+    where
+        cursor = fromDocument doc
+        decrypt t = (B64.decode $ encodeUtf8 t)
+                            >>= wxppDecrypt app_id ak
+
+wxppInMsgEntityFromDocument :: Document -> Either String WxppInMsgEntity
+wxppInMsgEntityFromDocument doc = do
+    to_user <- get_ele_s "ToUserName"
+    from_user <- fmap WxppOpenID $ get_ele_s "FromUserName"
+    tt <- get_ele_s "CreateTime"
+                >>= maybe
+                        (fail $ "Failed to parse CreateTime")
+                        (return . posixSecondsToUTCTime
+                                . (realToFrac :: Int64 -> NominalDiffTime)
+                        )
+                    . simpleParseDecT
+    msg_id <- fmap WxppInMsgID $
+                get_ele_s "MsgId"
+                    >>= maybe (fail $ "Failed to parse MsgId") return
+                        . simpleParseDecT
+    msg <- wxppInMsgFromDocument doc
+    return $ WxppInMsgEntity to_user from_user tt msg_id msg
+    where
+        get_ele_s = getElementContent cursor
+        cursor = fromDocument doc
+
+
+wxppInMsgFromDocument :: Document -> Either String WxppInMsg
+wxppInMsgFromDocument doc = do
+    msg_type_s <- get_ele_s "MsgType"
+    case msg_type_s of
+
+        "text"  -> do
+                    ct <- get_ele_s "Content"
+                    return $ WxppInMsgText ct
+
+        "image" -> do
+                    url <- get_ele_s "PicUrl"
+                    media_id <- fmap WxppMediaID $ get_ele_s "MediaId"
+                    return $ WxppInMsgImage media_id url
+
+        "voice" -> do
+                    media_id <- fmap WxppMediaID $ get_ele_s "MediaId"
+                    format <- get_ele_s "Format"
+                    let reg = getElementContentMaybe cursor "Recognition"
+                    return $ WxppInMsgVoice media_id format reg
+
+        "video" -> do
+                    media_id <- fmap WxppMediaID $ get_ele_s "MediaId"
+                    thumb_media_id <- fmap WxppMediaID $ get_ele_s "ThumbMediaId"
+                    return $ WxppInMsgVideo media_id thumb_media_id
+
+        "location" -> do
+                    x <- get_ele_s "Location_X"
+                            >>= maybe (fail $ "Failed to parse Location_X") return
+                                . simpleParseFloatT
+                    y <- get_ele_s "Location_Y"
+                            >>= maybe (fail $ "Failed to parse Location_Y") return
+                                . simpleParseFloatT
+                    scale <- get_ele_s "Scale"
+                            >>= maybe (fail $ "Failed to parse Scale") return
+                                . simpleParseFloatT
+                    label <- get_ele_s "Label"
+                    return $ WxppInMsgLocation (x, y) scale label
+
+        "link"      -> do
+                    url <- get_ele_s "Url"
+                    title <- get_ele_s "Title"
+                    desc <- get_ele_s "Description"
+                    return $ WxppInMsgLink url title desc
+
+        "event"     -> fmap WxppInMsgEvent $ wxppEventFromDocument doc
+
+        _       -> fail $ T.unpack $
+                    "unknown/unsupported MsgType: " <> msg_type_s
+
+    where
+        get_ele_s = getElementContent cursor
+        cursor = fromDocument doc
+
+
+wxppEventFromDocument :: Document -> Either String WxppEvent
+wxppEventFromDocument doc = do
+    evt_type <- get_ele_s "Event"
+    case evt_type of
+        "subscribe" -> do
+            case getElementContentMaybe cursor "EventKey" of
+                Nothing     -> return $ WxppEvtSubscribe
+                Just ek_s   -> do
+                            let prefix = "qrscene_"
+                            ticket <- fmap QRTicket $ get_ele_s "Ticket"
+                            scene_id <- liftM WxppSceneID $
+                                if T.isPrefixOf prefix ek_s
+                                    then
+                                        maybe
+                                            (fail $ "Failed to parse scene id")
+                                            return
+                                            $ simpleParseDecT $
+                                                T.drop (length prefix) ek_s
+
+                                    else fail $ T.unpack $
+                                                "EventKey does not start with "
+                                                    <> prefix
+                            return $ WxppEvtSubscribeAtScene scene_id ticket
+
+        "unsubscribe" -> return $ WxppEvtUnsubscribe
+
+        "SCAN"      -> do
+                    scan_id <- fmap WxppSceneID $
+                            get_ele_s "EventKey"
+                                >>= maybe
+                                        (fail $ "Failed to parse EventKey")
+                                        return
+                                    . simpleParseDecT
+                    ticket <- fmap QRTicket $ get_ele_s "Ticket"
+                    return $ WxppEvtScan scan_id ticket
+
+        "LOCATION"  -> do
+                    latitude <- get_ele_s "Latitude"
+                            >>= maybe (fail $ "Failed to parse Latitude") return
+                                . simpleParseFloatT
+                    longitude <- get_ele_s "Longitude"
+                            >>= maybe (fail $ "Failed to parse Longitude") return
+                                . simpleParseFloatT
+                    prec <- get_ele_s "Precision"
+                            >>= maybe (fail $ "Failed to parse Precision") return
+                                . simpleParseFloatT
+                    return $ WxppEvtReportLocation (latitude, longitude) prec
+
+        "CLICK" -> do
+                    ek <- get_ele_s "EventKey"
+                    return $ WxppEvtClickItem ek
+        "VIEW"  -> do
+                    url <- get_ele_s "EventKey"
+                    return $ WxppEvtFollowUrl url
+
+        _       -> fail $ T.unpack $
+                    "unknown/unsupported Event type: " <> evt_type
+
+    where
+        get_ele_s = getElementContent cursor
+        cursor = fromDocument doc
+
+
+wxppOutMsgEntityToDocument :: WxppOutMsgEntity -> Document
+wxppOutMsgEntityToDocument me = Document (Prologue [] Nothing []) root []
+    where
+        root = wxppOutMsgEntityToElement me
+
+wxppOutMsgEntityToElement :: WxppOutMsgEntity -> Element
+wxppOutMsgEntityToElement me = Element "xml" mempty $ common_nodes <> msg_nodes
+    where
+        msg_nodes = wxppOutMsgToNodes $ wxppOutMessage me
+        common_nodes = [xml|
+<ToUserName>#{unWxppOpenID $ wxppOutToUserName me}
+<FromUserName>#{wxppOutFromUserName me}
+<CreateTime>#{fromString $ show $ utcTimeToEpochInt $ wxppOutCreatedTime me}
+|]
+
+-- | 外发信息对应的节点列表
+-- 不包含 CreateTime 之类的与特定信息无关的节点
+wxppOutMsgToNodes :: WxppOutMsg -> [Node]
+
+wxppOutMsgToNodes (WxppOutMsgText ct) = [xml|
+<MsgType>text
+<Content>#{ct}
+|]
+
+wxppOutMsgToNodes (WxppOutMsgImage (WxppMediaID media_id)) = [xml|
+<MsgType>image
+<MediaId>#{media_id}
+|]
+
+wxppOutMsgToNodes (WxppOutMsgVoice (WxppMediaID media_id)) = [xml|
+<MsgType>voice
+<MediaId>#{media_id}
+|]
+
+wxppOutMsgToNodes (WxppOutMsgVideo (WxppMediaID media_id) m_title m_desc) = [xml|
+<MsgType>video
+<MediaId>#{media_id}
+$maybe title <- m_title
+    <Title>#{title}
+$maybe desc <- m_desc
+    <Description>#{desc}
+|]
+
+wxppOutMsgToNodes (WxppOutMsgMusic (WxppMediaID media_id) m_title m_desc m_url m_hq_url) = [xml|
+<MsgType>music
+<ThumbMediaId>#{media_id}
+$maybe title <- m_title
+    <Title>#{title}
+$maybe desc <- m_desc
+    <Description>#{desc}
+$maybe url <- m_url
+    <MusicUrl>#{url}
+$maybe hq_url <- m_hq_url
+    <HQMusicUrl>#{hq_url}
+|]
+
+wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
+<MsgType>news
+<ArticleCount>#{T.pack $ show $ length articles}
+<Articles>
+    $forall article <- articles
+        <Item>
+            $maybe title <- wxppArticleTitle article
+                <Title>#{title}
+            $maybe desc <- wxppArticleDesc article
+                <Description>#{desc}
+            $maybe url <- wxppArticleUrl article
+                <Url>#{url}
+            $maybe pic_url <- wxppArticlePicUrl article
+                <PicUrl>#{pic_url}
+|]
+
+
+--------------------------------------------------------------------------------
+
+utcTimeToEpochInt :: UTCTime -> Int
+utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
+
+getElementContent :: Monad m => Cursor -> Name -> m Text
+getElementContent cursor t =
+    maybe (fail $ T.unpack $ "no such element: " <> nameLocalName t) return $
+        getElementContentMaybe cursor t
+
+getElementContentMaybe :: Cursor -> Name -> Maybe Text
+getElementContentMaybe cursor t =
+    listToMaybe $ cursor $/ element t &// content
+
+simpleParseDec :: (Eq a, Num a) => String -> Maybe a
+simpleParseDec = fmap fst . listToMaybe . filter ((== "") . snd) . readDec
+
+simpleParseDecT :: (Eq a, Num a) => Text -> Maybe a
+simpleParseDecT = simpleParseDec . T.unpack
+
+simpleParseFloat :: (Eq a, RealFrac a) => String -> Maybe a
+simpleParseFloat = fmap fst . listToMaybe . filter ((== "") . snd) . readFloat
+
+simpleParseFloatT :: (Eq a, RealFrac a) => Text -> Maybe a
+simpleParseFloatT = simpleParseFloat . T.unpack

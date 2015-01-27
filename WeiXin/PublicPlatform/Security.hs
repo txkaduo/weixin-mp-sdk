@@ -168,14 +168,14 @@ wxppDecryptInternal app_id (AesKey ak) iv encrypted =
         plain   = pkcs7PaddingDecode 32 $ cbcDecrypt ctx iv encrypted
 
 
-wxppDecrypt :: Monad m =>
+wxppDecrypt ::
     WxppAppID
     -> AesKey
     -> ByteString       -- ^ encrypted message
-    -> m (Either String ByteString)
-wxppDecrypt app_id ak encrypted = runExceptT $ do
-    iv <- maybe (throwE $ "cannot make IV") return $ makeIV iv_bs
-    ExceptT $ return $ wxppDecryptInternal app_id ak iv encrypted
+    -> Either String ByteString
+wxppDecrypt app_id ak encrypted = do
+    iv <- maybe (fail "cannot make IV") return $ makeIV iv_bs
+    wxppDecryptInternal app_id ak iv encrypted
     where
         -- 文档没有明确写，但示范代码就是使用 aes key的前16字节
         iv_bs = take 16 $ toBytes $ unAesKey ak

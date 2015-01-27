@@ -12,8 +12,23 @@ import Crypto.Cipher.AES                    (AES)
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 
 
+newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
+                        deriving (Show, Eq, Ord)
+
+newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
+                    deriving (Show, Eq, Ord)
+
+newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
+                    deriving (Show, Eq, Ord)
+
+newtype WxppSceneID = WxppSceneID { unWxppSceneID :: Word32 }
+                    deriving (Show, Eq, Ord)
+
+newtype QRTicket = QRTicket { unQRTicket :: Text }
+                    deriving (Show, Eq, Ord)
+
 newtype Token = Token { unToken :: Text }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, Ord)
 
 newtype AesKey = AesKey { unAesKey :: Key AES }
                     deriving (Eq)
@@ -68,6 +83,69 @@ instance FromJSON WxppAppConfig where
                             return $ WxppAppConfig app_id secret token
                                         x
                                         xs
+
+
+data WxppEvent = WxppEvtSubscribe
+                | WxppEvtUnsubscribe
+                | WxppEvtSubscribeAtScene WxppSceneID QRTicket
+                | WxppEvtScan WxppSceneID QRTicket
+                | WxppEvtReportLocation (Double, Double) Double
+                    -- ^ (纬度，经度） 精度
+                | WxppEvtClickItem Text
+                | WxppEvtFollowUrl Text
+                deriving (Show, Eq)
+
+data WxppInMsg =  WxppInMsgText Text
+                | WxppInMsgImage WxppMediaID Text
+                | WxppInMsgVoice WxppMediaID Text (Maybe Text)
+                | WxppInMsgVideo WxppMediaID WxppMediaID
+                | WxppInMsgLocation (Double, Double) Double Text
+                    -- ^ (latitude, longitude) scale label
+                | WxppInMsgLink Text Text Text
+                    -- ^ url title description
+                | WxppInMsgEvent WxppEvent
+                deriving (Show, Eq)
+
+
+data WxppInMsgEntity = WxppInMsgEntity
+                        {
+                            wxppInToUserName        :: Text
+                            , wxppInFromUserName    :: WxppOpenID
+                            , wxppInCreatedTime     :: UTCTime
+                            , wxppInMessageID       :: WxppInMsgID
+                            , wxppInMessage         :: WxppInMsg
+                        }
+                        deriving (Show, Eq)
+
+-- | 图文信息
+data WxppArticle = WxppArticle {
+                    wxppArticleTitle    :: Maybe Text    -- ^ title
+                    , wxppArticleDesc   :: Maybe Text    -- ^ description
+                    , wxppArticlePicUrl :: Maybe Text    -- ^ pic url
+                    , wxppArticleUrl    :: Maybe Text    -- ^ url
+                    }
+                    deriving (Show, Eq)
+
+data WxppOutMsg = WxppOutMsgText Text
+                | WxppOutMsgImage WxppMediaID
+                | WxppOutMsgVoice WxppMediaID
+                | WxppOutMsgVideo WxppMediaID (Maybe Text) (Maybe Text)
+                    -- ^ media_id title description
+                | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe Text) (Maybe Text)
+                    -- ^ thumb_media_id, title, description, url, hq_url
+                | WxppOutMsgArticle [WxppArticle]
+                    -- ^ 根据文档，图文总数不可超过10
+                        deriving (Show, Eq)
+
+data WxppOutMsgEntity = WxppOutMsgEntity
+                        {
+                            wxppOutToUserName       :: WxppOpenID
+                            , wxppOutFromUserName   :: Text
+                            , wxppOutCreatedTime    :: UTCTime
+                            , wxppOutMessage        :: WxppOutMsg
+                        }
+                        deriving (Show, Eq)
+
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"

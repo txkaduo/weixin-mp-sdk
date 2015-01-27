@@ -5,8 +5,13 @@ import Crypto.Cipher                        (makeKey)
 import System.Exit
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
+import qualified Data.ByteString.Lazy       as LB
+import Data.Default                         (def)
+import Text.XML                             (renderText)
+import qualified Data.Text.Lazy             as LT
 
 import WeiXin.PublicPlatform.Security
+import WeiXin.PublicPlatform.Message
 
 
 testLikeJava :: IO ()
@@ -48,16 +53,47 @@ testLikeJava = do
                         putStrLn $ "wxppDecrypt returns unexpected result"
                         putStrLn $ fromString $ C8.unpack $ B64.encode msg_bs
                         exitFailure
+
+    case B64.decode afterAesEncrypt2 of
+        Left err -> do
+                    putStrLn $ "failed to base64-decode afterAesEncrypt2: "
+                                <> fromString err
+                    exitFailure
+        Right bs -> do
+            dec_res <- wxppDecrypt appId aes_key bs
+            case dec_res of
+                Left err -> do
+                    putStrLn $ "failed to wxppDecrypt: " <> fromString err
+                    exitFailure
+                Right msg_bs -> do
+                    putStrLn $ decodeUtf8 msg_bs
+                    case wxppInMsgEntityFromLbsA $ LB.fromStrict msg_bs of
+                        Left err -> do
+                            putStrLn $ "failed to wxppMessageNoticeFromLbsA: " <> fromString err
+                            exitFailure
+                        Right mn -> do
+                            -- putStrLn $ decodeUtf8 msg_bs
+                            putStrLn $ fromString $ show mn
+
     where
         -- nonce = "xxxxxx"
         appId = WxppAppID "wxb11529c136998cb6"
         encodingAesKey = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
-        token = "pamtest"
+        -- token = "pamtest"
         randomStr = encodeUtf8 "aaaabbbbccccdddd"
         replyMsg = "我是中文abcd123"
         afterAesEncrypt = "jn1L23DB+6ELqJ+6bruv21Y6MD7KeIfP82D6gU39rmkgczbWwt5+3bnyg5K55bgVtVzd832WzZGMhkP72vVOfg=="
         afterAesEncrypt2 = "jn1L23DB+6ELqJ+6bruv23M2GmYfkv0xBh2h+XTBOKVKcgDFHle6gqcZ1cZrk3e1qjPQ1F4RsLWzQRG9udbKWesxlkupqcEcW7ZQweImX9+wLMa0GaUzpkycA8+IamDBxn5loLgZpnS7fVAbExOkK5DYHBmv5tptA9tklE/fTIILHR8HLXa5nQvFb3tYPKAlHF3rtTeayNf0QuM+UW/wM9enGIDIJHF7CLHiDNAYxr+r+OrJCmPQyTy8cVWlu9iSvOHPT/77bZqJucQHQ04sq7KZI27OcqpQNSto2OdHCoTccjggX5Z9Mma0nMJBU+jLKJ38YB1fBIz+vBzsYjrTmFQ44YfeEuZ+xRTQwr92vhA9OxchWVINGC50qE/6lmkwWTwGX9wtQpsJKhP+oS7rvTY8+VdzETdfakjkwQ5/Xka042OlUb1/slTwo4RscuQ+RdxSGvDahxAJ6+EAjLt9d8igHngxIbf6YyqqROxuxqIeIch3CssH/LqRs+iAcILvApYZckqmA7FNERspKA5f8GoJ9sv8xmGvZ9Yrf57cExWtnX8aCMMaBropU/1k+hKP5LVdzbWCG0hGwx/dQudYR/eXp3P0XxjlFiy+9DMlaFExWUZQDajPkdPrEeOwofJb"
 
+testMsgToXml :: IO ()
+testMsgToXml = do
+    let f = LT.toStrict . renderText def . wxppOutMsgEntityToDocument
+    now <- getCurrentTime
+    putStrLn $ f $ WxppOutMsgEntity (WxppOpenID "openID收") "一个人" now $
+                        WxppOutMsgText "中文\n<xml>"
+
+
 main :: IO ()
 main = do
+    testMsgToXml
     testLikeJava
