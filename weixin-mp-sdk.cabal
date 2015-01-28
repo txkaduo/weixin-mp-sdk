@@ -22,6 +22,7 @@ library
                        WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Message
+                       WeiXin.PublicPlatform.Menu
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork

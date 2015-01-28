@@ -3,7 +3,7 @@ module WeiXin.PublicPlatform.Types where
 import ClassyPrelude
 import Data.SafeCopy
 import Data.Aeson
-import Data.Aeson.Types                     (Parser)
+import Data.Aeson.Types                     (Parser, Pair)
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import Data.Byteable                        (toBytes)
@@ -170,6 +170,104 @@ class FromJsonHandler h => JsonWxppInMsgHandler m h where
 
 data SomeJsonWxppInMsgHandler m =
         forall h. JsonWxppInMsgHandler m h => SomeJsonWxppInMsgHandler h
+
+
+-- | 可以点击的菜单所携带的数据及菜单的类型
+-- 虽然看上去所有菜单都只有个文本作为数据，但概念上这些文本并不相同
+-- 例如，有时候它明确地就是一个 URL
+data MenuItemData = MenuItemDataClick Text
+                        -- ^ key
+                    | MenuItemDataView Text
+                        -- ^ url
+                    | MenuItemDataScanCode Text
+                        -- ^ key
+                    | MenuItemDataScanCodeWaitMsg Text
+                        -- ^ key
+                    | MenuItemDataPicSysPhoto Text
+                        -- ^ key
+                    | MenuItemDataPicPhotoOrAlbum Text
+                        -- ^ key
+                    | MenuItemDataPicWeiXin Text
+                        -- ^ key
+                    | MenuItemDataLocationSelect Text
+                        -- ^ key
+                    deriving (Show, Eq)
+
+
+menuItemDataToJsonPairs :: MenuItemData -> [Pair]
+menuItemDataToJsonPairs (MenuItemDataClick key) =
+                                [ "type"    .= ("click" :: Text)
+                                , "key"     .= key
+                                ]
+menuItemDataToJsonPairs (MenuItemDataView url) =
+                                [ "type"    .= ("view" :: Text)
+                                , "url"     .= url
+                                ]
+menuItemDataToJsonPairs (MenuItemDataScanCode key) =
+                                [ "type"    .= ("scancode_push" :: Text)
+                                , "key"     .= key
+                                ]
+menuItemDataToJsonPairs (MenuItemDataScanCodeWaitMsg key) =
+                                [ "type"    .= ("scancode_waitmsg" :: Text)
+                                , "key"     .= key
+                                ]
+menuItemDataToJsonPairs (MenuItemDataPicSysPhoto key) =
+                                [ "type"    .= ("pic_sysphoto" :: Text)
+                                , "key"     .= key
+                                ]
+menuItemDataToJsonPairs (MenuItemDataPicPhotoOrAlbum key) =
+                                [ "type"    .= ("pic_photo_or_album" :: Text)
+                                , "key"     .= key
+                                ]
+menuItemDataToJsonPairs (MenuItemDataPicWeiXin key) =
+                                [ "type"    .= ("pic_weixin" :: Text)
+                                , "key"     .= key
+                                ]
+menuItemDataToJsonPairs (MenuItemDataLocationSelect key) =
+                                [ "type"    .= ("location_select" :: Text)
+                                , "key"     .= key
+                                ]
+
+menuItemDataFromJsonObj :: Object -> Parser MenuItemData
+menuItemDataFromJsonObj obj = do
+    typ <- obj .: "type"
+    case typ of
+        "click"             -> fmap MenuItemDataClick $ obj .: "key"
+        "view"              -> fmap MenuItemDataView $ obj .: "url"
+        "scancode_push"     -> fmap MenuItemDataScanCode $ obj .: "key"
+        "scancode_waitmsg"  -> fmap MenuItemDataScanCodeWaitMsg $ obj .: "key"
+        "pic_sysphoto"      -> fmap MenuItemDataPicSysPhoto $ obj .: "key"
+        "pic_photo_or_album"-> fmap MenuItemDataPicPhotoOrAlbum $ obj .: "key"
+        "pic_weixin"        -> fmap MenuItemDataPicWeiXin $ obj .: "key"
+        "location_select"   -> fmap MenuItemDataLocationSelect $ obj .: "key"
+        _                   -> fail $ "unknown/unsupported menu type: " <> typ
+
+
+-- | 菜单项，及其子菜单
+data MenuItem = MenuItem {
+                    menuItemName             :: Text
+                    , menuItemDataOrSubs    :: Either MenuItemData [MenuItem]
+                }
+                deriving (Show, Eq)
+
+instance ToJSON MenuItem where
+    toJSON mi = object $
+                    [ "name" .= menuItemName mi ]
+                    ++
+                        either
+                            menuItemDataToJsonPairs
+                            (\items -> [("sub_button" .= map toJSON items)])
+                            (menuItemDataOrSubs mi)
+
+
+instance FromJSON MenuItem where
+    parseJSON = withObject "MenuItem" $ \obj -> do
+                    name <- obj .: "name"
+                    m_subs <- obj .:? "sub_button"
+                    dat_or_subs <- case m_subs of
+                        Just subs   -> return $ Right subs
+                        Nothing     -> fmap Left $ menuItemDataFromJsonObj obj
+                    return $ MenuItem name dat_or_subs
 
 
 wxppLogSource :: IsString a => a
