@@ -400,7 +400,9 @@ tryEveryInMsgByHandler handlers app_config ime = do
         (x:xs)  -> do
                     when (not $ null xs) $ do
                         -- 有多个 Just 结果，但服务器只能让我们回复一个信息
-                        -- 因此后面的信息会丢失
+                        -- 因此后面的信息会目前会丢失
+                        -- TODO：以后可以异步调用“客服接口”主动发消息给用户
+                        --       根据文档，这只能在 48 小时完成
                         $(logWarnS) wxppLogSource $ T.pack $
                             "more than one reply messages from handlers,"
                             <> " incoming MsgId=" <> (show $ wxppInMessageID ime)
