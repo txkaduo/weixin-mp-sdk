@@ -3,6 +3,7 @@ module WeiXin.PublicPlatform.Types where
 import ClassyPrelude
 import Data.SafeCopy
 import Data.Aeson
+import Data.Aeson.Types                     (Parser)
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import Data.Byteable                        (toBytes)
@@ -153,6 +154,23 @@ data WxppOutMsgEntity = WxppOutMsgEntity
 type WxppInMsgHandler m = WxppAppConfig
                             -> WxppInMsgEntity
                             -> m (Either String (Maybe WxppOutMsg))
+
+class FromJsonHandler h where
+    -- | 假定每个算法的配置段都有一个 name 的字段
+    -- 根据这个方法选择出一个指定算法类型，
+    -- 然后从 json 数据中反解出相应的值
+    isNameOfInMsgHandler :: Monad n => n h -> Text -> Bool
+
+    parseInMsgHandler :: Monad n => n h -> Object -> Parser h
+
+-- | WxppInMsgHandler that can be parsed from JSON value
+class FromJsonHandler h => JsonWxppInMsgHandler m h where
+    handleInMsg :: h -> WxppInMsgHandler m
+
+
+data SomeJsonWxppInMsgHandler m =
+        forall h. JsonWxppInMsgHandler m h => SomeJsonWxppInMsgHandler h
+
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
