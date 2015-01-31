@@ -13,9 +13,6 @@ import Control.Monad.Logger
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
-import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
-                                            , utcTimeToPOSIXSeconds)
-import Data.Time                            (NominalDiffTime)
 import Numeric                              (readDec, readFloat)
 
 import WeiXin.PublicPlatform.Security
@@ -116,9 +113,7 @@ wxppInMsgEntityFromDocument doc = do
     tt <- get_ele_s "CreateTime"
                 >>= maybe
                         (fail $ "Failed to parse CreateTime")
-                        (return . posixSecondsToUTCTime
-                                . (realToFrac :: Int64 -> NominalDiffTime)
-                        )
+                        (return . epochIntToUtcTime)
                     . simpleParseDecT
     msg_id <- fmap WxppInMsgID $
                 get_ele_s "MsgId"
@@ -409,9 +404,6 @@ tryEveryInMsgByHandler handlers app_config ime = do
                     return $ Right $ Just x
 
 --------------------------------------------------------------------------------
-
-utcTimeToEpochInt :: UTCTime -> Int
-utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
 getElementContent :: Monad m => Cursor -> Name -> m Text
 getElementContent cursor t =

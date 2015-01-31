@@ -9,6 +9,9 @@ import qualified Data.ByteString.Char8      as C8
 import Data.Byteable                        (toBytes)
 import Crypto.Cipher                        (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
+import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
+                                            , utcTimeToPOSIXSeconds)
+import Data.Time                            (NominalDiffTime)
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 
@@ -269,6 +272,14 @@ instance FromJSON MenuItem where
                         Nothing     -> fmap Left $ menuItemDataFromJsonObj obj
                     return $ MenuItem name dat_or_subs
 
+
+--------------------------------------------------------------------------------
+
+utcTimeToEpochInt :: UTCTime -> Int64
+utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
+
+epochIntToUtcTime :: Int64 -> UTCTime
+epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
