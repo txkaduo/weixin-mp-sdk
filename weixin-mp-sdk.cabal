@@ -72,6 +72,7 @@ library
                      , xml-conduit
                      , xml-hamlet
                      , wai
+                     , conduit
 
 
   -- hs-source-dirs:      
