@@ -1,4 +1,9 @@
-module WeiXin.PublicPlatform.Types where
+{-# LANGUAGE ScopedTypeVariables #-}
+module WeiXin.PublicPlatform.Types
+    ( module WeiXin.PublicPlatform.Types
+    , Gender(..)
+    , UrlText(..)
+    ) where
 
 import ClassyPrelude
 import Data.SafeCopy
@@ -14,6 +19,7 @@ import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
 import Data.Time                            (NominalDiffTime)
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
+import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 
 
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
@@ -271,6 +277,68 @@ instance FromJSON MenuItem where
                         Just subs   -> return $ Right subs
                         Nothing     -> fmap Left $ menuItemDataFromJsonObj obj
                     return $ MenuItem name dat_or_subs
+
+
+newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
+                    deriving (Show, Eq, Ord)
+
+data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
+                    deriving (Show, Eq, Ord)
+
+type NickName = Text
+type CityName = Text
+type ProvinceName = Text
+type ContryName = Text
+
+-- | 用户基础信息查询接口的返回
+data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
+                        | EndUserQueryResult
+                            WxppOpenID
+                            NickName    -- ^ nickname
+                            (Maybe Gender)
+                            SimpleLocaleName
+                            CityName
+                            ProvinceName
+                            ContryName
+                            UrlText     -- ^ head image url
+                            UTCTime
+                            (Maybe WxppUnionID)
+                        deriving (Show, Eq, Ord)
+
+instance FromJSON EndUserQueryResult where
+    parseJSON = withObject "EndUserQueryResult" $ \obj -> do
+                open_id <- WxppOpenID <$> obj .: "openid"
+                if_sub <- (\x -> x > (0 :: Int)) <$> obj .: "subscribe"
+                if not if_sub
+                    then return $ EndUserQueryResultNotSubscribed open_id
+                    else do
+                        nickname <- obj .: "nickname"
+                        sex <- obj .: "sex"
+
+                        m_gender <- case (sex :: Int) of
+                            0   -> return Nothing
+                            1   -> return $ Just Male
+                            2   -> return $ Just Female
+                            _   -> fail $ "unknown sex: " <> show sex
+
+                        city <- obj .: "city"
+                        lang <- SimpleLocaleName <$> obj .: "language"
+                        province <- obj .: "province"
+                        contry <- obj .: "contry"
+                        headimgurl <- UrlText <$> obj .: "headimgurl"
+                        subs_time <- epochIntToUtcTime <$> obj .: "subscribe_time"
+                        m_union_id <- fmap WxppUnionID <$> obj .:? "unionid"
+                        return $ EndUserQueryResult
+                                    open_id
+                                    nickname
+                                    m_gender
+                                    lang
+                                    city
+                                    province
+                                    contry
+                                    headimgurl
+                                    subs_time
+                                    m_union_id
 
 
 --------------------------------------------------------------------------------

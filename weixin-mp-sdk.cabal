@@ -23,6 +23,7 @@ library
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Message
                        WeiXin.PublicPlatform.Menu
+                       WeiXin.PublicPlatform.EndUser
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
@@ -43,7 +44,7 @@ library
                      , classy-prelude
                      , yesod
                      , yesod-core
-                     , yesod-helpers >= 0.7.2
+                     , yesod-helpers >= 0.7.3
                      , text
                      , aeson
                      , bytestring
