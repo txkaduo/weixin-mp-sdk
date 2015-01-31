@@ -165,7 +165,7 @@ wxppInMsgFromDocument doc = do
                     return $ WxppInMsgLocation (x, y) scale label
 
         "link"      -> do
-                    url <- get_ele_s "Url"
+                    url <- UrlText <$> get_ele_s "Url"
                     title <- get_ele_s "Title"
                     desc <- get_ele_s "Description"
                     return $ WxppInMsgLink url title desc
@@ -311,9 +311,9 @@ $maybe title <- m_title
     <Title>#{title}
 $maybe desc <- m_desc
     <Description>#{desc}
-$maybe url <- m_url
+$maybe url <- unUrlText <$> m_url
     <MusicUrl>#{url}
-$maybe hq_url <- m_hq_url
+$maybe hq_url <- unUrlText <$> m_hq_url
     <HQMusicUrl>#{hq_url}
 |]
 
@@ -327,9 +327,9 @@ wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
                 <Title>#{title}
             $maybe desc <- wxppArticleDesc article
                 <Description>#{desc}
-            $maybe url <- wxppArticleUrl article
+            $maybe url <- unUrlText <$> wxppArticleUrl article
                 <Url>#{url}
-            $maybe pic_url <- wxppArticlePicUrl article
+            $maybe pic_url <- unUrlText <$> wxppArticlePicUrl article
                 <PicUrl>#{pic_url}
 |]
 

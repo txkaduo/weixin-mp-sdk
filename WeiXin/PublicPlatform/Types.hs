@@ -114,7 +114,7 @@ data WxppInMsg =  WxppInMsgText Text
                 | WxppInMsgVideo WxppMediaID WxppMediaID
                 | WxppInMsgLocation (Double, Double) Double Text
                     -- ^ (latitude, longitude) scale label
-                | WxppInMsgLink Text Text Text
+                | WxppInMsgLink UrlText Text Text
                     -- ^ url title description
                 | WxppInMsgEvent WxppEvent
                 deriving (Show, Eq)
@@ -134,8 +134,8 @@ data WxppInMsgEntity = WxppInMsgEntity
 data WxppArticle = WxppArticle {
                     wxppArticleTitle    :: Maybe Text    -- ^ title
                     , wxppArticleDesc   :: Maybe Text    -- ^ description
-                    , wxppArticlePicUrl :: Maybe Text    -- ^ pic url
-                    , wxppArticleUrl    :: Maybe Text    -- ^ url
+                    , wxppArticlePicUrl :: Maybe UrlText -- ^ pic url
+                    , wxppArticleUrl    :: Maybe UrlText -- ^ url
                     }
                     deriving (Show, Eq)
 
@@ -144,7 +144,7 @@ data WxppOutMsg = WxppOutMsgText Text
                 | WxppOutMsgVoice WxppMediaID
                 | WxppOutMsgVideo WxppMediaID (Maybe Text) (Maybe Text)
                     -- ^ media_id title description
-                | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe Text) (Maybe Text)
+                | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgArticle [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
@@ -189,7 +189,7 @@ data SomeJsonWxppInMsgHandler m =
 -- 例如，有时候它明确地就是一个 URL
 data MenuItemData = MenuItemDataClick Text
                         -- ^ key
-                    | MenuItemDataView Text
+                    | MenuItemDataView UrlText
                         -- ^ url
                     | MenuItemDataScanCode Text
                         -- ^ key
@@ -211,7 +211,7 @@ menuItemDataToJsonPairs (MenuItemDataClick key) =
                                 [ "type"    .= ("click" :: Text)
                                 , "key"     .= key
                                 ]
-menuItemDataToJsonPairs (MenuItemDataView url) =
+menuItemDataToJsonPairs (MenuItemDataView (UrlText url)) =
                                 [ "type"    .= ("view" :: Text)
                                 , "url"     .= url
                                 ]
@@ -245,7 +245,7 @@ menuItemDataFromJsonObj obj = do
     typ <- obj .: "type"
     case typ of
         "click"             -> fmap MenuItemDataClick $ obj .: "key"
-        "view"              -> fmap MenuItemDataView $ obj .: "url"
+        "view"              -> fmap MenuItemDataView $ UrlText <$> obj .: "url"
         "scancode_push"     -> fmap MenuItemDataScanCode $ obj .: "key"
         "scancode_waitmsg"  -> fmap MenuItemDataScanCodeWaitMsg $ obj .: "key"
         "pic_sysphoto"      -> fmap MenuItemDataPicSysPhoto $ obj .: "key"
