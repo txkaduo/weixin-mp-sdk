@@ -7,8 +7,9 @@ module WeiXin.PublicPlatform.Types
 
 import ClassyPrelude
 import Data.SafeCopy
-import Data.Aeson
-import Data.Aeson.Types                     (Parser, Pair)
+import Data.Aeson                           as A
+import qualified Data.Text                  as T
+import Data.Aeson.Types                     (Parser, Pair, typeMismatch)
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import Data.Byteable                        (toBytes)
@@ -17,6 +18,8 @@ import Crypto.Cipher.AES                    (AES)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
 import Data.Time                            (NominalDiffTime)
+import Data.Scientific                      (toBoundedInteger)
+import Text.Read                            (reads)
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
@@ -313,14 +316,7 @@ instance FromJSON EndUserQueryResult where
                     then return $ EndUserQueryResultNotSubscribed open_id
                     else do
                         nickname <- obj .: "nickname"
-                        sex <- obj .: "sex"
-
-                        m_gender <- case (sex :: Int) of
-                            0   -> return Nothing
-                            1   -> return $ Just Male
-                            2   -> return $ Just Female
-                            _   -> fail $ "unknown sex: " <> show sex
-
+                        m_gender <- obj .: "sex" >>= parseSexJson
                         city <- obj .: "city"
                         lang <- SimpleLocaleName <$> obj .: "language"
                         province <- obj .: "province"
@@ -339,6 +335,27 @@ instance FromJSON EndUserQueryResult where
                                     headimgurl
                                     subs_time
                                     m_union_id
+
+-- | sex 字段出现在文档两处，有时候是个整数，有时候是个字串
+-- 这个函数处理两种情况
+parseSexJson :: Value -> Parser (Maybe Gender)
+parseSexJson = go
+    where
+        go (A.String t) = p t $ fmap fst $ listToMaybe $ reads $ T.unpack t
+        go (A.Number n) = p n $ toBoundedInteger n
+        go v            = typeMismatch "Number or String" v
+
+        p :: Show a => a -> Maybe Int -> Parser (Maybe Gender)
+        p x mi = case mi of
+                Just i  -> parseSexInt i
+                Nothing -> fail $ "unknown sex: " <> show x
+
+
+parseSexInt :: Monad m => Int -> m (Maybe Gender)
+parseSexInt 0 = return Nothing
+parseSexInt 1 = return $ Just Male
+parseSexInt 2 = return $ Just Female
+parseSexInt x = fail $ "unknown sex: " <> show x
 
 
 --------------------------------------------------------------------------------

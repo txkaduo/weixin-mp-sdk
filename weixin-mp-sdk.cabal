@@ -73,6 +73,7 @@ library
                      , xml-hamlet
                      , wai
                      , conduit
+                     , scientific
 
 
   -- hs-source-dirs:      
