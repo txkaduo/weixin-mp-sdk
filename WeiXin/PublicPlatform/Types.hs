@@ -113,7 +113,8 @@ data WxppInMsgEntity = WxppInMsgEntity
                             wxppInToUserName        :: Text
                             , wxppInFromUserName    :: WxppOpenID
                             , wxppInCreatedTime     :: UTCTime
-                            , wxppInMessageID       :: WxppInMsgID
+                            , wxppInMessageID       :: Maybe WxppInMsgID
+                                -- ^ 从文档看，除了事件通知，所有信息都有 MsgID
                             , wxppInMessage         :: WxppInMsg
                         }
                         deriving (Show, Eq)

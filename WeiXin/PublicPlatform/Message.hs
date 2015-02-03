@@ -120,10 +120,9 @@ wxppInMsgEntityFromDocument doc = do
                                 . (realToFrac :: Int64 -> NominalDiffTime)
                         )
                     . simpleParseDecT
-    msg_id <- fmap WxppInMsgID $
-                get_ele_s "MsgId"
-                    >>= maybe (fail $ "Failed to parse MsgId") return
-                        . simpleParseDecT
+    msg_id <- fmap (fmap WxppInMsgID) $
+                mapM (maybe (fail $ "Failed to parse MsgId") return . simpleParseDecT)
+                    $ getElementContentMaybe cursor "MsgId"
     msg <- wxppInMsgFromDocument doc
     return $ WxppInMsgEntity to_user from_user tt msg_id msg
     where
@@ -421,7 +420,7 @@ getElementContentMaybe cursor t =
     listToMaybe $ cursor $/ element t &// content
 
 simpleParseDec :: (Eq a, Num a) => String -> Maybe a
-simpleParseDec = fmap fst . listToMaybe . filter ((== "") . snd) . readDec
+simpleParseDec = fmap fst . listToMaybe . filter (null . snd) . readDec
 
 simpleParseDecT :: (Eq a, Num a) => Text -> Maybe a
 simpleParseDecT = simpleParseDec . T.unpack
