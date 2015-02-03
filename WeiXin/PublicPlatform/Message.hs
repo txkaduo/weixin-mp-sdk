@@ -411,9 +411,9 @@ tryEveryInMsgByHandler handlers ime = do
 utcTimeToEpochInt :: UTCTime -> Int
 utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
-getElementContent :: Monad m => Cursor -> Name -> m Text
+getElementContent :: Cursor -> Name -> Either String Text
 getElementContent cursor t =
-    maybe (fail $ T.unpack $ "no such element: " <> nameLocalName t) return $
+    maybe (Left $ T.unpack $ "no such element: " <> nameLocalName t) Right $
         getElementContentMaybe cursor t
 
 getElementContentMaybe :: Cursor -> Name -> Maybe Text
