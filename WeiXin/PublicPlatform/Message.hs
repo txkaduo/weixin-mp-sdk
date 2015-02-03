@@ -189,24 +189,27 @@ wxppEventFromDocument doc = do
     evt_type <- get_ele_s "Event"
     case evt_type of
         "subscribe" -> do
-            case getElementContentMaybe cursor "EventKey" of
-                Nothing     -> return $ WxppEvtSubscribe
-                Just ek_s   -> do
-                            let prefix = "qrscene_"
-                            ticket <- fmap QRTicket $ get_ele_s "Ticket"
-                            scene_id <- liftM WxppSceneID $
-                                if T.isPrefixOf prefix ek_s
-                                    then
-                                        maybe
-                                            (fail $ "Failed to parse scene id")
-                                            return
-                                            $ simpleParseDecT $
-                                                T.drop (length prefix) ek_s
+            let ek_s = fromMaybe "" $ getElementContentMaybe cursor "EventKey"
+            if null ek_s
+                then do
+                    -- 实测证明，普通的订阅事件通知也会发个 EventKey 过来，只是为空而已
+                    return WxppEvtSubscribe
+                else do
+                    let prefix = "qrscene_"
+                    ticket <- fmap QRTicket $ get_ele_s "Ticket"
+                    scene_id <- liftM WxppSceneID $
+                        if T.isPrefixOf prefix ek_s
+                            then
+                                maybe
+                                    (fail $ "Failed to parse scene id")
+                                    return
+                                    $ simpleParseDecT $
+                                        T.drop (length prefix) ek_s
 
-                                    else fail $ T.unpack $
-                                                "EventKey does not start with "
-                                                    <> prefix
-                            return $ WxppEvtSubscribeAtScene scene_id ticket
+                            else fail $ T.unpack $
+                                        "EventKey does not start with "
+                                            <> prefix
+                    return $ WxppEvtSubscribeAtScene scene_id ticket
 
         "unsubscribe" -> return $ WxppEvtUnsubscribe
 
