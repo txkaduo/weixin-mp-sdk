@@ -95,7 +95,7 @@ postSubHomeR = do
 
             err_or_resp <- runExceptT $ do
                 m_out_msg <- ExceptT $
-                        (try $ liftIO $ handle_msg app_config me)
+                        (try $ liftIO $ handle_msg me)
                             >>= return
                                     . either
                                         (Left . (show :: SomeException -> String))

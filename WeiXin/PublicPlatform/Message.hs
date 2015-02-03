@@ -378,9 +378,9 @@ parseJsonWxppInMsgHandler known_hs =
 --      则理解为成功
 tryEveryInMsgByHandler :: MonadLogger m =>
     [WxppInMsgHandler m] -> WxppInMsgHandler m
-tryEveryInMsgByHandler handlers app_config ime = do
+tryEveryInMsgByHandler handlers ime = do
     (errs, res_lst) <- liftM partitionEithers $
-                            mapM (\h -> h app_config ime) handlers
+                            mapM (\h -> h ime) handlers
     forM_ errs $ \err -> do
         $(logWarnS) wxppLogSource $ T.pack $
             "Error when handling incoming message, "

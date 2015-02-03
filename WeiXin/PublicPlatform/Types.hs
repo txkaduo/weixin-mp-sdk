@@ -151,8 +151,7 @@ data WxppOutMsgEntity = WxppOutMsgEntity
 -- | 响应收到的服务器信息
 -- Left 用于表达错误
 -- Right Nothing 代表无需回复一个新信息
-type WxppInMsgHandler m = WxppAppConfig
-                            -> WxppInMsgEntity
+type WxppInMsgHandler m = WxppInMsgEntity
                             -> m (Either String (Maybe WxppOutMsg))
 
 class FromJsonHandler h where
