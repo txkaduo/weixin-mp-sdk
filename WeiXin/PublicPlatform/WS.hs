@@ -59,10 +59,11 @@ instance Exception WxppWsCallError
 tryWxppWsResult :: MonadCatch m =>
     m a -> m (Either WxppWsCallError a)
 tryWxppWsResult f = do
-    liftM Right f `catch` h1 `catch` h2
+    liftM Right f `catch` h1 `catch` h2 `catch` h3
     where
         h1 = return . Left . WxppWsErrorHttp
         h2 = return . Left . WxppWsErrorJson
+        h3 = return . Left . WxppWsErrorApp
 
 
 asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
@@ -73,7 +74,7 @@ asWxppWsResponseNormal' :: (MonadThrow m, FromJSON a) =>
     Response LB.ByteString -> m a
 asWxppWsResponseNormal' =
     asWxppWsResponseNormal
-        >=> either (throwM . WxppWsErrorApp) return . unWxppWsResp
+        >=> either throwM return . unWxppWsResp
 
 
 wxppRemoteApiBaseUrl :: IsString a => a
