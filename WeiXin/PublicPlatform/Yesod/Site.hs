@@ -19,11 +19,14 @@ import Text.XML                             (renderText)
 import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
+import Data.Yaml                            (decodeFileEither, encode)
 
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
+import WeiXin.PublicPlatform.Menu
+import WeiXin.PublicPlatform.WS
 
 
 checkSignature :: Yesod master => HandlerT WxppSub (HandlerT master IO) ()
@@ -122,6 +125,50 @@ postSubHomeR = do
                         InternalError "cannot encode outgoing message into XML"
                 Right xmls -> return xmls
 
+
+-- | reload menu from config/menu.yml
+getReloadMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) String
+getReloadMenuR = do
+    err_or_menu <- liftIO $ decodeFileEither "config/menu.yml"
+    case err_or_menu of
+        Left err    -> do
+            $(logErrorS) wxppLogSource $
+                "Failed to parse menu yml: " <> fromString (show err)
+            return $ "Failed to parse yml: " <> show err
+        Right menu  -> do
+            foundation <- getYesod
+            m_atk <- liftIO $ wxppSubAccessTokens foundation
+            case m_atk of
+                Nothing             -> return $ "Failed to create menu: no access token available."
+                Just access_token   ->  do
+                    err_or <- tryWxppWsResult $
+                                    if null menu
+                                        then wxppDeleteMenu access_token
+                                        else wxppCreateMenu access_token menu
+                    case err_or of
+                        Left err    -> do
+                                        $(logErrorS) wxppLogSource $
+                                                "Failed to reload menu: " <> fromString (show err)
+                                        return $ "Failed to reload menu: " <> show err
+                        Right _     -> do
+                                        return $ "Menu reloaded successfully."
+
+
+getQueryMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
+getQueryMenuR = do
+    foundation <- getYesod
+    m_atk <- liftIO $ wxppSubAccessTokens foundation
+    case m_atk of
+        Nothing             -> return $ "Failed to create menu: no access token available."
+        Just access_token   ->  do
+            err_or <- tryWxppWsResult $ wxppQueryMenu access_token
+            case err_or of
+                Left err    -> do
+                                $(logErrorS) wxppLogSource $
+                                        "Failed to query menu: " <> fromString (show err)
+                                return $ fromString $ "Failed to query menu: " <> show err
+                Right menus -> do
+                                return $ decodeUtf8 $ encode menus
 
 instance Yesod master => YesodSubDispatch WxppSub (HandlerT master IO)
     where

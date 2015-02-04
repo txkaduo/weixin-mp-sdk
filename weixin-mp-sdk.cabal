@@ -74,6 +74,7 @@ library
                      , wai
                      , conduit
                      , scientific
+                     , yaml
 
 
   -- hs-source-dirs:      
