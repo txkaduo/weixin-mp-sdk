@@ -277,8 +277,8 @@ instance FromJSON MenuItem where
                     name <- obj .: "name"
                     m_subs <- obj .:? "sub_button"
                     dat_or_subs <- case m_subs of
-                        Just subs   -> return $ Right subs
-                        Nothing     -> fmap Left $ menuItemDataFromJsonObj obj
+                        Just (subs@(_:_))   -> return $ Right subs
+                        _                   -> fmap Left $ menuItemDataFromJsonObj obj
                     return $ MenuItem name dat_or_subs
 
 
