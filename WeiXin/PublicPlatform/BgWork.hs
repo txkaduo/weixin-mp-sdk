@@ -4,8 +4,9 @@ import ClassyPrelude hiding (catch)
 import Control.Monad.Catch                  ( catch )
 import Data.Acid
 import Data.Time                            (addUTCTime, NominalDiffTime)
-import Control.Monad.Logger                 (MonadLogger, logErrorS)
+import Control.Monad.Logger
 import System.Timeout                       (timeout)
+import Control.Exception                    (evaluate)
 
 import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
@@ -34,9 +35,42 @@ refreshAccessTokenIfNeeded wac acid dt = do
                     "Failed to refresh access token: "
                         <> fromString (show err)
             Right (AccessTokenResp atk ttl) -> do
+                $(logDebugS) wxppLogSource $ fromString $
+                    "New access token acquired, expired in: " <> show ttl
                 now' <- liftIO getCurrentTime
                 let expiry = addUTCTime (fromIntegral ttl) now'
                 liftIO $ update acid $ WxppAcidAddAcccessToken atk expiry
+
+
+-- | infinite loop to refresh access token
+-- Create a backgroup thread to call this, so that access token can be keep fresh.
+loopRefreshAccessToken ::
+    (MonadIO m, MonadLogger m, MonadCatch m) =>
+    IO Bool     -- ^ This function should be a blocking op,
+                -- return True if the infinite should be aborted.
+    -> Int      -- ^ interval between successive checking (in seconds)
+    -> WxppAppConfig
+    -> AcidState WxppAcidState
+    -> NominalDiffTime
+    -> m ()
+loopRefreshAccessToken chk_abort intv wac acid dt = do
+    loopRunWSJob chk_abort intv $ refreshAccessTokenIfNeeded wac acid dt
+
+
+loopRunWSJob :: (MonadIO m, MonadCatch m) =>
+    IO Bool     -- ^ This function should be a blocking op,
+                -- return True if the infinite should be aborted immediately.
+    -> Int      -- ^ interval in seconds
+    -> m ()     -- ^ the job to be repeatly called
+    -> m ()
+loopRunWSJob chk_abort intv job = loop
+    where
+        loop = do
+            job >>= liftIO . evaluate
+            m_if_abort <- liftIO $ timeout (intv * 1000 * 1000) chk_abort
+            case m_if_abort of
+                Just True   -> return ()
+                _           -> loop
 
 
 -- | 重复执行计算，并记录出现的异常
