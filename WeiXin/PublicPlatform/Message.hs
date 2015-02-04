@@ -13,9 +13,6 @@ import Control.Monad.Logger
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
-import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
-                                            , utcTimeToPOSIXSeconds)
-import Data.Time                            (NominalDiffTime)
 import Numeric                              (readDec, readFloat)
 
 import WeiXin.PublicPlatform.Security
@@ -116,9 +113,7 @@ wxppInMsgEntityFromDocument doc = do
     tt <- get_ele_s "CreateTime"
                 >>= maybe
                         (fail $ "Failed to parse CreateTime")
-                        (return . posixSecondsToUTCTime
-                                . (realToFrac :: Int64 -> NominalDiffTime)
-                        )
+                        (return . epochIntToUtcTime)
                     . simpleParseDecT
     msg_id <- fmap (fmap WxppInMsgID) $
                 mapM (maybe (fail $ "Failed to parse MsgId") return . simpleParseDecT)
@@ -169,7 +164,7 @@ wxppInMsgFromDocument doc = do
                     return $ WxppInMsgLocation (x, y) scale label
 
         "link"      -> do
-                    url <- get_ele_s "Url"
+                    url <- UrlText <$> get_ele_s "Url"
                     title <- get_ele_s "Title"
                     desc <- get_ele_s "Description"
                     return $ WxppInMsgLink url title desc
@@ -318,9 +313,9 @@ $maybe title <- m_title
     <Title>#{title}
 $maybe desc <- m_desc
     <Description>#{desc}
-$maybe url <- m_url
+$maybe url <- unUrlText <$> m_url
     <MusicUrl>#{url}
-$maybe hq_url <- m_hq_url
+$maybe hq_url <- unUrlText <$> m_hq_url
     <HQMusicUrl>#{hq_url}
 |]
 
@@ -334,9 +329,9 @@ wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
                 <Title>#{title}
             $maybe desc <- wxppArticleDesc article
                 <Description>#{desc}
-            $maybe url <- wxppArticleUrl article
+            $maybe url <- unUrlText <$> wxppArticleUrl article
                 <Url>#{url}
-            $maybe pic_url <- wxppArticlePicUrl article
+            $maybe pic_url <- unUrlText <$> wxppArticlePicUrl article
                 <PicUrl>#{pic_url}
 |]
 
@@ -402,16 +397,15 @@ tryEveryInMsgByHandler handlers ime = do
         (x:xs)  -> do
                     when (not $ null xs) $ do
                         -- 有多个 Just 结果，但服务器只能让我们回复一个信息
-                        -- 因此后面的信息会丢失
+                        -- 因此后面的信息会目前会丢失
+                        -- TODO：以后可以异步调用“客服接口”主动发消息给用户
+                        --       根据文档，这只能在 48 小时完成
                         $(logWarnS) wxppLogSource $ T.pack $
                             "more than one reply messages from handlers,"
                             <> " incoming MsgId=" <> (show $ wxppInMessageID ime)
                     return $ Right $ Just x
 
 --------------------------------------------------------------------------------
-
-utcTimeToEpochInt :: UTCTime -> Int
-utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
 getElementContent :: Cursor -> Name -> Either String Text
 getElementContent cursor t =

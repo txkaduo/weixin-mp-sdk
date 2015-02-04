@@ -7,6 +7,7 @@ import Data.Monoid                          (First(..))
 -- | 这是已能被识别的错误代码
 -- 这个列表尽量完整，但不必完整
 data WxppError = WxppServerBusy
+                | WxppNoError
                 | WxppInvalidAppSecret
                 | WxppInvalidAccessToken
                 | WxppInvalidTokenType
@@ -18,6 +19,7 @@ data WxppError = WxppServerBusy
 
 wxppToErrorCode :: WxppError -> Int
 wxppToErrorCode WxppServerBusy              = -1
+wxppToErrorCode WxppNoError                 = 0
 wxppToErrorCode WxppInvalidAppSecret        = 40001
 wxppToErrorCode WxppInvalidTokenType        = 40002
 wxppToErrorCode WxppInvalidOpenID           = 40003
