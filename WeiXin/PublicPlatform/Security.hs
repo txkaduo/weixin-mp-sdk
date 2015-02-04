@@ -46,7 +46,6 @@ instance FromJSON AccessTokenResp where
 
 
 -- | Refresh/update access token from WeiXin server.
--- May throw: WxppWsCallError
 refreshAccessToken ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     WxppAppConfig -> m AccessTokenResp
@@ -62,6 +61,13 @@ refreshAccessToken wac = do
     where
         app_id      = wxppConfigAppID wac
         app_secret  = wxppConfigAppSecret wac
+
+
+-- | a helper used with 'WxppAcidGetAcccessTokens'
+newestUsableAccessToken :: MonadIO m => [(AccessToken, UTCTime)] -> m (Maybe (AccessToken, UTCTime))
+newestUsableAccessToken lst = do
+    now <- liftIO getCurrentTime
+    return $ listToMaybe $ sortBy (comparing $ Down . snd) $ filter ((> now) . snd) $ lst
 
 
 pkcs7PaddingEncode :: Int -> ByteString -> ByteString
