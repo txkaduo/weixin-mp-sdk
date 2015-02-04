@@ -40,6 +40,7 @@ refreshAccessTokenIfNeeded wac acid dt = do
                 now' <- liftIO getCurrentTime
                 let expiry = addUTCTime (fromIntegral ttl) now'
                 liftIO $ update acid $ WxppAcidAddAcccessToken atk expiry
+                liftIO $ update acid $ WxppAcidPurgeAcccessToken now'
 
 
 -- | infinite loop to refresh access token
