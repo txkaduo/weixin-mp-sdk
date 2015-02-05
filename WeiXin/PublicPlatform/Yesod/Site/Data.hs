@@ -18,7 +18,7 @@ instance Show WxppSub where
         "WxppSub: " ++ show app_config
 
 mkYesodSubData "WxppSub" [parseRoutes|
-/               SubHomeR        GET POST
+/msg            MessageR        GET POST
 /menu/reload    ReloadMenuR     GET
 /menu/query     QueryMenuR      GET
 |]

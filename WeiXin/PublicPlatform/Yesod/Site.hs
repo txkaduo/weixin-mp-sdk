@@ -51,14 +51,14 @@ checkSignature = do
             res = dat >>= paramErrorFromEither "signature" . check_sign
         return $ res *> pure ()
 
-getSubHomeR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
-getSubHomeR = do
+getMessageR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
+getMessageR = do
     checkSignature
     (httpErrorWhenParamError =<<) $ do
         reqGetParamE' "echostr"
 
-postSubHomeR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
-postSubHomeR = do
+postMessageR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
+postMessageR = do
     checkSignature
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
