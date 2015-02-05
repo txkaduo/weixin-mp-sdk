@@ -2,9 +2,11 @@ module WeiXin.PublicPlatform.InMsgHandler where
 
 import ClassyPrelude
 import Control.Monad.Logger
+import Control.Monad.Trans.Except
 import qualified Data.Text                  as T
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
+import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -36,6 +38,9 @@ class IsWxppInMsgHandler m h where
 data SomeWxppInMsgHandler m =
         forall h. (IsWxppInMsgHandler m h, FromJsonHandler h) => SomeWxppInMsgHandler h
 
+instance IsWxppInMsgHandler m (SomeWxppInMsgHandler m) where
+    handleInMsg (SomeWxppInMsgHandler h) = handleInMsg h
+
 -- | 用于在配置文件中，读取出一系列响应算法
 parseWxppInMsgHandlers ::
     [SomeWxppInMsgHandler m]
@@ -46,11 +51,11 @@ parseWxppInMsgHandlers ::
 parseWxppInMsgHandlers known_hs = withArray "[SomeWxppInMsgHandler]" $
         mapM (parseWxppInMsgHandler known_hs) . toList
 
-
 parseWxppInMsgHandler ::
     [SomeWxppInMsgHandler m]
         -- ^ value inside SomeWxppInMsgHandler is not used
         -- use: SomeWxppInMsgHandler undefined is ok
+        -- see: allBasicWxppInMsgHandlersWHNF
     -> Value
     -> Parser (SomeWxppInMsgHandler m)
 parseWxppInMsgHandler known_hs =
@@ -59,9 +64,28 @@ parseWxppInMsgHandler known_hs =
         SomeWxppInMsgHandler h <- maybe
                 (fail $ "unknown handler name: " <> T.unpack name)
                 return
-                $ flip find  known_hs
+                $ flip find known_hs
                 $ \(SomeWxppInMsgHandler h) -> isNameOfInMsgHandler (Just h) name
         fmap SomeWxppInMsgHandler $ parseInMsgHandler (Just h) obj
+
+
+-- | 这里构造的列表只用于 parseWxppInMsgHandlers
+allBasicWxppInMsgHandlersWHNF ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
+    [SomeWxppInMsgHandler m]
+allBasicWxppInMsgHandlersWHNF =
+    [ SomeWxppInMsgHandler (error "handler forced" :: WelcomeSubscribe)
+    ]
+
+
+readWxppInMsgHandlers ::
+    [SomeWxppInMsgHandler m]
+    -> String
+    -> IO (Either ParseException [SomeWxppInMsgHandler m])
+readWxppInMsgHandlers tmps fp = runExceptT $ do
+    (ExceptT $ decodeFileEither fp)
+        >>= either (throwE . AesonException) return
+                . parseEither (parseWxppInMsgHandlers tmps)
 
 
 -- | 使用列表里的所有算法，逐一调用一次以处理收到的信息
@@ -73,9 +97,9 @@ parseWxppInMsgHandler known_hs =
 --   若有返回 Left 的，则选择第一个 Left 返回（代表失败）
 --   若连 Left 也没有（那只可能出现在handler数量本身就是零的情况）
 --      则理解为成功
-tryEveryInMsgByHandler :: MonadLogger m =>
+tryEveryInMsgHandler :: MonadLogger m =>
     [WxppInMsgHandler m] -> WxppInMsgHandler m
-tryEveryInMsgByHandler handlers ime = do
+tryEveryInMsgHandler handlers ime = do
     (errs, res_lst) <- liftM partitionEithers $
                             mapM (\h -> h ime) handlers
     forM_ errs $ \err -> do
@@ -105,6 +129,14 @@ tryEveryInMsgByHandler handlers ime = do
                             <> " incoming MsgId=" <> (show $ wxppInMessageID ime)
                     return $ Right $ Just x
 
+
+tryEveryInMsgHandler' :: MonadLogger m =>
+    AcidState WxppAcidState
+    -> m (Maybe AccessToken)
+    -> [SomeWxppInMsgHandler m]
+    -> WxppInMsgHandler m
+tryEveryInMsgHandler' acid get_atk known_hs = do
+    tryEveryInMsgHandler $ flip map known_hs $ \h -> handleInMsg h acid get_atk
 
 -- | 用户订阅公众号时发送欢迎信息
 data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgL
