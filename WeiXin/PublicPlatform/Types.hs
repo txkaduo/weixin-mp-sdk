@@ -238,13 +238,13 @@ class FromJsonHandler h where
 
     parseInMsgHandler :: Monad n => n h -> Object -> Parser h
 
--- | WxppInMsgHandler that can be parsed from JSON value
-class FromJsonHandler h => JsonWxppInMsgHandler m h where
+-- | something that can be used as WxppInMsgHandler
+class IsWxppInMsgHandler m h where
     handleInMsg :: h -> WxppInMsgHandler m
 
 
-data SomeJsonWxppInMsgHandler m =
-        forall h. JsonWxppInMsgHandler m h => SomeJsonWxppInMsgHandler h
+data SomeWxppInMsgHandler m =
+        forall h. (IsWxppInMsgHandler m h, FromJsonHandler h) => SomeWxppInMsgHandler h
 
 
 -- | 可以点击的菜单所携带的数据及菜单的类型

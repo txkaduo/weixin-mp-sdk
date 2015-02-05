@@ -338,30 +338,30 @@ wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
 
 -- | 用于在配置文件中，读取出一系列响应算法
 parseJsonWxppInMsgHandlers ::
-    [SomeJsonWxppInMsgHandler m]
-        -- ^ value inside SomeJsonWxppInMsgHandler is not used
-        -- use: SomeJsonWxppInMsgHandler undefined is ok
+    [SomeWxppInMsgHandler m]
+        -- ^ value inside SomeWxppInMsgHandler is not used
+        -- use: SomeWxppInMsgHandler undefined is ok
     -> Value
-    -> Parser [SomeJsonWxppInMsgHandler m]
-parseJsonWxppInMsgHandlers known_hs = withArray "[SomeJsonWxppInMsgHandler]" $
+    -> Parser [SomeWxppInMsgHandler m]
+parseJsonWxppInMsgHandlers known_hs = withArray "[SomeWxppInMsgHandler]" $
         mapM (parseJsonWxppInMsgHandler known_hs) . toList
 
 
 parseJsonWxppInMsgHandler ::
-    [SomeJsonWxppInMsgHandler m]
-        -- ^ value inside SomeJsonWxppInMsgHandler is not used
-        -- use: SomeJsonWxppInMsgHandler undefined is ok
+    [SomeWxppInMsgHandler m]
+        -- ^ value inside SomeWxppInMsgHandler is not used
+        -- use: SomeWxppInMsgHandler undefined is ok
     -> Value
-    -> Parser (SomeJsonWxppInMsgHandler m)
+    -> Parser (SomeWxppInMsgHandler m)
 parseJsonWxppInMsgHandler known_hs =
-    withObject "SomeJsonWxppInMsgHandler" $ \obj -> do
+    withObject "SomeWxppInMsgHandler" $ \obj -> do
         name <- obj .: "name"
-        SomeJsonWxppInMsgHandler h <- maybe
+        SomeWxppInMsgHandler h <- maybe
                 (fail $ "unknown handler name: " <> T.unpack name)
                 return
                 $ flip find  known_hs
-                $ \(SomeJsonWxppInMsgHandler h) -> isNameOfInMsgHandler (Just h) name
-        fmap SomeJsonWxppInMsgHandler $ parseInMsgHandler (Just h) obj
+                $ \(SomeWxppInMsgHandler h) -> isNameOfInMsgHandler (Just h) name
+        fmap SomeWxppInMsgHandler $ parseInMsgHandler (Just h) obj
 
 
 -- | 使用列表里的所有算法，逐一调用一次以处理收到的信息
