@@ -47,7 +47,7 @@ wxppAcidPurgeAcccessToken ::
     UTCTime -> Update WxppAcidState ()
 wxppAcidPurgeAcccessToken expiry = do
     modify $ over wxppAcidStateAccessTokens $
-                filter ((<= expiry) . snd)
+                filter ((> expiry) . snd)
 
 $(makeAcidic ''WxppAcidState
     [ 'wxppAcidGetAcccessTokens
