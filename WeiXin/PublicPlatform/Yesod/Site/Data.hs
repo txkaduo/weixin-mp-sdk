@@ -4,6 +4,7 @@ import Yesod
 import Prelude
 
 import WeiXin.PublicPlatform.Security
+import WeiXin.PublicPlatform.InMsgHandler
 
 data WxppSub = WxppSub {
                 wxppSubAppConfig        :: WxppAppConfig

@@ -224,28 +224,6 @@ data WxppOutMsgEntity = WxppOutMsgEntity
                         deriving (Show, Eq)
 
 
--- | 响应收到的服务器信息
--- Left 用于表达错误
--- Right Nothing 代表无需回复一个新信息
-type WxppInMsgHandler m = WxppInMsgEntity
-                            -> m (Either String (Maybe WxppOutMsg))
-
-class FromJsonHandler h where
-    -- | 假定每个算法的配置段都有一个 name 的字段
-    -- 根据这个方法选择出一个指定算法类型，
-    -- 然后从 json 数据中反解出相应的值
-    isNameOfInMsgHandler :: Monad n => n h -> Text -> Bool
-
-    parseInMsgHandler :: Monad n => n h -> Object -> Parser h
-
--- | something that can be used as WxppInMsgHandler
-class IsWxppInMsgHandler m h where
-    handleInMsg :: h -> WxppInMsgHandler m
-
-
-data SomeWxppInMsgHandler m =
-        forall h. (IsWxppInMsgHandler m h, FromJsonHandler h) => SomeWxppInMsgHandler h
-
 
 -- | 可以点击的菜单所携带的数据及菜单的类型
 -- 虽然看上去所有菜单都只有个文本作为数据，但概念上这些文本并不相同

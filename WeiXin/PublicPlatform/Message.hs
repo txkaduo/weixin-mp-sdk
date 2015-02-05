@@ -9,9 +9,6 @@ import qualified Data.Text.Lazy             as LT
 import Text.XML
 import Text.XML.Cursor
 import Text.Hamlet.XML
-import Control.Monad.Logger
-import Data.Aeson
-import Data.Aeson.Types                     (Parser)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Numeric                              (readDec, readFloat)
 
@@ -335,75 +332,6 @@ wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
                 <PicUrl>#{pic_url}
 |]
 
-
--- | 用于在配置文件中，读取出一系列响应算法
-parseJsonWxppInMsgHandlers ::
-    [SomeWxppInMsgHandler m]
-        -- ^ value inside SomeWxppInMsgHandler is not used
-        -- use: SomeWxppInMsgHandler undefined is ok
-    -> Value
-    -> Parser [SomeWxppInMsgHandler m]
-parseJsonWxppInMsgHandlers known_hs = withArray "[SomeWxppInMsgHandler]" $
-        mapM (parseJsonWxppInMsgHandler known_hs) . toList
-
-
-parseJsonWxppInMsgHandler ::
-    [SomeWxppInMsgHandler m]
-        -- ^ value inside SomeWxppInMsgHandler is not used
-        -- use: SomeWxppInMsgHandler undefined is ok
-    -> Value
-    -> Parser (SomeWxppInMsgHandler m)
-parseJsonWxppInMsgHandler known_hs =
-    withObject "SomeWxppInMsgHandler" $ \obj -> do
-        name <- obj .: "name"
-        SomeWxppInMsgHandler h <- maybe
-                (fail $ "unknown handler name: " <> T.unpack name)
-                return
-                $ flip find  known_hs
-                $ \(SomeWxppInMsgHandler h) -> isNameOfInMsgHandler (Just h) name
-        fmap SomeWxppInMsgHandler $ parseInMsgHandler (Just h) obj
-
-
--- | 使用列表里的所有算法，逐一调用一次以处理收到的信息
--- 返回第一个返回 Right Just 的结果
--- 如果都没有返回 Right Just 则：
--- 如果有一个handler返回 Right Nothing，这个函数也返回 Right Nothing
--- （代表成功但无回复）
--- 如果没有一个handler返回 Right Nothing，则：
---   若有返回 Left 的，则选择第一个 Left 返回（代表失败）
---   若连 Left 也没有（那只可能出现在handler数量本身就是零的情况）
---      则理解为成功
-tryEveryInMsgByHandler :: MonadLogger m =>
-    [WxppInMsgHandler m] -> WxppInMsgHandler m
-tryEveryInMsgByHandler handlers ime = do
-    (errs, res_lst) <- liftM partitionEithers $
-                            mapM (\h -> h ime) handlers
-    forM_ errs $ \err -> do
-        $(logWarnS) wxppLogSource $ T.pack $
-            "Error when handling incoming message, "
-            <> "MsgId=" <> (show $ wxppInMessageID ime)
-            <> ": " <> err
-
-    case catMaybes res_lst of
-        []      -> do
-                    -- 没有一个 handler 有回复
-                    -- 如果 res_lst 本身也是空，说明全部都失败了，
-                    -- 除非errs也为空
-                    return $
-                        if null res_lst
-                            then maybe (Right Nothing) Left $
-                                    listToMaybe errs
-                            else Right Nothing
-        (x:xs)  -> do
-                    when (not $ null xs) $ do
-                        -- 有多个 Just 结果，但服务器只能让我们回复一个信息
-                        -- 因此后面的信息会目前会丢失
-                        -- TODO：以后可以异步调用“客服接口”主动发消息给用户
-                        --       根据文档，这只能在 48 小时完成
-                        $(logWarnS) wxppLogSource $ T.pack $
-                            "more than one reply messages from handlers,"
-                            <> " incoming MsgId=" <> (show $ wxppInMessageID ime)
-                    return $ Right $ Just x
 
 --------------------------------------------------------------------------------
 

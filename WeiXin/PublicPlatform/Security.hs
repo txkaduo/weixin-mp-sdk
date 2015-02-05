@@ -63,12 +63,6 @@ refreshAccessToken wac = do
         app_secret  = wxppConfigAppSecret wac
 
 
--- | a helper used with 'WxppAcidGetAcccessTokens'
-newestUsableAccessToken :: MonadIO m => [(AccessToken, UTCTime)] -> m (Maybe (AccessToken, UTCTime))
-newestUsableAccessToken lst = do
-    now <- liftIO getCurrentTime
-    return $ listToMaybe $ sortBy (comparing $ Down . snd) $ filter ((> now) . snd) $ lst
-
 
 pkcs7PaddingEncode :: Int -> ByteString -> ByteString
 pkcs7PaddingEncode blk_size bs =

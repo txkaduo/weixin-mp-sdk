@@ -14,6 +14,12 @@ import Control.Monad.State                  (modify)
 import WeiXin.PublicPlatform.Types
 
 
+-- | a helper used with 'WxppAcidGetAcccessTokens'
+newestUsableAccessToken :: UTCTime -> [(AccessToken, UTCTime)] -> Maybe (AccessToken, UTCTime)
+newestUsableAccessToken now lst =
+    listToMaybe $ sortBy (comparing $ Down . snd) $ filter ((> now) . snd) $ lst
+
+
 -- | 服务器进程需持久保持的数据
 data WxppAcidState = WxppAcidState {
                     _wxppAcidStateAccessTokens :: ![(AccessToken, UTCTime)]
@@ -21,6 +27,7 @@ data WxppAcidState = WxppAcidState {
                         -- 因此记录了最近使用过的所有 AccessToken 及其过期时间
                         -- 这个列表实现时没有明确地限制长度
                         -- 而是定时丢弃过期的 access token
+                        -- 注意：这个列表是排了序的
                     , _wxppAcidStateUploadedMedia :: !(Map MD5Hash UploadResult)
                     }
                     deriving (Typeable)
@@ -64,3 +71,11 @@ $(makeAcidic ''WxppAcidState
     , 'wxppAcidPurgeAcccessToken
     , 'wxppAcidLookupMediaIDByHash
     ])
+
+
+wxppAcidGetUsableAccessToken :: MonadIO m =>
+    AcidState WxppAcidState -> m (Maybe AccessToken)
+wxppAcidGetUsableAccessToken acid = liftIO $ do
+    now <- getCurrentTime
+    fmap (join . (fmap $ \x -> if snd x > now then Just (fst x) else Nothing)) $
+        query acid WxppAcidGetAcccessToken

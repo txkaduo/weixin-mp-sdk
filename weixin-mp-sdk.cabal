@@ -23,6 +23,7 @@ library
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Media
                        WeiXin.PublicPlatform.Message
+                       WeiXin.PublicPlatform.InMsgHandler
                        WeiXin.PublicPlatform.Menu
                        WeiXin.PublicPlatform.EndUser
                        WeiXin.PublicPlatform.Yesod.Site
