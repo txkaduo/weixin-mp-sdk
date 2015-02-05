@@ -138,7 +138,14 @@ tryEveryInMsgHandler' :: MonadLogger m =>
 tryEveryInMsgHandler' acid get_atk known_hs = do
     tryEveryInMsgHandler $ flip map known_hs $ \h -> handleInMsg h acid get_atk
 
--- | 用户订阅公众号时发送欢迎信息
+tryWxppWsResultE :: MonadCatch m =>
+    String -> ExceptT String m b -> ExceptT String m b
+tryWxppWsResultE op f =
+    tryWxppWsResult f
+        >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
+
+
+-- | 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
 data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgL
                         deriving (Show, Typeable)
 
@@ -148,28 +155,18 @@ instance FromJsonHandler WelcomeSubscribe where
     parseInMsgHandler _ obj = do
         WelcomeSubscribe <$> obj .: "msg"
 
-
-instance ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgHandler m WelcomeSubscribe
     where
-    handleInMsg (WelcomeSubscribe outmsg) acid get_atk ime = do
+    handleInMsg (WelcomeSubscribe outmsg) acid get_atk ime = runExceptT $ do
         is_subs <- case wxppInMessage ime of
                     WxppInMsgEvent WxppEvtSubscribe             -> return True
                     WxppInMsgEvent (WxppEvtSubscribeAtScene {}) -> return True
-                    _   -> return False
+                    _                                           -> return False
         if is_subs
             then do
-                err_or <- tryWxppWsResult $ do
-                    m_atk <- get_atk
-                    case m_atk of
-                        Nothing -> return $ Left "no access token available"
-                        Just atk -> do
-                            outmsg' <- fromWxppOutMsgL acid atk outmsg
-                            return $ Right $ Just outmsg'
-                case err_or of
-                    Left err -> do
-                        return $ Left $
-                            "Got exception when getting access token or uploading media: "
-                                <> show err
-                    Right x -> return x
-            else return $ Right Nothing
+                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        >>= maybe (throwE $ "no access token available") return
+                liftM Just $ tryWxppWsResultE "fromWxppOutMsgL" $
+                                fromWxppOutMsgL acid atk outmsg
+            else return Nothing
