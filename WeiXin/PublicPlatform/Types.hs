@@ -12,21 +12,31 @@ import qualified Data.Text                  as T
 import Data.Aeson.Types                     (Parser, Pair, typeMismatch)
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
+import qualified Data.ByteString.Lazy       as LB
 import Data.Byteable                        (toBytes)
 import Crypto.Cipher                        (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
+import Data.Time                            (addUTCTime, NominalDiffTime)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
-import Data.Time                            (NominalDiffTime)
 import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
+import Filesystem.Path.CurrentOS            (encodeString, fromText)
+import qualified Crypto.Hash.MD5            as MD5
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 
 
+epochIntToUtcTime :: Int64 -> UTCTime
+epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
+
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
                         deriving (Show, Eq, Ord)
+
+instance SafeCopy WxppMediaID where
+    getCopy                 = contain $ safeGet
+    putCopy (WxppMediaID x) = contain $ safePut x
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Eq, Ord)
@@ -140,6 +150,15 @@ data WxppArticle = WxppArticle {
                     }
                     deriving (Show, Eq)
 
+instance FromJSON WxppArticle where
+    parseJSON = withObject "WxppArticle" $ \obj -> do
+                title <- obj .:? "title"
+                desc <- obj .:? "desc"
+                pic_url <- fmap UrlText <$> obj .:? "pic-url"
+                url <- fmap UrlText <$> obj .:? "url"
+                return $ WxppArticle title desc pic_url url
+
+-- | 外发的信息
 data WxppOutMsg = WxppOutMsgText Text
                 | WxppOutMsgImage WxppMediaID
                 | WxppOutMsgVoice WxppMediaID
@@ -149,7 +168,51 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgArticle [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
-                        deriving (Show, Eq)
+                deriving (Show, Eq)
+
+-- | 外发的信息的本地信息
+-- 因 WxppOutMsg 包含 media id，它只在上传3天内有效，这个类型的值代表的就是相应的本地长期有效的信息
+data WxppOutMsgL = WxppOutMsgTextL Text
+                | WxppOutMsgImageL FilePath
+                | WxppOutMsgVoiceL FilePath
+                | WxppOutMsgVideoL FilePath (Maybe Text) (Maybe Text)
+                    -- ^ media_id title description
+                | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
+                    -- ^ thumb_media_id, title, description, url, hq_url
+                | WxppOutMsgArticleL [WxppArticle]
+                    -- ^ 根据文档，图文总数不可超过10
+                deriving (Show, Eq)
+
+instance FromJSON WxppOutMsgL where
+    parseJSON = withObject "WxppOutMsgL" $ \obj -> do
+                    type_s <- obj .: "type"
+                    case type_s of
+                        "text" -> WxppOutMsgTextL <$> obj .: "text"
+                        "image" -> WxppOutMsgImageL . fromText <$> obj .: "path"
+                        "voice" -> WxppOutMsgVoiceL . fromText <$> obj .: "path"
+                        "video" -> do
+                                    path <- fromText <$> obj .: "path"
+                                    title <- obj .:? "title"
+                                    desc <- obj .:? "desc"
+                                    return $ WxppOutMsgVideoL path title desc
+                        "music" -> do
+                                    path <- fromText <$> obj .: "path"
+                                    title <- obj .:? "title"
+                                    desc <- obj .:? "desc"
+                                    url <- fmap UrlText <$> obj .:? "url"
+                                    hq_url <- fmap UrlText <$> obj .:? "hq-url"
+                                    return $ WxppOutMsgMusicL path title desc url hq_url
+                        "article" -> WxppOutMsgArticleL <$> obj .: "articles"
+                        _       -> fail $ "unknown type: " <> type_s
+
+
+data WxppMediaType = WxppMediaTypeImage
+                    | WxppMediaTypeVoice
+                    | WxppMediaTypeVideo
+                    | WxppMediaTypeThumb
+                    deriving (Show, Eq, Ord, Enum, Bounded)
+
+deriveSafeCopy 0 'base ''WxppMediaType
 
 data WxppOutMsgEntity = WxppOutMsgEntity
                         {
@@ -358,13 +421,47 @@ parseSexInt 2 = return $ Just Female
 parseSexInt x = fail $ "unknown sex: " <> show x
 
 
+newtype MD5Hash = MD5Hash { unMD5Hash :: ByteString }
+                deriving (Show, Eq, Ord)
+
+instance SafeCopy MD5Hash where
+    getCopy             = contain $ safeGet
+    putCopy (MD5Hash x) = contain $ safePut x
+
+-- | 上传媒体文件的结果
+data UploadResult = UploadResult {
+                        urMediaType     :: WxppMediaType
+                        , urMediaId     :: WxppMediaID
+                        , urCreateTime  :: UTCTime
+                        }
+                        deriving (Show, Typeable)
+
+deriveSafeCopy 0 'base ''UploadResult
+
+instance FromJSON UploadResult where
+    parseJSON = withObject "UploadResult" $ \obj -> do
+        type_s <- obj .: "type"
+        typ <- case type_s of
+                "image" -> return WxppMediaTypeImage
+                "voice" -> return WxppMediaTypeVoice
+                "video" -> return WxppMediaTypeVideo
+                "thumb" -> return WxppMediaTypeThumb
+                _       -> fail $ "unknown type: " <> type_s
+        media_id <- WxppMediaID <$> obj .: "media_id"
+        t <- epochIntToUtcTime <$> obj .: "created_at"
+        return $ UploadResult typ media_id t
+
 --------------------------------------------------------------------------------
 
 utcTimeToEpochInt :: UTCTime -> Int64
 utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
-epochIntToUtcTime :: Int64 -> UTCTime
-epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
-
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
+
+md5HashFile :: FilePath -> IO MD5Hash
+md5HashFile = fmap (MD5Hash . MD5.hashlazy) . LB.readFile . encodeString
+
+-- | 上传得到的 media id 只能用一段时间
+usableUploadResult :: UTCTime -> NominalDiffTime -> UploadResult -> Bool
+usableUploadResult now dt ur = addUTCTime dt (urCreateTime ur) < now

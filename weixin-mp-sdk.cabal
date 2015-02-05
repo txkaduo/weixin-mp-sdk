@@ -21,6 +21,7 @@ library
                        WeiXin.PublicPlatform.WS
                        WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
+                       WeiXin.PublicPlatform.Media
                        WeiXin.PublicPlatform.Message
                        WeiXin.PublicPlatform.Menu
                        WeiXin.PublicPlatform.EndUser
@@ -75,6 +76,9 @@ library
                      , conduit
                      , scientific
                      , yaml
+                     , system-filepath
+                     , cryptohash
+                     , containers
 
 
   -- hs-source-dirs:      

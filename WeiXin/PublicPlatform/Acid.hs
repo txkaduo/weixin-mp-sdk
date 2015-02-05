@@ -1,4 +1,7 @@
-module WeiXin.PublicPlatform.Acid where
+module WeiXin.PublicPlatform.Acid
+    ( module WeiXin.PublicPlatform.Acid
+    , AcidState
+    ) where
 
 import ClassyPrelude
 import Control.Lens
@@ -18,6 +21,7 @@ data WxppAcidState = WxppAcidState {
                         -- 因此记录了最近使用过的所有 AccessToken 及其过期时间
                         -- 这个列表实现时没有明确地限制长度
                         -- 而是定时丢弃过期的 access token
+                    , _wxppAcidStateUploadedMedia :: !(Map MD5Hash UploadResult)
                     }
                     deriving (Typeable)
 
@@ -25,7 +29,7 @@ $(makeLenses ''WxppAcidState)
 $(deriveSafeCopy 0 'base ''WxppAcidState)
 
 instance Default WxppAcidState where
-    def = WxppAcidState def
+    def = WxppAcidState def def
 
 wxppAcidGetAcccessTokens :: Query WxppAcidState [(AccessToken, UTCTime)]
 wxppAcidGetAcccessTokens =
@@ -49,9 +53,14 @@ wxppAcidPurgeAcccessToken expiry = do
     modify $ over wxppAcidStateAccessTokens $
                 filter ((> expiry) . snd)
 
+wxppAcidLookupMediaIDByHash :: MD5Hash -> Query WxppAcidState (Maybe UploadResult)
+wxppAcidLookupMediaIDByHash h =
+    asks $ view $ wxppAcidStateUploadedMedia . at h
+
 $(makeAcidic ''WxppAcidState
     [ 'wxppAcidGetAcccessTokens
     , 'wxppAcidGetAcccessToken
     , 'wxppAcidAddAcccessToken
     , 'wxppAcidPurgeAcccessToken
+    , 'wxppAcidLookupMediaIDByHash
     ])
