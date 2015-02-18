@@ -1,6 +1,7 @@
 module WeiXin.PublicPlatform.InMsgHandler where
 
 import ClassyPrelude
+import Data.Proxy
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import qualified Data.Text                  as T
@@ -23,9 +24,9 @@ class FromJsonHandler h where
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
     -- 然后从 json 数据中反解出相应的值
-    isNameOfInMsgHandler :: Monad n => n h -> Text -> Bool
+    isNameOfInMsgHandler :: Proxy h -> Text -> Bool
 
-    parseInMsgHandler :: Monad n => n h -> Object -> Parser h
+    parseInMsgHandler :: Proxy h -> Object -> Parser h
 
 -- | something that can be used as WxppInMsgHandler
 class IsWxppInMsgHandler m h where
@@ -41,45 +42,44 @@ data SomeWxppInMsgHandler m =
 instance IsWxppInMsgHandler m (SomeWxppInMsgHandler m) where
     handleInMsg (SomeWxppInMsgHandler h) = handleInMsg h
 
+data SomeWxppInMsgHandlerProxy m =
+        forall h. (IsWxppInMsgHandler m h, FromJsonHandler h) =>
+                SomeWxppInMsgHandlerProxy (Proxy h)
+
 -- | 用于在配置文件中，读取出一系列响应算法
 parseWxppInMsgHandlers ::
-    [SomeWxppInMsgHandler m]
-        -- ^ value inside SomeWxppInMsgHandler is not used
-        -- use: SomeWxppInMsgHandler undefined is ok
+    [SomeWxppInMsgHandlerProxy m]
     -> Value
     -> Parser [SomeWxppInMsgHandler m]
 parseWxppInMsgHandlers known_hs = withArray "[SomeWxppInMsgHandler]" $
         mapM (parseWxppInMsgHandler known_hs) . toList
 
 parseWxppInMsgHandler ::
-    [SomeWxppInMsgHandler m]
-        -- ^ value inside SomeWxppInMsgHandler is not used
-        -- use: SomeWxppInMsgHandler undefined is ok
-        -- see: allBasicWxppInMsgHandlersWHNF
+    [SomeWxppInMsgHandlerProxy m]
     -> Value
     -> Parser (SomeWxppInMsgHandler m)
 parseWxppInMsgHandler known_hs =
     withObject "SomeWxppInMsgHandler" $ \obj -> do
         name <- obj .: "name"
-        SomeWxppInMsgHandler h <- maybe
+        SomeWxppInMsgHandlerProxy ph <- maybe
                 (fail $ "unknown handler name: " <> T.unpack name)
                 return
                 $ flip find known_hs
-                $ \(SomeWxppInMsgHandler h) -> isNameOfInMsgHandler (Just h) name
-        fmap SomeWxppInMsgHandler $ parseInMsgHandler (Just h) obj
+                $ \(SomeWxppInMsgHandlerProxy ph) -> isNameOfInMsgHandler ph name
+        fmap SomeWxppInMsgHandler $ parseInMsgHandler ph obj
 
 
 -- | 这里构造的列表只用于 parseWxppInMsgHandlers
-allBasicWxppInMsgHandlersWHNF ::
+allBasicWxppInMsgHandlerProxies ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
-    [SomeWxppInMsgHandler m]
-allBasicWxppInMsgHandlersWHNF =
-    [ SomeWxppInMsgHandler (error "handler forced" :: WelcomeSubscribe)
+    [SomeWxppInMsgHandlerProxy m]
+allBasicWxppInMsgHandlerProxies =
+    [ SomeWxppInMsgHandlerProxy (Proxy :: Proxy WelcomeSubscribe)
     ]
 
 
 readWxppInMsgHandlers ::
-    [SomeWxppInMsgHandler m]
+    [SomeWxppInMsgHandlerProxy m]
     -> String
     -> IO (Either ParseException [SomeWxppInMsgHandler m])
 readWxppInMsgHandlers tmps fp = runExceptT $ do
