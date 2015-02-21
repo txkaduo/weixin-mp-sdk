@@ -23,6 +23,8 @@ import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
 import Filesystem.Path.CurrentOS            (encodeString, fromText)
 import qualified Crypto.Hash.MD5            as MD5
+import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
+                                            , SqlType(SqlString))
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
@@ -41,8 +43,22 @@ instance SafeCopy WxppMediaID where
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Eq, Ord)
 
+instance PersistField WxppOpenID where
+    toPersistValue      = toPersistValue . unWxppOpenID
+    fromPersistValue    = fmap WxppOpenID . fromPersistValue
+
+instance PersistFieldSql WxppOpenID where
+    sqlType _ = SqlString
+
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord)
+
+instance PersistField WxppInMsgID where
+    toPersistValue      = toPersistValue . unWxppInMsgID
+    fromPersistValue    = fmap WxppInMsgID . fromPersistValue
+
+instance PersistFieldSql WxppInMsgID where
+    sqlType _ = SqlString
 
 newtype WxppSceneID = WxppSceneID { unWxppSceneID :: Word32 }
                     deriving (Show, Eq, Ord)
