@@ -85,24 +85,32 @@ postMessageR = do
                         >>= maybe (fail $ "Internal Error: Assertion Failed") return
                 else wxppInMsgEntityFromLbs lbs
 
-    case err_or_msg_entity of
-        Left err -> do
-                    $(logError) $ fromString $
-                        "Failed to parse message from XML: " <> err
-                    return ""
+    m_ime <- case err_or_msg_entity of
+                        Left err -> do
+                                    $(logError) $ fromString $
+                                        "Failed to parse message from XML: " <> err
+                                    return Nothing
 
-        Right me -> do
-            let handle_msg      = wxppSubMsgHandler foundation
-                user_open_id    = wxppInFromUserName me
-                my_name         = wxppInToUserName me
+                        Right me -> return $ Just me
 
-            err_or_resp <- runExceptT $ do
-                m_out_msg <- ExceptT $
-                        (try $ liftIO $ handle_msg me)
-                            >>= return
-                                    . either
-                                        (Left . (show :: SomeException -> String))
-                                        id
+    err_or_resp <- lift $ runExceptT $ do
+        let handle_msg      = wxppSubMsgHandler foundation
+        m_out_msg <- ExceptT $
+                (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg lbs m_ime)
+                    >>= return
+                            . either
+                                (Left . (show :: SomeException -> String))
+                                id
+
+        case m_ime of
+            Nothing -> do
+                -- incoming message cannot be parsed
+                -- we don't know who send the message
+                return ""
+
+            Just me -> do
+                let user_open_id    = wxppInFromUserName me
+                    my_name         = wxppInToUserName me
 
                 fmap (fromMaybe "") $ forM m_out_msg $ \out_msg -> do
                     now <- liftIO getCurrentTime
@@ -117,13 +125,13 @@ postMessageR = do
                                                 app_id ak out_msg_entity
                             else return $ wxppOutMsgEntityToDocument out_msg_entity
 
-            case err_or_resp of
-                Left err -> do
-                    $(logErrorS) wxppLogSource $ fromString $
-                        "cannot encode outgoing message into XML: " <> err
-                    throwM $ HCError $
-                        InternalError "cannot encode outgoing message into XML"
-                Right xmls -> return xmls
+    case err_or_resp of
+        Left err -> do
+            $(logErrorS) wxppLogSource $ fromString $
+                "cannot encode outgoing message into XML: " <> err
+            throwM $ HCError $
+                InternalError "cannot encode outgoing message into XML"
+        Right xmls -> return xmls
 
 
 -- | reload menu from config/menu.yml

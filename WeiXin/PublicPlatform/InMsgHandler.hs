@@ -5,6 +5,7 @@ import Data.Proxy
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import qualified Data.Text                  as T
+import qualified Data.ByteString.Lazy       as LB
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
@@ -17,16 +18,29 @@ import WeiXin.PublicPlatform.Acid
 -- | 响应收到的服务器信息
 -- Left 用于表达错误
 -- Right Nothing 代表无需回复一个新信息
-type WxppInMsgHandler m = WxppInMsgEntity
-                            -> m (Either String (Maybe WxppOutMsg))
+type WxppInMsgHandler m =
+        LB.ByteString
+            -- ^ raw data of message (unparsed)
+        -> Maybe WxppInMsgEntity
+            -- ^ this is nothing only if caller cannot parse the message
+        -> m (Either String (Maybe WxppOutMsg))
 
-class FromJsonHandler h where
+
+-- | 可以从配置文件中读取出来的某种处理值
+class JsonConfigable h where
+    -- | 从配置文件中读取的数据未必能提供构造完整的值的所有信息
+    -- 这个类型指示出无法在配置文件中提供的信息
+    -- 这部分信息只能由调用者自己提供
+    -- 通常这会是一个函数
+    type JsonConfigableUnconfigData h
+
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
     -- 然后从 json 数据中反解出相应的值
     isNameOfInMsgHandler :: Proxy h -> Text -> Bool
 
-    parseInMsgHandler :: Proxy h -> Object -> Parser h
+    parseInMsgHandler :: Proxy h -> Object -> Parser (JsonConfigableUnconfigData h -> h)
+
 
 -- | something that can be used as WxppInMsgHandler
 class IsWxppInMsgHandler m h where
@@ -37,49 +51,49 @@ class IsWxppInMsgHandler m h where
 
 
 data SomeWxppInMsgHandler m =
-        forall h. (IsWxppInMsgHandler m h, FromJsonHandler h) => SomeWxppInMsgHandler h
+        forall h. (IsWxppInMsgHandler m h) => SomeWxppInMsgHandler h
 
 instance IsWxppInMsgHandler m (SomeWxppInMsgHandler m) where
     handleInMsg (SomeWxppInMsgHandler h) = handleInMsg h
 
-data SomeWxppInMsgHandlerProxy m =
-        forall h. (IsWxppInMsgHandler m h, FromJsonHandler h) =>
-                SomeWxppInMsgHandlerProxy (Proxy h)
+data WxppInMsgHandlerPrototype m =
+        forall h. (IsWxppInMsgHandler m h, JsonConfigable h) =>
+                WxppInMsgHandlerPrototype (Proxy h) (JsonConfigableUnconfigData h)
 
 -- | 用于在配置文件中，读取出一系列响应算法
 parseWxppInMsgHandlers ::
-    [SomeWxppInMsgHandlerProxy m]
+    [WxppInMsgHandlerPrototype m]
     -> Value
     -> Parser [SomeWxppInMsgHandler m]
 parseWxppInMsgHandlers known_hs = withArray "[SomeWxppInMsgHandler]" $
         mapM (parseWxppInMsgHandler known_hs) . toList
 
 parseWxppInMsgHandler ::
-    [SomeWxppInMsgHandlerProxy m]
+    [WxppInMsgHandlerPrototype m]
     -> Value
     -> Parser (SomeWxppInMsgHandler m)
 parseWxppInMsgHandler known_hs =
     withObject "SomeWxppInMsgHandler" $ \obj -> do
         name <- obj .: "name"
-        SomeWxppInMsgHandlerProxy ph <- maybe
+        WxppInMsgHandlerPrototype ph ext <- maybe
                 (fail $ "unknown handler name: " <> T.unpack name)
                 return
                 $ flip find known_hs
-                $ \(SomeWxppInMsgHandlerProxy ph) -> isNameOfInMsgHandler ph name
-        fmap SomeWxppInMsgHandler $ parseInMsgHandler ph obj
+                $ \(WxppInMsgHandlerPrototype ph _) -> isNameOfInMsgHandler ph name
+        fmap SomeWxppInMsgHandler $ liftM ( $ ext) $ parseInMsgHandler ph obj
 
 
 -- | 这里构造的列表只用于 parseWxppInMsgHandlers
-allBasicWxppInMsgHandlerProxies ::
+allBasicWxppInMsgHandlerPrototypes ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
-    [SomeWxppInMsgHandlerProxy m]
-allBasicWxppInMsgHandlerProxies =
-    [ SomeWxppInMsgHandlerProxy (Proxy :: Proxy WelcomeSubscribe)
+    [WxppInMsgHandlerPrototype m]
+allBasicWxppInMsgHandlerPrototypes =
+    [ WxppInMsgHandlerPrototype (Proxy :: Proxy WelcomeSubscribe) ()
     ]
 
 
 readWxppInMsgHandlers ::
-    [SomeWxppInMsgHandlerProxy m]
+    [WxppInMsgHandlerPrototype m]
     -> String
     -> IO (Either ParseException [SomeWxppInMsgHandler m])
 readWxppInMsgHandlers tmps fp = runExceptT $ do
@@ -99,13 +113,13 @@ readWxppInMsgHandlers tmps fp = runExceptT $ do
 --      则理解为成功
 tryEveryInMsgHandler :: MonadLogger m =>
     [WxppInMsgHandler m] -> WxppInMsgHandler m
-tryEveryInMsgHandler handlers ime = do
+tryEveryInMsgHandler handlers bs m_ime = do
     (errs, res_lst) <- liftM partitionEithers $
-                            mapM (\h -> h ime) handlers
+                            mapM (\h -> h bs m_ime) handlers
     forM_ errs $ \err -> do
         $(logWarnS) wxppLogSource $ T.pack $
             "Error when handling incoming message, "
-            <> "MsgId=" <> (show $ wxppInMessageID ime)
+            <> "MsgId=" <> (show $ join $ fmap wxppInMessageID m_ime)
             <> ": " <> err
 
     case catMaybes res_lst of
@@ -126,7 +140,8 @@ tryEveryInMsgHandler handlers ime = do
                         --       根据文档，这只能在 48 小时完成
                         $(logWarnS) wxppLogSource $ T.pack $
                             "more than one reply messages from handlers,"
-                            <> " incoming MsgId=" <> (show $ wxppInMessageID ime)
+                            <> " incoming MsgId="
+                            <> (show $ join $ fmap wxppInMessageID m_ime)
                     return $ Right $ Just x
 
 
@@ -149,20 +164,22 @@ tryWxppWsResultE op f =
 data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgL
                         deriving (Show, Typeable)
 
-instance FromJsonHandler WelcomeSubscribe where
+instance JsonConfigable WelcomeSubscribe where
+    type JsonConfigableUnconfigData WelcomeSubscribe = ()
+
     isNameOfInMsgHandler _ x = x == "welcome-subscribe"
 
     parseInMsgHandler _ obj = do
-        WelcomeSubscribe <$> obj .: "msg"
+        const . WelcomeSubscribe <$> obj .: "msg"
 
 instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgHandler m WelcomeSubscribe
     where
-    handleInMsg (WelcomeSubscribe outmsg) acid get_atk ime = runExceptT $ do
-        is_subs <- case wxppInMessage ime of
-                    WxppInMsgEvent WxppEvtSubscribe             -> return True
-                    WxppInMsgEvent (WxppEvtSubscribeAtScene {}) -> return True
-                    _                                           -> return False
+    handleInMsg (WelcomeSubscribe outmsg) acid get_atk _bs m_ime = runExceptT $ do
+        is_subs <- case fmap wxppInMessage m_ime of
+                    Just (WxppInMsgEvent WxppEvtSubscribe)              -> return True
+                    Just (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))  -> return True
+                    _                                                   -> return False
         if is_subs
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
