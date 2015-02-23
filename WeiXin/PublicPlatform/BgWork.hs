@@ -55,16 +55,16 @@ loopRefreshAccessToken ::
     -> NominalDiffTime
     -> m ()
 loopRefreshAccessToken chk_abort intv wac acid dt = do
-    loopRunWSJob chk_abort intv $ refreshAccessTokenIfNeeded wac acid dt
+    loopRunBgJob chk_abort intv $ refreshAccessTokenIfNeeded wac acid dt
 
 
-loopRunWSJob :: (MonadIO m, MonadCatch m) =>
+loopRunBgJob :: (MonadIO m, MonadCatch m) =>
     IO Bool     -- ^ This function should be a blocking op,
                 -- return True if the infinite should be aborted immediately.
     -> Int      -- ^ interval in seconds
     -> m ()     -- ^ the job to be repeatly called
     -> m ()
-loopRunWSJob chk_abort intv job = loop
+loopRunBgJob chk_abort intv job = loop
     where
         loop = do
             job >>= liftIO . evaluate
