@@ -135,7 +135,7 @@ data WxppEvent = WxppEvtSubscribe
                 deriving (Show, Eq)
 
 data WxppInMsg =  WxppInMsgText Text
-                | WxppInMsgImage WxppMediaID Text
+                | WxppInMsgImage WxppMediaID UrlText
                 | WxppInMsgVoice WxppMediaID Text (Maybe Text)
                 | WxppInMsgVideo WxppMediaID WxppMediaID
                 | WxppInMsgLocation (Double, Double) Double Text

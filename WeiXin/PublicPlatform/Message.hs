@@ -165,7 +165,7 @@ wxppInMsgFromDocument doc = do
                     return $ WxppInMsgText ct
 
         "image" -> do
-                    url <- get_ele_s "PicUrl"
+                    url <- UrlText <$> get_ele_s "PicUrl"
                     media_id <- fmap WxppMediaID $ get_ele_s "MediaId"
                     return $ WxppInMsgImage media_id url
 
