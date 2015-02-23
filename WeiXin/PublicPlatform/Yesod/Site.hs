@@ -6,16 +6,17 @@ module WeiXin.PublicPlatform.Yesod.Site
 
 import ClassyPrelude
 import Yesod
+import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
-import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
+import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
 import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , reqGetParamE'
                                             , paramErrorFromEither
                                             , httpErrorRetryWithValidParams
                                             )
 import Network.Wai                          (lazyRequestBody)
-import Text.XML                             (renderText)
+import Text.XML                             (renderText, parseLBS)
 import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
@@ -78,25 +79,25 @@ postMessageR = do
         ak          = wxppConfigAppAesKey app_config
         bak_aks     = wxppConfigAppBackupAesKeys app_config
 
-    let err_or_msg_entity = do
-            if enc
-                then do
-                    wxppInMsgEntityFromLbsET app_id (ak:bak_aks) lbs
-                        >>= maybe (fail $ "Internal Error: Assertion Failed") return
-                else wxppInMsgEntityFromLbs lbs
-
-    m_ime <- case err_or_msg_entity of
-                        Left err -> do
-                                    $(logError) $ fromString $
-                                        "Failed to parse message from XML: " <> err
-                                    return Nothing
-
-                        Right me -> return $ Just me
 
     err_or_resp <- lift $ runExceptT $ do
+        decrypted_xml <-
+            if enc
+                then do
+                    (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id (ak:bak_aks))
+                        >>= maybe (throwE $ "Internal Error: Assertion Failed") (return . LB.fromStrict)
+                else return lbs
+
+        let err_or_parsed = parse_xml_lbs decrypted_xml >>= wxppInMsgEntityFromDocument
+        m_ime <- case err_or_parsed of
+                    Left err -> do
+                        $logError $ fromString $ "Error when parsing incoming XML: " ++ err
+                        return Nothing
+                    Right x -> return $ Just x
+
         let handle_msg      = wxppSubMsgHandler foundation
         m_out_msg <- ExceptT $
-                (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg lbs m_ime)
+                (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg decrypted_xml m_ime)
                     >>= return
                             . either
                                 (Left . (show :: SomeException -> String))
@@ -132,6 +133,10 @@ postMessageR = do
             throwM $ HCError $
                 InternalError "cannot encode outgoing message into XML"
         Right xmls -> return xmls
+    where
+        parse_xml_lbs x  = case parseLBS def x of
+                                Left ex     -> fail $ "Failed to parse XML: " <> show ex
+                                Right xdoc  -> return xdoc
 
 
 -- | reload menu from config/menu.yml

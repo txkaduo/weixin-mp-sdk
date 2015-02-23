@@ -13,6 +13,6 @@ WxppIncomingHeader
 -- | Unparsed message
 WxppIncomingRawMsg
     header              WxppIncomingHeaderId Maybe
-    body                ByteString
+    body                ByteString          -- ^ unencrypted message bytestring
 
     UniqueWxppIncomingRawMsg header !force
