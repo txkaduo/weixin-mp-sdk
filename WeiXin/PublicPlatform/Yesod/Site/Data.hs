@@ -6,6 +6,7 @@ module WeiXin.PublicPlatform.Yesod.Site.Data where
 
 import ClassyPrelude
 import Yesod
+import Database.Persist.Quasi
 import Control.Monad.Logger
 import qualified Data.ByteString.Lazy       as LB
 
@@ -32,3 +33,59 @@ mkYesodSubData "WxppSub" [parseRoutes|
 /menu/reload    ReloadMenuR     GET
 /menu/query     QueryMenuR      GET
 |]
+
+wxppSubModelsDef :: [EntityDef]
+wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
+
+share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
+                    $(persistFileWith lowerCaseSettings "models")
+
+newtype WxppSubDBActionRunner m = WxppSubDBActionRunner
+        {
+            runWxppSubDBActionRunner ::
+#if MIN_VERSION_persistent(2, 0, 0)
+                    (forall backend a.
+                        ( PersistStore backend
+                        , PersistEntityBackend WxppIncomingRawMsg ~ backend
+                        , PersistEntityBackend WxppIncomingHeader ~ backend
+                        ) =>
+                        ReaderT backend m a -> m a
+                    )
+#else
+                    -- the branch of code is not compiled or tested.
+                    (forall c.
+                        ( PersistConfig c
+                        , PersistEntityBackend WxppIncomingRawMsg ~ PersistConfigBackend c
+                        , PersistEntityBackend WxppIncomingHeader ~ PersistConfigBackend c
+                        ) =>
+                        PersistConfigBackend c (ResourceT m) a -> m a
+                    )
+#endif
+        }
+
+-- | 保存所有收到的信息到数据库
+data StoreMessageToDB m = StoreMessageToDB (WxppSubDBActionRunner m)
+
+instance JsonConfigable (StoreMessageToDB m) where
+    type JsonConfigableUnconfigData (StoreMessageToDB m) = WxppSubDBActionRunner m
+
+    isNameOfInMsgHandler _ = ( == "db-store-all" )
+
+    parseInMsgHandler _ _obj = return StoreMessageToDB
+
+
+instance MonadIO m => IsWxppInMsgHandler m (StoreMessageToDB m) where
+    handleInMsg (StoreMessageToDB db_runner) _acid _get_atk bs m_ime = do
+        now <- liftIO getCurrentTime
+        runWxppSubDBActionRunner db_runner $ do
+            m_header_id <- forM m_ime $ \ime -> do
+                            insert $ WxppIncomingHeader
+                                        (wxppInToUserName ime)
+                                        (wxppInFromUserName ime)
+                                        (wxppInCreatedTime ime)
+                                        (wxppInMessageID ime)
+                                        now
+            insert_ $ WxppIncomingRawMsg
+                            m_header_id
+                            (LB.toStrict bs)
+        return $ Right Nothing

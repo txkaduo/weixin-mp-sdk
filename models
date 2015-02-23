@@ -1,0 +1,18 @@
+-- | shared information in parsed message
+WxppIncomingHeader
+    to                  Text
+    from                WxppOpenID
+    time                UTCTime
+    extId               WxppInMsgID Maybe
+
+    notifyTime          UTCTime
+
+    UniqueWxppIncomingMsgHeader extId !force
+
+
+-- | Unparsed message
+WxppIncomingRawMsg
+    header              WxppIncomingHeaderId Maybe
+    body                ByteString
+
+    UniqueWxppIncomingRawMsg header !force
