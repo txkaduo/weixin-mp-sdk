@@ -33,6 +33,39 @@ wxppInMsgEntityFromLbsA app_id ak bs =
         Right doc   -> wxppInMsgEntityFromDocumentA app_id ak doc
 
 
+-- | decrypt bytestring from 'Encrypt' element
+wxppDecryptByteStringDocumentE ::
+    WxppAppID
+    -> AesKey
+    -> Document
+    -> Either String ByteString
+wxppDecryptByteStringDocumentE app_id ak doc = do
+    get_ele_s "Encrypt" >>= decrypt
+    where
+        get_ele_s = getElementContent cursor
+        cursor = fromDocument doc
+        decrypt t = (B64.decode $ encodeUtf8 t)
+                            >>= wxppDecrypt app_id ak
+
+-- | call wxppInMsgEntityFromDocumentE with each of the AesKey
+wxppTryDecryptByteStringDocumentE ::
+    WxppAppID
+    -> [AesKey]
+    -> Document
+    -> Either String (Maybe ByteString)
+        -- ^ 如果全部失败，取第一个错误
+        -- 如果有一个成功就直接返回成功
+        -- 如果失败、成功都没有（只出现在 AesKey 列表为空的情况）
+        -- 则为 Right Nothing
+wxppTryDecryptByteStringDocumentE app_id ak_list doc =
+    case (fails, dones) of
+        ([],        []      )   -> Right Nothing
+        (_ ,        (done:_))   -> Right $ Just done
+        ((err:_),   _       )   -> Left err
+    where
+        (fails, dones) = partitionEithers $ flip map ak_list $
+                            \ak -> wxppDecryptByteStringDocumentE app_id ak doc
+
 -- | get message from 'Encrypt' element
 wxppInMsgEntityFromDocumentE ::
     WxppAppID
