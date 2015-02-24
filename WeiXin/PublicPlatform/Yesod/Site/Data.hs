@@ -7,7 +7,9 @@ module WeiXin.PublicPlatform.Yesod.Site.Data where
 import ClassyPrelude
 import Yesod
 import Database.Persist.Quasi
+import Database.Persist.Sql
 import Control.Monad.Logger
+import Control.Monad.Trans.Resource
 import qualified Data.ByteString.Lazy       as LB
 
 import WeiXin.PublicPlatform.Security
@@ -34,7 +36,12 @@ mkYesodSubData "WxppSub" [parseRoutes|
 /menu/query     QueryMenuR      GET
 |]
 
-wxppSubModelsDef :: [EntityDef]
+wxppSubModelsDef ::
+#if MIN_VERSION_persistent(2, 0, 0)
+    [EntityDef]
+#else
+    [EntityDef SqlType]
+#endif
 wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
 
 share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
@@ -52,13 +59,11 @@ newtype WxppSubDBActionRunner m = WxppSubDBActionRunner
                         ReaderT backend m a -> m a
                     )
 #else
-                    -- the branch of code is not compiled or tested.
-                    (forall c.
-                        ( PersistConfig c
-                        , PersistEntityBackend WxppIncomingRawMsg ~ PersistConfigBackend c
-                        , PersistEntityBackend WxppIncomingHeader ~ PersistConfigBackend c
-                        ) =>
-                        PersistConfigBackend c (ResourceT m) a -> m a
+                    -- XXX: 这里没有找到一种可以中立于数据库backend的表达方法
+                    -- 暂时只能写死是 SqlPersistT
+                    -- 这种写法不支持 MongoDB
+                    (forall a .
+                        SqlPersistT (ResourceT m) a -> m a
                     )
 #endif
         }
@@ -74,7 +79,13 @@ instance JsonConfigable (StoreMessageToDB m) where
     parseInMsgHandler _ _obj = return StoreMessageToDB
 
 
-instance MonadIO m => IsWxppInMsgHandler m (StoreMessageToDB m) where
+instance (MonadIO m
+#if !MIN_VERSION_persistent(2, 0, 0)
+    , MonadBaseControl IO m
+    , MonadLogger m
+    , MonadThrow m
+#endif
+    ) => IsWxppInMsgHandler m (StoreMessageToDB m) where
     handleInMsg (StoreMessageToDB db_runner) _acid _get_atk bs m_ime = do
         now <- liftIO getCurrentTime
         runWxppSubDBActionRunner db_runner $ do

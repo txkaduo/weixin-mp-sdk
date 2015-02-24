@@ -81,6 +81,7 @@ library
                      , system-filepath
                      , cryptohash
                      , containers
+                     , resourcet
 
 
   -- hs-source-dirs:      
