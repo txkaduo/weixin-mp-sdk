@@ -30,7 +30,7 @@ wxppUploadMedia (AccessToken atk) mtype fp = do
                     WxppMediaTypeVideo -> "video"
                     WxppMediaTypeThumb -> "thumb"
 
-    let url = wxppRemoteApiBaseUrl <> "/media/upload"
+    let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ type_s :: Text]
     (liftIO $ postWith opts url $ partFileSource "media" $ encodeString fp)

@@ -70,6 +70,8 @@ asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
     Response LB.ByteString -> m (WxppWsResp a)
 asWxppWsResponseNormal = liftM (view responseBody) . asJSON
 
+-- | 解释远程调用的结果，返回正常的值，异常情况会抛出
+-- 抛出的异常主要类型就是 WxppWsCallError 列出的情况
 asWxppWsResponseNormal' :: (MonadThrow m, FromJSON a) =>
     Response LB.ByteString -> m a
 asWxppWsResponseNormal' =
@@ -79,3 +81,6 @@ asWxppWsResponseNormal' =
 
 wxppRemoteApiBaseUrl :: IsString a => a
 wxppRemoteApiBaseUrl = "https://api.weixin.qq.com/cgi-bin"
+
+wxppRemoteFileApiBaseUrl :: IsString a => a
+wxppRemoteFileApiBaseUrl = "https://file.api.weixin.qq.com/cgi-bin"
