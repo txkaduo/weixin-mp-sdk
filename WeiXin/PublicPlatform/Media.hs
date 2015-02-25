@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Media
     ( module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Types
@@ -9,11 +10,35 @@ import Control.Lens
 import Control.Monad.Logger
 import Filesystem.Path.CurrentOS            (encodeString)
 import Data.Acid                            (query)
+import qualified Data.ByteString.Lazy       as LB
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
 
+
+-- | 下载一个多媒体文件
+wxppDownloadMedia ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaID
+    -> m (Response LB.ByteString)
+wxppDownloadMedia (AccessToken atk) mid = do
+    let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
+        opts = defaults & param "access_token" .~ [ atk ]
+                        & param "media_id" .~ [ unWxppMediaID mid ]
+    rb <- liftIO $ getWith opts url
+
+    -- 需要某种方法区别正常和异常的返回
+    -- 使用 Content-Type 的方式
+    -- 但 content-type 的内容严格地说不是一个简单的字串比较就了事的
+    -- rb ^. responseHeader "Content-Type"
+    -- 这里使用的方法是先测试一下当作错误报告的 json 解释，不行就认为是正常返回
+    _ :: () <- (liftM (view responseBody) $ asJSON rb)
+                    >>= either throwM return . unWxppWsResp
+
+    -- 至此，我们确定返回内容不是文档所述的错误码
+    return rb
 
 
 -- | 上传本地一个文件
