@@ -1,18 +1,32 @@
--- | shared information in parsed message
-WxppIncomingHeader
-    to                  Text
-    from                WxppOpenID
-    time                UTCTime
-    extId               WxppInMsgID Maybe
+-- 这里定义的若干 Model 是主要为 StoreInMsgToDB “标准”消息处理器而设计
 
+
+-- | incoming message
+WxppInMsgRecord
+    to                  Text Maybe
+                            -- ^ Nothing only if we cannot parse the message propertly
+    from                WxppOpenID Maybe
+                            -- ^ Nothing only if we cannot parse the message propertly
+    createdTime         UTCTime Maybe
+                            -- ^ Nothing only if we cannot parse the message propertly
+    extId               WxppInMsgID Maybe
+                            -- ^ Nothing if we cannot parse the message propertly
+                            -- or it is an event notification
+
+    blob                ByteString          -- ^ unencrypted message bytestring
     notifyTime          UTCTime
 
-    UniqueWxppIncomingMsgHeader extId !force
+    UniqueWxppInMsgRecord extId !force
 
 
--- | Unparsed message
-WxppIncomingRawMsg
-    header              WxppIncomingHeaderId Maybe
-    body                ByteString          -- ^ unencrypted message bytestring
+-- | 永久保存可能会失效的数据
+-- 因为各种媒体文件只有短时间内有效，这个表把这些文件支持保存到本地数据库
+WxppStoredMedia
+    extId               WxppMediaID
+    msg                 WxppInMsgRecordId
+    blob                ByteString
+    saveTime            UTCTime
 
-    UniqueWxppIncomingRawMsg header !force
+    UniqueWxppStoredMedia extId msg
+            -- ^ 按文档，WxppMediaID可能会被重用
+            -- 因此加上它所相关联的消息作为
