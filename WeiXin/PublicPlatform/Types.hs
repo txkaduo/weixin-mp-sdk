@@ -40,6 +40,14 @@ instance SafeCopy WxppMediaID where
     getCopy                 = contain $ safeGet
     putCopy (WxppMediaID x) = contain $ safePut x
 
+instance PersistField WxppMediaID where
+    toPersistValue      = toPersistValue . unWxppMediaID
+    fromPersistValue    = fmap WxppMediaID . fromPersistValue
+
+instance PersistFieldSql WxppMediaID where
+    sqlType _ = SqlString
+
+
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Eq, Ord)
 
@@ -49,6 +57,7 @@ instance PersistField WxppOpenID where
 
 instance PersistFieldSql WxppOpenID where
     sqlType _ = SqlString
+
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord)
@@ -134,8 +143,12 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtFollowUrl Text
                 deriving (Show, Eq)
 
+
+-- | 收到的各种消息: 包括普通消息和事件推送
 data WxppInMsg =  WxppInMsgText Text
+                    -- ^ 文本消息
                 | WxppInMsgImage WxppMediaID UrlText
+                    -- ^ 消息
                 | WxppInMsgVoice WxppMediaID Text (Maybe Text)
                 | WxppInMsgVideo WxppMediaID WxppMediaID
                 | WxppInMsgLocation (Double, Double) Double Text
@@ -222,6 +235,7 @@ instance FromJSON WxppOutMsgL where
                         _       -> fail $ "unknown type: " <> type_s
 
 
+-- | 上传多媒体文件接口中的 type 参数
 data WxppMediaType = WxppMediaTypeImage
                     | WxppMediaTypeVoice
                     | WxppMediaTypeVideo
