@@ -25,6 +25,7 @@ WxppStoredMedia
     extId               WxppMediaID
     msg                 WxppInMsgRecordId
     blob                ByteString
+    mime                ByteString
     saveTime            UTCTime
 
     UniqueWxppStoredMedia extId msg

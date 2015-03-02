@@ -7,12 +7,16 @@ module WeiXin.PublicPlatform.Yesod.Site.Function
     )where
 
 import ClassyPrelude
+import Yesod
 import Database.Persist.Sql
-import Control.Monad.Logger
+import Control.Lens
+import Network.Wreq
 import Control.Monad.Trans.Resource
 import qualified Data.ByteString.Lazy       as LB
 
 import WeiXin.PublicPlatform.Security
+import WeiXin.PublicPlatform.Media
+import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 
@@ -77,7 +81,7 @@ instance (MonadIO m
                             now
 
             -- save any temporary media data
-            mids <- fmap (fromMaybe []) $ forM m_ime $ \ime -> do
+            mids <- liftM (fromMaybe []) $ forM m_ime $ \ime -> do
                         case wxppInMessage ime of
                             WxppInMsgImage mid _   -> return [mid]
                             WxppInMsgVoice mid _ _ -> return [mid]
@@ -89,3 +93,46 @@ instance (MonadIO m
             media_downloader msg_record_id mid
 
         return $ Right Nothing
+
+
+-- | 下载多媒体文件，保存至数据库
+downloadSaveMediaToDB ::
+    ( MonadLogger m
+    , MonadCatch m
+    , MonadIO m
+#if MIN_VERSION_persistent(2, 0, 0)
+    , PersistUnique backend
+    , backend ~ PersistEntityBackend WxppStoredMedia
+#else
+    , PersistUnique m
+    , PersistMonadBackend m ~ PersistEntityBackend WxppStoredMedia
+#endif
+    ) =>
+    AccessToken
+    -> WxppInMsgRecordId
+    -> WxppMediaID
+#if MIN_VERSION_persistent(2, 0, 0)
+    -> ReaderT backend m ()
+#else
+    -> m ()
+#endif
+downloadSaveMediaToDB atk msg_id media_id = do
+    err_or_rb <- tryWxppWsResult $ wxppDownloadMedia atk media_id
+    case err_or_rb of
+        Left err -> do
+                    $(logError) $ "Failed to download media '" <> unWxppMediaID media_id
+                                    <> "': " <> (fromString $ show err)
+        Right rb -> do
+                    now <- liftIO getCurrentTime
+                    old_or_id <- insertBy $ WxppStoredMedia
+                                                media_id
+                                                msg_id
+                                                (LB.toStrict $ rb ^. responseBody)
+                                                (rb ^. responseHeader "Content-Type")
+                                                now
+                    case old_or_id of
+                        Left (Entity old_id _) -> do
+                            $(logWarn) $ "Media '" <> unWxppMediaID media_id
+                                            <> "' already in DB, record id: "
+                                            <> toPathPiece old_id
+                        Right _ -> return ()

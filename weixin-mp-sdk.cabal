@@ -71,8 +71,8 @@ library
                      , byteable
                      , random
                      , attoparsec
-                     , transformers
-                     , transformers-compat
+                     , transformers >= 0.4
+                     -- , transformers-compat
                      , xml-conduit
                      , xml-hamlet
                      , wai
