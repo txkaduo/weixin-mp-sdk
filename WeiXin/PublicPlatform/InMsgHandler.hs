@@ -345,7 +345,7 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgText t')  -> do
                 let t = T.unpack $ T.strip t'
-                return $ not $ null $ rights $ map (flip execute t) lst
+                return $ not $ null $ catMaybes $ rights $ map (flip execute t) lst
             _                       -> return False
 
 
