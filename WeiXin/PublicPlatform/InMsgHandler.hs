@@ -239,7 +239,7 @@ instance Show (WxppInMsgDispatchHandler m) where
 
 instance JsonConfigable (WxppInMsgDispatchHandler m) where
     type JsonConfigableUnconfigData (WxppInMsgDispatchHandler m) =
-            ( [WxppInMsgProcessorPrototype Bool m]
+            ( [WxppInMsgPredictorPrototype m]
             , [WxppInMsgHandlerPrototype m]
             )
 
