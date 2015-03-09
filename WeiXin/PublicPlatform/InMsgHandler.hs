@@ -10,20 +10,26 @@ import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
 
+import Yesod.Helpers.Aeson                  (parseArray)
+
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.Acid
 
--- | 响应收到的服务器信息
--- Left 用于表达错误
--- Right Nothing 代表无需回复一个新信息
-type WxppInMsgHandler m =
+
+-- | 对收到的消息处理的函数
+type WxppInMsgProcessor m a =
         LB.ByteString
             -- ^ raw data of message (unparsed)
         -> Maybe WxppInMsgEntity
             -- ^ this is nothing only if caller cannot parse the message
-        -> m (Either String (Maybe WxppOutMsg))
+        -> m (Either String a)
+            -- ^ Left 用于表达错误
+
+-- | 响应收到的服务器信息，其结果中：
+-- Nothing 代表无需回复一个新信息
+type WxppInMsgHandler m = WxppInMsgProcessor m (Maybe WxppOutMsg)
 
 
 -- | 可以从配置文件中读取出来的某种处理值
@@ -39,57 +45,84 @@ class JsonConfigable h where
     -- 然后从 json 数据中反解出相应的值
     isNameOfInMsgHandler :: Proxy h -> Text -> Bool
 
-    parseInMsgHandler :: Proxy h -> Object -> Parser (JsonConfigableUnconfigData h -> h)
+    parseWithExtraData :: Proxy h -> JsonConfigableUnconfigData h -> Object -> Parser h
+
+
+-- | 预处理收到的消息的结果
+type family WxppInMsgProcessResult h :: *
+
+
+-- | 对收到的消息作出某种处理
+-- 实例分为两大类：
+-- Predictor 其处理结果是个 Bool 值
+-- Handler 其处理结果是个 Maybe WxppOutMsg
+class IsWxppInMsgProcessor m h where
+    processInMsg ::
+        h
+        -> AcidState WxppAcidState
+        -> m (Maybe AccessToken)
+        -> WxppInMsgProcessor m (WxppInMsgProcessResult h)
+
+data SomeWxppInMsgProcessor r m =
+        forall h. (IsWxppInMsgProcessor m h, WxppInMsgProcessResult h ~ r) => SomeWxppInMsgProcessor h
+
+type instance WxppInMsgProcessResult (SomeWxppInMsgProcessor r m) = r
+
+-- | 所有 Handler 可放在这个类型内
+type SomeWxppInMsgHandler m = SomeWxppInMsgProcessor (Maybe WxppOutMsg) m
+
+-- | 所有 Predictor 可放在这个类型内
+type SomeWxppInMsgPredictor m = SomeWxppInMsgProcessor Bool m
 
 
 -- | something that can be used as WxppInMsgHandler
-class IsWxppInMsgHandler m h where
-    handleInMsg :: h
-                -> AcidState WxppAcidState
-                -> m (Maybe AccessToken)
-                -> WxppInMsgHandler m
+type IsWxppInMsgHandler m h =
+        ( IsWxppInMsgProcessor m h
+        , WxppInMsgProcessResult h ~ Maybe WxppOutMsg
+        )
+
+instance IsWxppInMsgProcessor m (SomeWxppInMsgProcessor r m) where
+    processInMsg (SomeWxppInMsgProcessor h) = processInMsg h
 
 
-data SomeWxppInMsgHandler m =
-        forall h. (IsWxppInMsgHandler m h) => SomeWxppInMsgHandler h
+data WxppInMsgProcessorPrototype r m =
+        forall h. (IsWxppInMsgProcessor m h, JsonConfigable h, WxppInMsgProcessResult h ~ r) =>
+                WxppInMsgProcessorPrototype (Proxy h) (JsonConfigableUnconfigData h)
 
-instance IsWxppInMsgHandler m (SomeWxppInMsgHandler m) where
-    handleInMsg (SomeWxppInMsgHandler h) = handleInMsg h
+type WxppInMsgHandlerPrototype m = WxppInMsgProcessorPrototype (Maybe WxppOutMsg) m
 
-data WxppInMsgHandlerPrototype m =
-        forall h. (IsWxppInMsgHandler m h, JsonConfigable h) =>
-                WxppInMsgHandlerPrototype (Proxy h) (JsonConfigableUnconfigData h)
+type WxppInMsgPredictorPrototype m = WxppInMsgProcessorPrototype Bool m
+
+type IsWxppInMsgHandlerRouter m p =
+            ( IsWxppInMsgProcessor m p, JsonConfigable p
+            , WxppInMsgProcessResult p ~ Maybe (SomeWxppInMsgHandler m)
+            )
+
+data SomeWxppInMsgHandlerRouter m =
+        forall p. ( IsWxppInMsgHandlerRouter m p ) =>
+            SomeWxppInMsgHandlerRouter p
+
 
 -- | 用于在配置文件中，读取出一系列响应算法
-parseWxppInMsgHandlers ::
-    [WxppInMsgHandlerPrototype m]
+parseWxppInMsgProcessors ::
+    [WxppInMsgProcessorPrototype r m]
     -> Value
-    -> Parser [SomeWxppInMsgHandler m]
-parseWxppInMsgHandlers known_hs = withArray "[SomeWxppInMsgHandler]" $
-        mapM (parseWxppInMsgHandler known_hs) . toList
+    -> Parser [SomeWxppInMsgProcessor r m]
+parseWxppInMsgProcessors known_hs = withArray "[SomeWxppInMsgProcessor]" $
+        mapM (withObject "SomeWxppInMsgProcessor" $ parseWxppInMsgProcessor known_hs) . toList
 
-parseWxppInMsgHandler ::
-    [WxppInMsgHandlerPrototype m]
-    -> Value
-    -> Parser (SomeWxppInMsgHandler m)
-parseWxppInMsgHandler known_hs =
-    withObject "SomeWxppInMsgHandler" $ \obj -> do
+parseWxppInMsgProcessor ::
+    [WxppInMsgProcessorPrototype r m]
+    -> Object
+    -> Parser (SomeWxppInMsgProcessor r m)
+parseWxppInMsgProcessor known_hs obj = do
         name <- obj .: "name"
-        WxppInMsgHandlerPrototype ph ext <- maybe
-                (fail $ "unknown handler name: " <> T.unpack name)
+        WxppInMsgProcessorPrototype ph ext <- maybe
+                (fail $ "unknown processor name: " <> T.unpack name)
                 return
                 $ flip find known_hs
-                $ \(WxppInMsgHandlerPrototype ph _) -> isNameOfInMsgHandler ph name
-        fmap SomeWxppInMsgHandler $ liftM ( $ ext) $ parseInMsgHandler ph obj
-
-
--- | 这里构造的列表只用于 parseWxppInMsgHandlers
-allBasicWxppInMsgHandlerPrototypes ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
-    [WxppInMsgHandlerPrototype m]
-allBasicWxppInMsgHandlerPrototypes =
-    [ WxppInMsgHandlerPrototype (Proxy :: Proxy WelcomeSubscribe) ()
-    ]
+                $ \(WxppInMsgProcessorPrototype ph _) -> isNameOfInMsgHandler ph name
+        fmap SomeWxppInMsgProcessor $ parseWithExtraData ph ext obj
 
 
 readWxppInMsgHandlers ::
@@ -99,7 +132,7 @@ readWxppInMsgHandlers ::
 readWxppInMsgHandlers tmps fp = runExceptT $ do
     (ExceptT $ decodeFileEither fp)
         >>= either (throwE . AesonException) return
-                . parseEither (parseWxppInMsgHandlers tmps)
+                . parseEither (parseWxppInMsgProcessors tmps)
 
 
 -- | 使用列表里的所有算法，逐一调用一次以处理收到的信息
@@ -151,7 +184,7 @@ tryEveryInMsgHandler' :: MonadLogger m =>
     -> [SomeWxppInMsgHandler m]
     -> WxppInMsgHandler m
 tryEveryInMsgHandler' acid get_atk known_hs = do
-    tryEveryInMsgHandler $ flip map known_hs $ \h -> handleInMsg h acid get_atk
+    tryEveryInMsgHandler $ flip map known_hs $ \h -> processInMsg h acid get_atk
 
 tryWxppWsResultE :: MonadCatch m =>
     String -> ExceptT String m b -> ExceptT String m b
@@ -160,7 +193,7 @@ tryWxppWsResultE op f =
         >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
 
 
--- | 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
+-- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
 data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgL
                         deriving (Show, Typeable)
 
@@ -169,13 +202,17 @@ instance JsonConfigable WelcomeSubscribe where
 
     isNameOfInMsgHandler _ x = x == "welcome-subscribe"
 
-    parseInMsgHandler _ obj = do
-        const . WelcomeSubscribe <$> obj .: "msg"
+    parseWithExtraData _ _ obj = do
+        WelcomeSubscribe <$> obj .: "msg"
+
+
+type instance WxppInMsgProcessResult WelcomeSubscribe = Maybe WxppOutMsg
 
 instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    IsWxppInMsgHandler m WelcomeSubscribe
+    IsWxppInMsgProcessor m WelcomeSubscribe
     where
-    handleInMsg (WelcomeSubscribe outmsg) acid get_atk _bs m_ime = runExceptT $ do
+
+    processInMsg (WelcomeSubscribe outmsg) acid get_atk _bs m_ime = runExceptT $ do
         is_subs <- case fmap wxppInMessage m_ime of
                     Just (WxppInMsgEvent WxppEvtSubscribe)              -> return True
                     Just (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))  -> return True
@@ -187,3 +224,137 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 liftM Just $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
             else return Nothing
+
+
+-- | Handler: 根据所带的 Predictor 与 Handler 对应表，分发到不同的 Handler 处理收到消息
+data WxppInMsgDispatchHandler m =
+        WxppInMsgDispatchHandler [(SomeWxppInMsgPredictor m, SomeWxppInMsgHandler m)]
+
+instance Show (WxppInMsgDispatchHandler m) where
+    show _ = "WxppInMsgDispatchHandler"
+
+instance JsonConfigable (WxppInMsgDispatchHandler m) where
+    type JsonConfigableUnconfigData (WxppInMsgDispatchHandler m) =
+            ( [WxppInMsgProcessorPrototype Bool m]
+            , [WxppInMsgHandlerPrototype m]
+            )
+
+    isNameOfInMsgHandler _ x = x == "dispatch"
+
+    parseWithExtraData _ (proto_pred, proto_handler) obj = do
+        fmap WxppInMsgDispatchHandler $
+            obj .: "route" >>= parseArray "message handler routes" parse_one
+        where
+            parse_one = withObject "message handler route" $ \o -> do
+                p <- o .: "predictor" >>= parseWxppInMsgProcessor proto_pred
+                h <- o .: "handler" >>= parseWxppInMsgProcessor proto_handler
+                return $ (p, h)
+
+
+type instance WxppInMsgProcessResult (WxppInMsgDispatchHandler m) = Maybe WxppOutMsg
+
+instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHandler m)
+    where
+    processInMsg (WxppInMsgDispatchHandler table) acid get_atk bs m_ime =
+        go table
+        where
+            go []               = return $ Right Nothing
+            go ((p, h):xs)      = do
+                err_or_b <- processInMsg p acid get_atk bs m_ime
+                b <- case err_or_b of
+                    Left err -> do
+                                $(logError) $ fromString $
+                                    "Predictor failed: " <> err
+                                return False
+                    Right b -> return b
+                if b
+                    then processInMsg h acid get_atk bs m_ime
+                    else go xs
+
+
+-- | Handler: 将满足某些条件的用户信息转发至微信的“多客服”系统
+data TransferToCS = TransferToCS
+                    deriving (Show, Typeable)
+
+instance JsonConfigable TransferToCS where
+    type JsonConfigableUnconfigData TransferToCS = ()
+
+    isNameOfInMsgHandler _ x = x == "transfer-to-cs"
+
+    parseWithExtraData _ _ _obj = return TransferToCS
+
+
+type instance WxppInMsgProcessResult TransferToCS = Maybe WxppOutMsg
+
+instance (Monad m) => IsWxppInMsgProcessor m TransferToCS where
+    processInMsg TransferToCS _acid _get_atk _bs _m_ime =
+        return $ Right $ Just WxppOutMsgTransferToCustomerService
+
+
+-- | Predictor: 判断信息是否是指定列表里的字串之一
+-- 注意：用户输入去除空白之后，必须完整地匹配列表中某个元素才算匹配
+data WxppInMsgMatchOneOf = WxppInMsgMatchOneOf [Text]
+                            deriving (Show, Typeable)
+
+
+instance JsonConfigable WxppInMsgMatchOneOf where
+    type JsonConfigableUnconfigData WxppInMsgMatchOneOf = ()
+
+    isNameOfInMsgHandler _ x = x == "one-of"
+
+    parseWithExtraData _ _ obj = (WxppInMsgMatchOneOf . map T.strip) <$> obj .: "texts"
+
+
+type instance WxppInMsgProcessResult WxppInMsgMatchOneOf = Bool
+
+instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOf where
+    processInMsg (WxppInMsgMatchOneOf lst) _acid _get_atk _bs m_ime = runExceptT $ do
+        case wxppInMessage <$> m_ime of
+            Just (WxppInMsgText t)  -> return $ T.strip t `elem` lst
+            _                       -> return False
+
+
+-- | Handler: 固定地返回一个某个信息
+data ConstResponse = ConstResponse WxppOutMsgL
+                    deriving (Show, Typeable)
+
+instance JsonConfigable ConstResponse where
+    type JsonConfigableUnconfigData ConstResponse = ()
+
+    isNameOfInMsgHandler _ x = x == "const"
+
+    parseWithExtraData _ _ obj = do
+        ConstResponse <$> obj .: "msg"
+
+
+type instance WxppInMsgProcessResult ConstResponse = Maybe WxppOutMsg
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m ConstResponse
+    where
+
+    processInMsg (ConstResponse outmsg) acid get_atk _bs _m_ime = runExceptT $ do
+        atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                >>= maybe (throwE $ "no access token available") return
+        liftM Just $ tryWxppWsResultE "fromWxppOutMsgL" $
+                        fromWxppOutMsgL acid atk outmsg
+
+
+-- | 用于解释 SomeWxppInMsgHandler 的类型信息
+allBasicWxppInMsgHandlerPrototypes ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
+    [WxppInMsgHandlerPrototype m]
+allBasicWxppInMsgHandlerPrototypes =
+    [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) ()
+    ]
+
+
+-- | 用于解释 SomeWxppInMsgPredictor 的类型信息
+allBasicWxppInMsgPredictorPrototypes ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
+    [WxppInMsgPredictorPrototype m]
+allBasicWxppInMsgPredictorPrototypes =
+    [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
+    ]

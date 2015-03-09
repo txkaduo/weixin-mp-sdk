@@ -103,4 +103,6 @@ fromWxppOutMsgL acid    atk (WxppOutMsgVideoL fp x1 x2)   = do
 fromWxppOutMsgL acid    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . urMediaId) $
             wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
+fromWxppOutMsgL _       _   WxppOutMsgTransferToCustomerServiceL =
+                                                    return WxppOutMsgTransferToCustomerService
 

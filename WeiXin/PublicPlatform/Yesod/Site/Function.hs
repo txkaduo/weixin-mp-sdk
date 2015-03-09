@@ -8,10 +8,8 @@ module WeiXin.PublicPlatform.Yesod.Site.Function
 
 import ClassyPrelude
 import Yesod
-import Database.Persist.Sql
 import Control.Lens
 import Network.Wreq
-import Control.Monad.Trans.Resource
 import qualified Data.ByteString.Lazy       as LB
 
 import WeiXin.PublicPlatform.Security
@@ -50,6 +48,8 @@ data StoreInMsgToDB m = StoreInMsgToDB
                                 -- ^ function to download media file
                                 -- 推荐使用异步方式下载
 
+type instance WxppInMsgProcessResult (StoreInMsgToDB m) = Maybe WxppOutMsg
+
 instance JsonConfigable (StoreInMsgToDB m) where
     type JsonConfigableUnconfigData (StoreInMsgToDB m) =
             ( WxppSubDBActionRunner m
@@ -58,7 +58,7 @@ instance JsonConfigable (StoreInMsgToDB m) where
 
     isNameOfInMsgHandler _ = ( == "db-store-all" )
 
-    parseInMsgHandler _ _obj = return $ uncurry StoreInMsgToDB
+    parseWithExtraData _ (x,y) _obj = return $ StoreInMsgToDB x y
 
 
 instance (MonadIO m
@@ -67,8 +67,9 @@ instance (MonadIO m
     , MonadLogger m
     , MonadThrow m
 #endif
-    ) => IsWxppInMsgHandler m (StoreInMsgToDB m) where
-    handleInMsg (StoreInMsgToDB db_runner media_downloader) _acid _get_atk bs m_ime = do
+    ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
+
+    processInMsg (StoreInMsgToDB db_runner media_downloader) _acid _get_atk bs m_ime = do
         now <- liftIO getCurrentTime
         (msg_record_id, mids) <- runWxppSubDBActionRunner db_runner $ do
             let m_to        = fmap wxppInToUserName m_ime

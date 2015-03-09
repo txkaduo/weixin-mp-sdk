@@ -365,6 +365,9 @@ wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
                 <PicUrl>#{pic_url}
 |]
 
+wxppOutMsgToNodes WxppOutMsgTransferToCustomerService = [xml|
+<MsgType>transfer_customer_service
+|]
 
 --------------------------------------------------------------------------------
 

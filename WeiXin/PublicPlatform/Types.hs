@@ -197,6 +197,8 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgArticle [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
+                | WxppOutMsgTransferToCustomerService
+                    -- ^ 把信息转发至客服
                 deriving (Show, Eq)
 
 -- | 外发的信息的本地信息
@@ -210,6 +212,8 @@ data WxppOutMsgL = WxppOutMsgTextL Text
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgArticleL [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
+                | WxppOutMsgTransferToCustomerServiceL
+                    -- ^ 把信息转发至客服
                 deriving (Show, Eq)
 
 instance FromJSON WxppOutMsgL where
@@ -232,6 +236,7 @@ instance FromJSON WxppOutMsgL where
                                     hq_url <- fmap UrlText <$> obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL path title desc url hq_url
                         "article" -> WxppOutMsgArticleL <$> obj .: "articles"
+                        "transfer-cs" -> return WxppOutMsgTransferToCustomerServiceL
                         _       -> fail $ "unknown type: " <> type_s
 
 
