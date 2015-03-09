@@ -218,7 +218,7 @@ data WxppOutMsgL = WxppOutMsgTextL Text
 
 instance FromJSON WxppOutMsgL where
     parseJSON = withObject "WxppOutMsgL" $ \obj -> do
-                    type_s <- obj .: "type"
+                    type_s <- obj .:? "type" .!= "text"
                     case type_s of
                         "text" -> WxppOutMsgTextL <$> obj .: "text"
                         "image" -> WxppOutMsgImageL . fromText <$> obj .: "path"
