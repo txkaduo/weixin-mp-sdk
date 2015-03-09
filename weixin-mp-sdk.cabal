@@ -84,6 +84,7 @@ library
                      , cryptohash
                      , containers
                      , resourcet
+                     , regex-tdfa
 
 
   -- hs-source-dirs:      

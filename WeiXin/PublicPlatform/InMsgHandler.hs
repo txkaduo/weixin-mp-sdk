@@ -10,6 +10,10 @@ import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
 
+import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
+import Text.Regex.TDFA.TDFA                 ( examineDFA)
+import Text.Regex.TDFA.String               (compile, execute)
+
 import Yesod.Helpers.Aeson                  (parseArray)
 
 import WeiXin.PublicPlatform.Types
@@ -313,6 +317,37 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOf where
             Just (WxppInMsgText t)  -> return $ T.strip t `elem` lst
             _                       -> return False
 
+-- | Predictor: 判断信息是否是指定列表里的字串之一
+-- 注意：用户输入去除空白之后，必须完整地匹配列表中某个元素才算匹配
+data WxppInMsgMatchOneOfRe = WxppInMsgMatchOneOfRe [Regex]
+                            deriving (Typeable)
+
+instance Show WxppInMsgMatchOneOfRe where
+    show (WxppInMsgMatchOneOfRe res) =
+        "WxppInMsgMatchOneOfRe " ++ show (map examineDFA res)
+
+instance JsonConfigable WxppInMsgMatchOneOfRe where
+    type JsonConfigableUnconfigData WxppInMsgMatchOneOfRe = ()
+
+    isNameOfInMsgHandler _ x = x == "one-of-posix-re"
+
+    parseWithExtraData _ _ obj = do
+        re_list <- obj .: "re"
+        fmap WxppInMsgMatchOneOfRe $ forM re_list $ \r -> do
+            case compile blankCompOpt blankExecOpt r of
+                Left err -> fail $ "Failed to compile RE: " <> err
+                Right rx -> return rx
+
+type instance WxppInMsgProcessResult WxppInMsgMatchOneOfRe = Bool
+
+instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
+    processInMsg (WxppInMsgMatchOneOfRe lst) _acid _get_atk _bs m_ime = runExceptT $ do
+        case wxppInMessage <$> m_ime of
+            Just (WxppInMsgText t')  -> do
+                let t = T.unpack $ T.strip t'
+                return $ not $ null $ rights $ map (flip execute t) lst
+            _                       -> return False
+
 
 -- | Handler: 固定地返回一个某个信息
 data ConstResponse = ConstResponse WxppOutMsgL
@@ -357,4 +392,5 @@ allBasicWxppInMsgPredictorPrototypes ::
     [WxppInMsgPredictorPrototype m]
 allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOfRe) ()
     ]
