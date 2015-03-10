@@ -25,6 +25,7 @@ library
                        WeiXin.PublicPlatform.Message
                        WeiXin.PublicPlatform.InMsgHandler
                        WeiXin.PublicPlatform.Menu
+                       WeiXin.PublicPlatform.CS
                        WeiXin.PublicPlatform.EndUser
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Function
@@ -85,6 +86,7 @@ library
                      , containers
                      , resourcet
                      , regex-tdfa
+                     , unordered-containers
 
 
   -- hs-source-dirs:      
