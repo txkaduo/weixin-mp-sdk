@@ -327,7 +327,9 @@ wxppOutMsgToNodes (WxppOutMsgVoice (WxppMediaID media_id)) = [xml|
 <MediaId>#{media_id}
 |]
 
-wxppOutMsgToNodes (WxppOutMsgVideo (WxppMediaID media_id) m_title m_desc) = [xml|
+wxppOutMsgToNodes (WxppOutMsgVideo (WxppMediaID media_id) _thumb_media_id m_title m_desc) = [xml|
+-- XXX: _thumb_media_id 在客服发送接口里有出现，但没有在“回复”接口文档里出现
+-- 暂时忽略这个参数
 <MsgType>video
 <MediaId>#{media_id}
 $maybe title <- m_title

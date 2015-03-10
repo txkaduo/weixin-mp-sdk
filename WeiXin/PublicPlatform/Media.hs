@@ -97,9 +97,10 @@ fromWxppOutMsgL acid    atk (WxppOutMsgImageL fp)   = do
 fromWxppOutMsgL acid    atk (WxppOutMsgVoiceL fp)   = do
         liftM (WxppOutMsgVoice . urMediaId) $
             wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
-fromWxppOutMsgL acid    atk (WxppOutMsgVideoL fp x1 x2)   = do
-        liftM ((\i -> WxppOutMsgVideo i x1 x2) . urMediaId) $
-            wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
+fromWxppOutMsgL acid    atk (WxppOutMsgVideoL fp fp2 x1 x2)   = do
+        liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
+            (liftM urMediaId $ wxppUploadMediaCached acid atk WxppMediaTypeVoice fp)
+            (liftM urMediaId $ wxppUploadMediaCached acid atk WxppMediaTypeVoice fp2)
 fromWxppOutMsgL acid    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . urMediaId) $
             wxppUploadMediaCached acid atk WxppMediaTypeVoice fp

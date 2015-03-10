@@ -33,6 +33,10 @@ import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 epochIntToUtcTime :: Int64 -> UTCTime
 epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
 
+-- | 客服帐号
+newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
+                        deriving (Show, Eq, Ord)
+
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
                         deriving (Show, Eq, Ord)
 
@@ -191,8 +195,8 @@ instance FromJSON WxppArticle where
 data WxppOutMsg = WxppOutMsgText Text
                 | WxppOutMsgImage WxppMediaID
                 | WxppOutMsgVoice WxppMediaID
-                | WxppOutMsgVideo WxppMediaID (Maybe Text) (Maybe Text)
-                    -- ^ media_id title description
+                | WxppOutMsgVideo WxppMediaID WxppMediaID (Maybe Text) (Maybe Text)
+                    -- ^ media_id thumb_media_id title description
                 | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgArticle [WxppArticle]
@@ -206,7 +210,7 @@ data WxppOutMsg = WxppOutMsgText Text
 data WxppOutMsgL = WxppOutMsgTextL Text
                 | WxppOutMsgImageL FilePath
                 | WxppOutMsgVoiceL FilePath
-                | WxppOutMsgVideoL FilePath (Maybe Text) (Maybe Text)
+                | WxppOutMsgVideoL FilePath FilePath (Maybe Text) (Maybe Text)
                     -- ^ media_id title description
                 | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
@@ -225,9 +229,10 @@ instance FromJSON WxppOutMsgL where
                         "voice" -> WxppOutMsgVoiceL . fromText <$> obj .: "path"
                         "video" -> do
                                     path <- fromText <$> obj .: "path"
+                                    path2 <- fromText <$> obj .: "thumb-image"
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
-                                    return $ WxppOutMsgVideoL path title desc
+                                    return $ WxppOutMsgVideoL path path2 title desc
                         "music" -> do
                                     path <- fromText <$> obj .: "path"
                                     title <- obj .:? "title"
