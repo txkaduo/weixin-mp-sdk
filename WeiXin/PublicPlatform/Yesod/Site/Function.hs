@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TupleSections #-}
 module WeiXin.PublicPlatform.Yesod.Site.Function
     ( module WeiXin.PublicPlatform.Yesod.Site.Function
     , module WeiXin.PublicPlatform.Yesod.Site.Data
@@ -48,7 +49,7 @@ data StoreInMsgToDB m = StoreInMsgToDB
                                 -- ^ function to download media file
                                 -- 推荐使用异步方式下载
 
-type instance WxppInMsgProcessResult (StoreInMsgToDB m) = Maybe WxppOutMsg
+type instance WxppInMsgProcessResult (StoreInMsgToDB m) = WxppInMsgHandlerResult
 
 instance JsonConfigable (StoreInMsgToDB m) where
     type JsonConfigableUnconfigData (StoreInMsgToDB m) =
@@ -93,7 +94,7 @@ instance (MonadIO m
         forM_ mids $ \mid -> do
             media_downloader msg_record_id mid
 
-        return $ Right Nothing
+        return $ Right $ return (False, Nothing)
 
 
 -- | 下载多媒体文件，保存至数据库

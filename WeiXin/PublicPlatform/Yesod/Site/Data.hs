@@ -19,12 +19,14 @@ data WxppSub =
                     -- ^ 所有配置信息
                 , wxppSubAccessTokens   :: IO (Maybe AccessToken)
                     -- ^ a computation to get usable access token
+                , wxppSubSendOutMsgs    :: [WxppOutMsgEntity] -> IO ()
+                    -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
                 , wxppSubRunLoggingT    :: forall a. LoggingT IO a -> IO a
                 }
 
 instance Show WxppSub where
-    show (WxppSub app_config _ _ _) =
+    show (WxppSub app_config _ _ _ _) =
         "WxppSub: " ++ show app_config
 
 mkYesodSubData "WxppSub" [parseRoutes|

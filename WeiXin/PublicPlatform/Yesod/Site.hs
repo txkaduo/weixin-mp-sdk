@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE TupleSections #-}
 module WeiXin.PublicPlatform.Yesod.Site
     ( module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
@@ -10,6 +11,9 @@ import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
+import Control.Concurrent.Async             (async)
+import Control.Concurrent                   (threadDelay)
+
 import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , reqGetParamE'
                                             , paramErrorFromEither
@@ -96,7 +100,7 @@ postMessageR = do
                     Right x -> return $ Just x
 
         let handle_msg      = wxppSubMsgHandler foundation
-        m_out_msg <- ExceptT $
+        out_res <- ExceptT $
                 (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg decrypted_xml m_ime)
                     >>= return
                             . either
@@ -107,24 +111,38 @@ postMessageR = do
             Nothing -> do
                 -- incoming message cannot be parsed
                 -- we don't know who send the message
-                return ""
+                return ("", [])
 
             Just me -> do
                 let user_open_id    = wxppInFromUserName me
                     my_name         = wxppInToUserName me
 
-                fmap (fromMaybe "") $ forM m_out_msg $ \out_msg -> do
-                    now <- liftIO getCurrentTime
-                    let out_msg_entity = WxppOutMsgEntity
+                let (primary_out_msgs, secondary_out_msgs) = (map snd *** map snd) $ partition fst out_res
+
+                -- 只要有 primary 的回应，就忽略非primary的回应
+                -- 如果没 primary 回应，而 secondary 回应有多个，则只选择第一个
+                let split_head ls = case ls of
+                                    [] -> (Nothing, [])
+                                    (x:xs) -> (Just x, xs)
+                let (m_resp_out_msg, other_out_msgs) =
+                        if null primary_out_msgs
+                            then (, []) $ listToMaybe $ catMaybes secondary_out_msgs
+                            else split_head $ catMaybes primary_out_msgs
+
+                now <- liftIO getCurrentTime
+                let mk_out_msg_entity x = WxppOutMsgEntity
                                             user_open_id
                                             my_name
                                             now
-                                            out_msg
-                    liftM (LT.toStrict . renderText def) $
-                        if enc
-                            then ExceptT $ wxppOutMsgEntityToDocumentE
-                                                app_id ak out_msg_entity
-                            else return $ wxppOutMsgEntityToDocument out_msg_entity
+                                            x
+                liftM (, map mk_out_msg_entity other_out_msgs) $
+                    fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
+                        liftM (LT.toStrict . renderText def) $ do
+                            let out_msg_entity = mk_out_msg_entity out_msg
+                            if enc
+                                then ExceptT $ wxppOutMsgEntityToDocumentE
+                                                    app_id ak out_msg_entity
+                                else return $ wxppOutMsgEntityToDocument out_msg_entity
 
     case err_or_resp of
         Left err -> do
@@ -132,7 +150,15 @@ postMessageR = do
                 "cannot encode outgoing message into XML: " <> err
             throwM $ HCError $
                 InternalError "cannot encode outgoing message into XML"
-        Right xmls -> return xmls
+        Right (xmls, other_out_msgs) -> do
+            when (not $ null other_out_msgs) $ do
+                void $ liftIO $ async $ do
+                    -- 延迟半秒只要为了让直接回复的回应能第一个到达用户
+                    threadDelay $ 1000 * 500
+                    wxppSubSendOutMsgs foundation other_out_msgs
+
+            return xmls
+
     where
         parse_xml_lbs x  = case parseLBS def x of
                                 Left ex     -> fail $ "Failed to parse XML: " <> show ex

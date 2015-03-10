@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
 import ClassyPrelude
@@ -31,9 +32,17 @@ type WxppInMsgProcessor m a =
         -> m (Either String a)
             -- ^ Left 用于表达错误
 
--- | 响应收到的服务器信息，其结果中：
+-- | 对于收到的消息有的回应，可能有多个。
+-- 分为两类：主要的，和备选的
+-- 备选的回应仅当“主要的”回应不存在是使用
+-- 主要的回应如果有多个，会尽量全部发给用户。但由于微信接口的限制，只有
+-- 第一个回应可以以回复的方式发给用户，其它“主要”回应要通过“客服”接口发给
+-- 用户，而“客服”接口需要一定条件才能开通。
+-- Bool 表明这个响应是否是“主要”的
 -- Nothing 代表无需回复一个新信息
-type WxppInMsgHandler m = WxppInMsgProcessor m (Maybe WxppOutMsg)
+type WxppInMsgHandlerResult = [(Bool, Maybe WxppOutMsg)]
+
+type WxppInMsgHandler m = WxppInMsgProcessor m WxppInMsgHandlerResult
 
 
 -- | 可以从配置文件中读取出来的某种处理值
@@ -59,7 +68,7 @@ type family WxppInMsgProcessResult h :: *
 -- | 对收到的消息作出某种处理
 -- 实例分为两大类：
 -- Predictor 其处理结果是个 Bool 值
--- Handler 其处理结果是个 Maybe WxppOutMsg
+-- Handler 其处理结果是个 WxppInMsgHandlerResult
 class IsWxppInMsgProcessor m h where
     processInMsg ::
         h
@@ -73,7 +82,7 @@ data SomeWxppInMsgProcessor r m =
 type instance WxppInMsgProcessResult (SomeWxppInMsgProcessor r m) = r
 
 -- | 所有 Handler 可放在这个类型内
-type SomeWxppInMsgHandler m = SomeWxppInMsgProcessor (Maybe WxppOutMsg) m
+type SomeWxppInMsgHandler m = SomeWxppInMsgProcessor WxppInMsgHandlerResult m
 
 -- | 所有 Predictor 可放在这个类型内
 type SomeWxppInMsgPredictor m = SomeWxppInMsgProcessor Bool m
@@ -82,7 +91,7 @@ type SomeWxppInMsgPredictor m = SomeWxppInMsgProcessor Bool m
 -- | something that can be used as WxppInMsgHandler
 type IsWxppInMsgHandler m h =
         ( IsWxppInMsgProcessor m h
-        , WxppInMsgProcessResult h ~ Maybe WxppOutMsg
+        , WxppInMsgProcessResult h ~ WxppInMsgHandlerResult
         )
 
 instance IsWxppInMsgProcessor m (SomeWxppInMsgProcessor r m) where
@@ -93,7 +102,7 @@ data WxppInMsgProcessorPrototype r m =
         forall h. (IsWxppInMsgProcessor m h, JsonConfigable h, WxppInMsgProcessResult h ~ r) =>
                 WxppInMsgProcessorPrototype (Proxy h) (JsonConfigableUnconfigData h)
 
-type WxppInMsgHandlerPrototype m = WxppInMsgProcessorPrototype (Maybe WxppOutMsg) m
+type WxppInMsgHandlerPrototype m = WxppInMsgProcessorPrototype WxppInMsgHandlerResult m
 
 type WxppInMsgPredictorPrototype m = WxppInMsgProcessorPrototype Bool m
 
@@ -140,14 +149,6 @@ readWxppInMsgHandlers tmps fp = runExceptT $ do
 
 
 -- | 使用列表里的所有算法，逐一调用一次以处理收到的信息
--- 返回第一个返回 Right Just 的结果
--- 如果都没有返回 Right Just 则：
--- 如果有一个handler返回 Right Nothing，这个函数也返回 Right Nothing
--- （代表成功但无回复）
--- 如果没有一个handler返回 Right Nothing，则：
---   若有返回 Left 的，则选择第一个 Left 返回（代表失败）
---   若连 Left 也没有（那只可能出现在handler数量本身就是零的情况）
---      则理解为成功
 tryEveryInMsgHandler :: MonadLogger m =>
     [WxppInMsgHandler m] -> WxppInMsgHandler m
 tryEveryInMsgHandler handlers bs m_ime = do
@@ -159,27 +160,7 @@ tryEveryInMsgHandler handlers bs m_ime = do
             <> "MsgId=" <> (show $ join $ fmap wxppInMessageID m_ime)
             <> ": " <> err
 
-    case catMaybes res_lst of
-        []      -> do
-                    -- 没有一个 handler 有回复
-                    -- 如果 res_lst 本身也是空，说明全部都失败了，
-                    -- 除非errs也为空
-                    return $
-                        if null res_lst
-                            then maybe (Right Nothing) Left $
-                                    listToMaybe errs
-                            else Right Nothing
-        (x:xs)  -> do
-                    when (not $ null xs) $ do
-                        -- 有多个 Just 结果，但服务器只能让我们回复一个信息
-                        -- 因此后面的信息会目前会丢失
-                        -- TODO：以后可以异步调用“客服接口”主动发消息给用户
-                        --       根据文档，这只能在 48 小时完成
-                        $(logWarnS) wxppLogSource $ T.pack $
-                            "more than one reply messages from handlers,"
-                            <> " incoming MsgId="
-                            <> (show $ join $ fmap wxppInMessageID m_ime)
-                    return $ Right $ Just x
+    return $ Right $ join res_lst
 
 
 tryEveryInMsgHandler' :: MonadLogger m =>
@@ -210,7 +191,7 @@ instance JsonConfigable WelcomeSubscribe where
         WelcomeSubscribe <$> obj .: "msg"
 
 
-type instance WxppInMsgProcessResult WelcomeSubscribe = Maybe WxppOutMsg
+type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
 
 instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
@@ -225,9 +206,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                liftM Just $ tryWxppWsResultE "fromWxppOutMsgL" $
+                liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
-            else return Nothing
+            else return []
 
 
 -- | Handler: 根据所带的 Predictor 与 Handler 对应表，分发到不同的 Handler 处理收到消息
@@ -255,14 +236,14 @@ instance JsonConfigable (WxppInMsgDispatchHandler m) where
                 return $ (p, h)
 
 
-type instance WxppInMsgProcessResult (WxppInMsgDispatchHandler m) = Maybe WxppOutMsg
+type instance WxppInMsgProcessResult (WxppInMsgDispatchHandler m) = WxppInMsgHandlerResult
 
 instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHandler m)
     where
     processInMsg (WxppInMsgDispatchHandler table) acid get_atk bs m_ime =
         go table
         where
-            go []               = return $ Right Nothing
+            go []               = return $ Right []
             go ((p, h):xs)      = do
                 err_or_b <- processInMsg p acid get_atk bs m_ime
                 b <- case err_or_b of
@@ -277,7 +258,7 @@ instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHa
 
 
 -- | Handler: 将满足某些条件的用户信息转发至微信的“多客服”系统
-data TransferToCS = TransferToCS
+data TransferToCS = TransferToCS Bool
                     deriving (Show, Typeable)
 
 instance JsonConfigable TransferToCS where
@@ -285,14 +266,14 @@ instance JsonConfigable TransferToCS where
 
     isNameOfInMsgHandler _ x = x == "transfer-to-cs"
 
-    parseWithExtraData _ _ _obj = return TransferToCS
+    parseWithExtraData _ _ obj = TransferToCS <$> obj .:? "primary" .!= False
 
 
-type instance WxppInMsgProcessResult TransferToCS = Maybe WxppOutMsg
+type instance WxppInMsgProcessResult TransferToCS = WxppInMsgHandlerResult
 
 instance (Monad m) => IsWxppInMsgProcessor m TransferToCS where
-    processInMsg TransferToCS _acid _get_atk _bs _m_ime =
-        return $ Right $ Just WxppOutMsgTransferToCustomerService
+    processInMsg (TransferToCS is_primary) _acid _get_atk _bs _m_ime =
+        return $ Right $ return $ (is_primary,) $ Just WxppOutMsgTransferToCustomerService
 
 
 -- | Predictor: 判断信息是否是指定列表里的字串之一
@@ -350,7 +331,7 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
 
 
 -- | Handler: 固定地返回一个某个信息
-data ConstResponse = ConstResponse WxppOutMsgL
+data ConstResponse = ConstResponse Bool WxppOutMsgL
                     deriving (Show, Typeable)
 
 instance JsonConfigable ConstResponse where
@@ -359,19 +340,21 @@ instance JsonConfigable ConstResponse where
     isNameOfInMsgHandler _ x = x == "const"
 
     parseWithExtraData _ _ obj = do
-        ConstResponse <$> obj .: "msg"
+        liftM2 ConstResponse
+            (obj .:? "primary" .!= False)
+            (obj .: "msg")
 
 
-type instance WxppInMsgProcessResult ConstResponse = Maybe WxppOutMsg
+type instance WxppInMsgProcessResult ConstResponse = WxppInMsgHandlerResult
 
 instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m ConstResponse
     where
 
-    processInMsg (ConstResponse outmsg) acid get_atk _bs _m_ime = runExceptT $ do
+    processInMsg (ConstResponse is_primary outmsg) acid get_atk _bs _m_ime = runExceptT $ do
         atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                 >>= maybe (throwE $ "no access token available") return
-        liftM Just $ tryWxppWsResultE "fromWxppOutMsgL" $
+        liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                         fromWxppOutMsgL acid atk outmsg
 
 
