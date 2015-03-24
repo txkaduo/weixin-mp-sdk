@@ -248,7 +248,7 @@ instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHa
                 err_or_b <- processInMsg p acid get_atk bs m_ime
                 b <- case err_or_b of
                     Left err -> do
-                                $(logError) $ fromString $
+                                $(logErrorS) wxppLogSource $ fromString $
                                     "Predictor failed: " <> err
                                 return False
                     Right b -> return b

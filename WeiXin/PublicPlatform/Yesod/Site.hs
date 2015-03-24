@@ -95,7 +95,7 @@ postMessageR = do
         let err_or_parsed = parse_xml_lbs decrypted_xml >>= wxppInMsgEntityFromDocument
         m_ime <- case err_or_parsed of
                     Left err -> do
-                        $logError $ fromString $ "Error when parsing incoming XML: " ++ err
+                        $logErrorS wxppLogSource $ fromString $ "Error when parsing incoming XML: " ++ err
                         return Nothing
                     Right x -> return $ Just x
 

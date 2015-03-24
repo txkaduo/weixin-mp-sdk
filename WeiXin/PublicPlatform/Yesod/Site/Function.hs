@@ -122,7 +122,7 @@ downloadSaveMediaToDB atk msg_id media_id = do
     err_or_rb <- tryWxppWsResult $ wxppDownloadMedia atk media_id
     case err_or_rb of
         Left err -> do
-                    $(logError) $ "Failed to download media '" <> unWxppMediaID media_id
+                    $(logErrorS) wxppLogSource $ "Failed to download media '" <> unWxppMediaID media_id
                                     <> "': " <> (fromString $ show err)
         Right rb -> do
                     now <- liftIO getCurrentTime
@@ -134,7 +134,7 @@ downloadSaveMediaToDB atk msg_id media_id = do
                                                 now
                     case old_or_id of
                         Left (Entity old_id _) -> do
-                            $(logWarn) $ "Media '" <> unWxppMediaID media_id
+                            $(logWarnS) wxppLogSource $ "Media '" <> unWxppMediaID media_id
                                             <> "' already in DB, record id: "
                                             <> toPathPiece old_id
                         Right _ -> return ()
