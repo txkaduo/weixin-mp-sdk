@@ -25,6 +25,7 @@ import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
 import Data.Yaml                            (decodeFileEither, encode)
+import Filesystem.Path.CurrentOS            (encodeString)
 
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
@@ -168,14 +169,15 @@ postMessageR = do
 -- | reload menu from config/menu.yml
 getReloadMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) String
 getReloadMenuR = do
-    err_or_menu <- liftIO $ decodeFileEither $ wxppDataDirPath ++ "/menu.yml"
+    foundation <- getYesod
+    let data_dir = wxppSubDataDir foundation
+    err_or_menu <- liftIO $ decodeFileEither $ encodeString $ data_dir </> "menu.yml"
     case err_or_menu of
         Left err    -> do
             $(logErrorS) wxppLogSource $
                 "Failed to parse menu yml: " <> fromString (show err)
             return $ "Failed to parse yml: " <> show err
         Right menu  -> do
-            foundation <- getYesod
             m_atk <- liftIO $ wxppSubAccessTokens foundation
             case m_atk of
                 Nothing             -> return $ "Failed to create menu: no access token available."

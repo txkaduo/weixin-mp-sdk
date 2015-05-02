@@ -21,12 +21,13 @@ data WxppSub =
                     -- ^ a computation to get usable access token
                 , wxppSubSendOutMsgs    :: [WxppOutMsgEntity] -> IO ()
                     -- ^ a computation to send outgoing messages
+                , wxppSubDataDir        :: FilePath
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
                 , wxppSubRunLoggingT    :: forall a. LoggingT IO a -> IO a
                 }
 
 instance Show WxppSub where
-    show (WxppSub app_config _ _ _ _) =
+    show (WxppSub app_config _ _ _ _ _) =
         "WxppSub: " ++ show app_config
 
 mkYesodSubData "WxppSub" [parseRoutes|

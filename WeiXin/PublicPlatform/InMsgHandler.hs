@@ -14,6 +14,7 @@ import Data.Yaml                            (decodeFileEither, parseEither, Pars
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
+import Filesystem.Path.CurrentOS            (encodeString, fromText)
 
 import Yesod.Helpers.Aeson                  (parseArray)
 
@@ -179,17 +180,23 @@ tryWxppWsResultE op f =
 
 
 -- |允许从另外文件加载 WxppOutMsgL ，而不是inline写在当前配置文件
-type WxppOutMsgLoader = IO (Either ParseException WxppOutMsgL)
+-- FilePath 参数是消息文件存放目录
+type WxppOutMsgLoader = FilePath -> IO (Either ParseException WxppOutMsgL)
 
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
 parseWxppOutMsgLoader obj =
-    (return . Right <$> obj .: "msg") <|>
-        (decodeFileEither . ((wxppDataDirPath <> "/msg/") <>) <$> obj .: "file")
+    (const . return . Right <$> obj .: "msg") <|>
+        (flip decodeOutMsgFile . fromText <$> obj .: "file")
+
+decodeOutMsgFile :: FilePath -> FilePath -> IO (Either ParseException WxppOutMsgL)
+decodeOutMsgFile msg_dir fp = decodeFileEither (encodeString $ msg_dir </> fp)
 
 -- | 执行 WxppOutMsgLoader 的操作，把结果转换成 WxppInMsgProcessor 所需的格式
-runWxppOutMsgLoader :: MonadIO m => WxppOutMsgLoader -> m (Either String WxppOutMsgL)
-runWxppOutMsgLoader get_outmsg = liftIO $ do
-    err_or_msg <- tryIOError get_outmsg
+runWxppOutMsgLoader :: MonadIO m =>
+    FilePath    -- ^ 消息文件存放目录
+    -> WxppOutMsgLoader -> m (Either String WxppOutMsgL)
+runWxppOutMsgLoader msg_dir get_outmsg = liftIO $ do
+    err_or_msg <- tryIOError $ get_outmsg msg_dir
     case err_or_msg of
         Left err    -> return $ Left $ "failed to load message from file: " ++ show err
         Right x     -> return $ parseMsgErrorToString x
@@ -200,16 +207,18 @@ parseMsgErrorToString (Right x)    = Right x
 
 
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
-data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgLoader
+data WelcomeSubscribe = WelcomeSubscribe
+                            FilePath            -- ^ 所有消息文件存放的目录
+                            WxppOutMsgLoader    -- ^ 打算回复用户的消息
                         deriving (Typeable)
 
 instance JsonConfigable WelcomeSubscribe where
-    type JsonConfigableUnconfigData WelcomeSubscribe = ()
+    type JsonConfigableUnconfigData WelcomeSubscribe = FilePath
 
     isNameOfInMsgHandler _ x = x == "welcome-subscribe"
 
-    parseWithExtraData _ _ obj = do
-        fmap WelcomeSubscribe $ parseWxppOutMsgLoader obj
+    parseWithExtraData _ msg_dir obj = do
+        WelcomeSubscribe msg_dir <$> parseWxppOutMsgLoader obj
 
 
 type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
@@ -218,7 +227,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
     where
 
-    processInMsg (WelcomeSubscribe get_outmsg) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WelcomeSubscribe msg_dir get_outmsg) acid get_atk _bs m_ime = runExceptT $ do
         is_subs <- case fmap wxppInMessage m_ime of
                     Just (WxppInMsgEvent WxppEvtSubscribe)              -> return True
                     Just (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))  -> return True
@@ -227,7 +236,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- ExceptT $ runWxppOutMsgLoader get_outmsg
+                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir get_outmsg
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
             else return []
@@ -235,14 +244,14 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
 -- | Handler: 处理点击菜单项目的事件通知，加载 Key 参数中指定的文件所记录的消息
 -- 要求 Key 参数的格式为： send-msg:<path to yaml>
-data WxppInMsgMenuItemClickSendMsg = WxppInMsgMenuItemClickSendMsg
+data WxppInMsgMenuItemClickSendMsg = WxppInMsgMenuItemClickSendMsg FilePath
 
 instance JsonConfigable WxppInMsgMenuItemClickSendMsg where
-    type JsonConfigableUnconfigData WxppInMsgMenuItemClickSendMsg = ()
+    type JsonConfigableUnconfigData WxppInMsgMenuItemClickSendMsg = FilePath
 
     isNameOfInMsgHandler _ x = x == "menu-click-send-msg"
 
-    parseWithExtraData _ _ _obj = return WxppInMsgMenuItemClickSendMsg
+    parseWithExtraData _ msg_dir _obj = return $ WxppInMsgMenuItemClickSendMsg msg_dir
 
 
 type instance WxppInMsgProcessResult WxppInMsgMenuItemClickSendMsg = WxppInMsgHandlerResult
@@ -251,7 +260,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgMenuItemClickSendMsg
     where
 
-    processInMsg WxppInMsgMenuItemClickSendMsg acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgMenuItemClickSendMsg msg_dir) acid get_atk _bs m_ime = runExceptT $ do
         m_fp <- case fmap wxppInMessage m_ime of
                 Just (WxppInMsgEvent (WxppEvtClickItem evt_key)) -> do
                     case T.stripPrefix "send-msg:" evt_key of
@@ -264,7 +273,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just fp -> do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- ExceptT $ runWxppOutMsgLoader $ decodeFileEither (T.unpack fp)
+                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile (fromText fp)
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
 
@@ -389,16 +398,16 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
 
 
 -- | Handler: 固定地返回一个某个信息
-data ConstResponse = ConstResponse Bool WxppOutMsgLoader
+data ConstResponse = ConstResponse FilePath Bool WxppOutMsgLoader
                     deriving (Typeable)
 
 instance JsonConfigable ConstResponse where
-    type JsonConfigableUnconfigData ConstResponse = ()
+    type JsonConfigableUnconfigData ConstResponse = FilePath
 
     isNameOfInMsgHandler _ x = x == "const"
 
-    parseWithExtraData _ _ obj = do
-        liftM2 ConstResponse
+    parseWithExtraData _ msg_dir obj = do
+        liftM2 (ConstResponse msg_dir)
             (obj .:? "primary" .!= False)
             (parseWxppOutMsgLoader obj)
 
@@ -409,10 +418,10 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m ConstResponse
     where
 
-    processInMsg (ConstResponse is_primary get_outmsg) acid get_atk _bs _m_ime = runExceptT $ do
+    processInMsg (ConstResponse msg_dir is_primary get_outmsg) acid get_atk _bs _m_ime = runExceptT $ do
         atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                 >>= maybe (throwE $ "no access token available") return
-        outmsg <- ExceptT $ runWxppOutMsgLoader get_outmsg
+        outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir get_outmsg
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                         fromWxppOutMsgL acid atk outmsg
 
@@ -420,12 +429,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
 allBasicWxppInMsgHandlerPrototypes ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
-    [WxppInMsgHandlerPrototype m]
-allBasicWxppInMsgHandlerPrototypes =
-    [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) ()
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) ()
+    FilePath
+    -> [WxppInMsgHandlerPrototype m]
+allBasicWxppInMsgHandlerPrototypes msg_dir =
+    [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
     ]
 
 
