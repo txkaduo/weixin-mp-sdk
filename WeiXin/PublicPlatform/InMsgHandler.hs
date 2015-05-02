@@ -178,12 +178,25 @@ tryWxppWsResultE op f =
         >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
 
 
--- | WxppOutMsgL 允许从另外文件加载，而不是inline写在当前配置文件
+-- |允许从另外文件加载 WxppOutMsgL ，而不是inline写在当前配置文件
 type WxppOutMsgLoader = IO (Either ParseException WxppOutMsgL)
 
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
 parseWxppOutMsgLoader obj =
     (return . Right <$> obj .: "msg") <|> (decodeFileEither <$> obj .: "file")
+
+-- | 执行 WxppOutMsgLoader 的操作，把结果转换成 WxppInMsgProcessor 所需的格式
+runWxppOutMsgLoader :: MonadIO m => WxppOutMsgLoader -> m (Either String WxppOutMsgL)
+runWxppOutMsgLoader get_outmsg = liftIO $ do
+    err_or_msg <- tryIOError get_outmsg
+    case err_or_msg of
+        Left err    -> return $ Left $ "failed to load message from file: " ++ show err
+        Right x     -> return $ parseMsgErrorToString x
+
+parseMsgErrorToString :: Either ParseException a -> Either String a
+parseMsgErrorToString (Left err)   = Left $ "failed to parse message from file: " ++ show err
+parseMsgErrorToString (Right x)    = Right x
+
 
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
 data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgLoader
@@ -213,10 +226,46 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- liftIO $ get_outmsg >>= either throwM return
+                outmsg <- ExceptT $ runWxppOutMsgLoader get_outmsg
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
             else return []
+
+
+-- | Handler: 处理点击菜单项目的事件通知，加载 Key 参数中指定的文件所记录的消息
+-- 要求 Key 参数的格式为： send-msg:<path to yaml>
+data WxppInMsgMenuItemClickSendMsg = WxppInMsgMenuItemClickSendMsg
+
+instance JsonConfigable WxppInMsgMenuItemClickSendMsg where
+    type JsonConfigableUnconfigData WxppInMsgMenuItemClickSendMsg = ()
+
+    isNameOfInMsgHandler _ x = x == "menu-click-send-msg"
+
+    parseWithExtraData _ _ _obj = return WxppInMsgMenuItemClickSendMsg
+
+
+type instance WxppInMsgProcessResult WxppInMsgMenuItemClickSendMsg = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m WxppInMsgMenuItemClickSendMsg
+    where
+
+    processInMsg WxppInMsgMenuItemClickSendMsg acid get_atk _bs m_ime = runExceptT $ do
+        m_fp <- case fmap wxppInMessage m_ime of
+                Just (WxppInMsgEvent (WxppEvtClickItem evt_key)) -> do
+                    case T.stripPrefix "send-msg:" evt_key of
+                        Nothing -> return Nothing
+                        Just x  -> return $ Just x
+                _ -> return Nothing
+
+        case m_fp of
+            Nothing -> return []
+            Just fp -> do
+                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        >>= maybe (throwE $ "no access token available") return
+                outmsg <- ExceptT $ runWxppOutMsgLoader $ decodeFileEither (T.unpack fp)
+                liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
+                                fromWxppOutMsgL acid atk outmsg
 
 
 -- | Handler: 根据所带的 Predictor 与 Handler 对应表，分发到不同的 Handler 处理收到消息
@@ -362,7 +411,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     processInMsg (ConstResponse is_primary get_outmsg) acid get_atk _bs _m_ime = runExceptT $ do
         atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                 >>= maybe (throwE $ "no access token available") return
-        outmsg <- liftIO $ get_outmsg >>= either throwM return
+        outmsg <- ExceptT $ runWxppOutMsgLoader get_outmsg
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                         fromWxppOutMsgL acid atk outmsg
 
@@ -373,6 +422,7 @@ allBasicWxppInMsgHandlerPrototypes ::
     [WxppInMsgHandlerPrototype m]
 allBasicWxppInMsgHandlerPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) ()
     ]
