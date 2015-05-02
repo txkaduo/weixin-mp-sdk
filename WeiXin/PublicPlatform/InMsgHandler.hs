@@ -178,9 +178,16 @@ tryWxppWsResultE op f =
         >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
 
 
+-- | WxppOutMsgL 允许从另外文件加载，而不是inline写在当前配置文件
+type WxppOutMsgLoader = IO (Either ParseException WxppOutMsgL)
+
+parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
+parseWxppOutMsgLoader obj =
+    (return . Right <$> obj .: "msg") <|> (decodeFileEither <$> obj .: "file")
+
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
-data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgL
-                        deriving (Show, Typeable)
+data WelcomeSubscribe = WelcomeSubscribe WxppOutMsgLoader
+                        deriving (Typeable)
 
 instance JsonConfigable WelcomeSubscribe where
     type JsonConfigableUnconfigData WelcomeSubscribe = ()
@@ -188,7 +195,7 @@ instance JsonConfigable WelcomeSubscribe where
     isNameOfInMsgHandler _ x = x == "welcome-subscribe"
 
     parseWithExtraData _ _ obj = do
-        WelcomeSubscribe <$> obj .: "msg"
+        fmap WelcomeSubscribe $ parseWxppOutMsgLoader obj
 
 
 type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
@@ -197,7 +204,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
     where
 
-    processInMsg (WelcomeSubscribe outmsg) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WelcomeSubscribe get_outmsg) acid get_atk _bs m_ime = runExceptT $ do
         is_subs <- case fmap wxppInMessage m_ime of
                     Just (WxppInMsgEvent WxppEvtSubscribe)              -> return True
                     Just (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))  -> return True
@@ -206,6 +213,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
+                outmsg <- liftIO $ get_outmsg >>= either throwM return
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
             else return []
@@ -331,8 +339,8 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
 
 
 -- | Handler: 固定地返回一个某个信息
-data ConstResponse = ConstResponse Bool WxppOutMsgL
-                    deriving (Show, Typeable)
+data ConstResponse = ConstResponse Bool WxppOutMsgLoader
+                    deriving (Typeable)
 
 instance JsonConfigable ConstResponse where
     type JsonConfigableUnconfigData ConstResponse = ()
@@ -342,7 +350,7 @@ instance JsonConfigable ConstResponse where
     parseWithExtraData _ _ obj = do
         liftM2 ConstResponse
             (obj .:? "primary" .!= False)
-            (obj .: "msg")
+            (parseWxppOutMsgLoader obj)
 
 
 type instance WxppInMsgProcessResult ConstResponse = WxppInMsgHandlerResult
@@ -351,9 +359,10 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m ConstResponse
     where
 
-    processInMsg (ConstResponse is_primary outmsg) acid get_atk _bs _m_ime = runExceptT $ do
+    processInMsg (ConstResponse is_primary get_outmsg) acid get_atk _bs _m_ime = runExceptT $ do
         atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                 >>= maybe (throwE $ "no access token available") return
+        outmsg <- liftIO $ get_outmsg >>= either throwM return
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                         fromWxppOutMsgL acid atk outmsg
 
