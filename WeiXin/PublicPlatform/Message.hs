@@ -356,7 +356,7 @@ wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
 <ArticleCount>#{T.pack $ show $ length articles}
 <Articles>
     $forall article <- articles
-        <Item>
+        <item>
             $maybe title <- wxppArticleTitle article
                 <Title>#{title}
             $maybe desc <- wxppArticleDesc article
