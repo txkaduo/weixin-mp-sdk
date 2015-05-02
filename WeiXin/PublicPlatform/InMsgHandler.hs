@@ -183,7 +183,8 @@ type WxppOutMsgLoader = IO (Either ParseException WxppOutMsgL)
 
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
 parseWxppOutMsgLoader obj =
-    (return . Right <$> obj .: "msg") <|> (decodeFileEither <$> obj .: "file")
+    (return . Right <$> obj .: "msg") <|>
+        (decodeFileEither . ((wxppDataDirPath <> "/msg/") <>) <$> obj .: "file")
 
 -- | 执行 WxppOutMsgLoader 的操作，把结果转换成 WxppInMsgProcessor 所需的格式
 runWxppOutMsgLoader :: MonadIO m => WxppOutMsgLoader -> m (Either String WxppOutMsgL)

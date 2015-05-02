@@ -472,6 +472,15 @@ instance FromJSON UploadResult where
         t <- epochIntToUtcTime <$> obj .: "created_at"
         return $ UploadResult typ media_id t
 
+
+-- | 暂时写死各种配置、消息定义所在的目录
+-- 此目录下有以下内容
+-- menu.yml: 菜单定义
+-- msg-handlers.yml: 消息处理器定义
+-- msg/ 目录：所有消息的定义
+wxppDataDirPath :: IsString a => a
+wxppDataDirPath = "wx-data"
+
 --------------------------------------------------------------------------------
 
 utcTimeToEpochInt :: UTCTime -> Int64

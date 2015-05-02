@@ -168,7 +168,7 @@ postMessageR = do
 -- | reload menu from config/menu.yml
 getReloadMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) String
 getReloadMenuR = do
-    err_or_menu <- liftIO $ decodeFileEither "config/menu.yml"
+    err_or_menu <- liftIO $ decodeFileEither $ wxppDataDirPath ++ "/menu.yml"
     case err_or_menu of
         Left err    -> do
             $(logErrorS) wxppLogSource $
