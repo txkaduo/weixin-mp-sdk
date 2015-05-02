@@ -87,12 +87,13 @@ newtype AesKey = AesKey { unAesKey :: Key AES }
 instance Show AesKey where
     show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
 
+parseAesKeyFromText :: Text -> Parser AesKey
+parseAesKeyFromText t = fmap AesKey $ do
+    bs <- parseBase64ByteString "AesKey" t
+    either (fail . show) return $ makeKey bs
+
 instance FromJSON AesKey where
-    parseJSON = fmap AesKey .
-                    (withText "AesKey" $ \t -> do
-                        bs <- parseBase64ByteString "AesKey" t
-                        either (fail . show) return $ makeKey bs
-                    )
+    parseJSON = withText "AesKey" parseAesKeyFromText
 
 newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
                     deriving (Show, Eq)
@@ -129,6 +130,8 @@ instance FromJSON WxppAppConfig where
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     token <- fmap Token $ obj .: "token"
                     aes_key_lst <- obj .: "aes-key"
+                                    >>= return . filter (not . T.null) . map T.strip
+                                    >>= mapM parseAesKeyFromText
                     case aes_key_lst of
                         []      -> fail $ "At least one AesKey is required"
                         (x:xs)  ->
