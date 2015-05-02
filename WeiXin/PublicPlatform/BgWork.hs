@@ -24,7 +24,7 @@ refreshAccessTokenIfNeeded ::
     -> m ()
 refreshAccessTokenIfNeeded wac acid dt = do
     now <- liftIO getCurrentTime
-    let t = addUTCTime (negate $ abs dt) now
+    let t = addUTCTime (abs dt) now
     expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
                         liftIO $ query acid $ WxppAcidGetAcccessToken
     when (expired) $ do
