@@ -187,7 +187,7 @@ type WxppOutMsgLoader = FilePath -> IO (Either ParseException WxppOutMsgL)
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
 parseWxppOutMsgLoader obj =
     (const . return . Right <$> obj .: "msg") <|>
-        (flip decodeOutMsgFile . fromText <$> obj .: "file")
+        (flip decodeOutMsgFile . setExtIfNotExist "yml" . fromText <$> obj .: "file")
 
 decodeOutMsgFile :: FilePath -> FilePath -> IO (Either ParseException WxppOutMsgL)
 decodeOutMsgFile msg_dir fp = decodeFileEither (encodeString $ msg_dir </> fp)
@@ -275,8 +275,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just fp' -> do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                let fp'' = fromText fp'
-                let fp = maybe (fp'' <.> "yml") (const fp'') $ extension fp''
+                let fp = setExtIfNotExist "yml" $ fromText fp'
                 outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
@@ -493,3 +492,9 @@ allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOfRe) ()
     ]
+
+--------------------------------------------------------------------------------
+
+setExtIfNotExist :: Text -> FilePath -> FilePath
+setExtIfNotExist def_ext fp =
+    maybe (fp <.> def_ext) (const fp) $ extension fp
