@@ -14,7 +14,7 @@ import Data.Yaml                            (decodeFileEither, parseEither, Pars
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
-import Filesystem.Path.CurrentOS            (encodeString, fromText)
+import Filesystem.Path.CurrentOS            (encodeString, fromText, extension)
 import qualified Filesystem.Path.CurrentOS  as FP
 
 import Yesod.Helpers.Aeson                  (parseArray)
@@ -272,10 +272,12 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
         case m_fp of
             Nothing -> return []
-            Just fp -> do
+            Just fp' -> do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile (fromText fp)
+                let fp'' = fromText fp'
+                let fp = maybe (fp'' <.> "yml") (const fp'') $ extension fp''
+                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
 
