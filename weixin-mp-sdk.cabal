@@ -88,6 +88,7 @@ library
                      , regex-tdfa
                      , unordered-containers
                      , fsnotify
+                     , directory
                      , monad-control
 
 

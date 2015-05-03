@@ -12,6 +12,7 @@ import Data.Yaml                            (decodeFileEither)
 import Filesystem.Path.CurrentOS            (encodeString, toText)
 import qualified System.FSNotify            as FN
 import Control.Monad.Trans.Control
+import System.Directory                     (doesFileExist)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Error
@@ -128,19 +129,24 @@ wxppWatchMenuYaml get_atk block_until_exit fp = do
                         -- 很多对文件操作的工具保存时都可能由多个文件系统操作完成
                         -- 比如 vim
 
-        handle_evt evt@(FN.Removed {}) = do
-            $logWarnS wxppLogSource $ "menu config file has been removed: "
-                                        <> (either id id $ toText (FN.eventPath evt))
-
         handle_evt evt = do
-            m_atk <- get_atk
-            case m_atk of
-                Nothing             -> do
-                    $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
-                Just access_token   ->  do
-                    err_or <- wxppCreateWithYaml access_token (FN.eventPath evt)
-                    case err_or of
-                        Left err    -> $logErrorS  wxppLogSource $ fromString $
-                                                "Failed to create menu: " <> err
-                        Right _     -> $logInfoS wxppLogSource $ "menu reloaded."
+            -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
+            -- 干脆不理会 event 的类型，直接检查文件是否存在
+            exists <- liftIO $ doesFileExist $ encodeString fp
+            if not exists
+                then do
+                    $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
+                                                <> (either id id $ toText (FN.eventPath evt))
+                    -- 如果打算停用菜单，可直接将配置文件清空
+                else do
+                    m_atk <- get_atk
+                    case m_atk of
+                        Nothing             -> do
+                            $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
+                        Just access_token   ->  do
+                            err_or <- wxppCreateWithYaml access_token (FN.eventPath evt)
+                            case err_or of
+                                Left err    -> $logErrorS  wxppLogSource $ fromString $
+                                                        "Failed to create menu: " <> err
+                                Right _     -> $logInfoS wxppLogSource $ "menu reloaded."
 
