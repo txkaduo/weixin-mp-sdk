@@ -13,6 +13,7 @@ import Filesystem.Path.CurrentOS            (encodeString, toText)
 import qualified System.FSNotify            as FN
 import Control.Monad.Trans.Control
 import System.Directory                     (doesFileExist)
+import Control.Concurrent                   (threadDelay)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Error
@@ -132,7 +133,7 @@ wxppWatchMenuYaml get_atk block_until_exit fp = do
         handle_evt evt = do
             -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
             -- 干脆不理会 event 的类型，直接检查文件是否存在
-            exists <- liftIO $ doesFileExist $ encodeString fp
+            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist (encodeString fp)
             if not exists
                 then do
                     $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
