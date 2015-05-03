@@ -87,6 +87,8 @@ library
                      , resourcet
                      , regex-tdfa
                      , unordered-containers
+                     , fsnotify
+                     , monad-control
 
 
   -- hs-source-dirs:      

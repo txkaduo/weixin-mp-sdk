@@ -1,3 +1,5 @@
+{-#LANGUAGE CPP #-}
+{-#LANGUAGE FlexibleContexts #-}
 module WeiXin.PublicPlatform.Menu where
 
 import ClassyPrelude
@@ -7,6 +9,9 @@ import Control.Monad.Logger
 import Data.Aeson
 import Control.Monad.Trans.Except
 import Data.Yaml                            (decodeFileEither)
+import Filesystem.Path.CurrentOS            (encodeString, toText)
+import qualified System.FSNotify            as FN
+import Control.Monad.Trans.Control
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Error
@@ -64,9 +69,9 @@ wxppDeleteMenu (AccessToken access_token) = do
 
 -- | 根据指定 YAML 文件配置调用远程接口，修改菜单
 wxppCreateWithYaml :: (MonadIO m, MonadLogger m, MonadCatch m) =>
-    AccessToken -> String -> m (Either String ())
+    AccessToken -> FilePath -> m (Either String ())
 wxppCreateWithYaml access_token fp = runExceptT $ do
-    err_or_menu <- liftIO $ decodeFileEither fp
+    err_or_menu <- liftIO $ decodeFileEither $ encodeString fp
     case err_or_menu of
         Left err    -> do
             $(logErrorS) wxppLogSource $
@@ -83,3 +88,54 @@ wxppCreateWithYaml access_token fp = runExceptT $ do
                                         "Failed to reload menu: " <> fromString (show err)
                                 throwE $ "Failed to reload menu: " <> show err
                 Right _     -> return ()
+
+
+#if MIN_VERSION_monad_control(1, 0, 0)
+#else
+liftBaseOpDiscard :: MonadBaseControl b m
+                  => ((a -> b ()) -> b c)
+                  ->  (a -> m ()) -> m c
+liftBaseOpDiscard f g = liftBaseWith $ \runInBase -> f $ void . runInBase . g
+#endif
+
+-- | 不断地监护菜单配置文件变化，自动修改微信的菜单
+-- 不返回，直至 block_until_exit 参数的计算完成
+wxppWatchMenuYaml :: (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
+    m (Maybe AccessToken)
+    -> IO ()        -- ^ bloack until exit
+    -> FilePath
+    -> m ()
+wxppWatchMenuYaml get_atk block_until_exit fp = do
+    -- 主动加载一次菜单配置
+    now <- liftIO getCurrentTime
+    handle_evt $ FN.Added fp now
+
+    bracket (liftIO FN.startManager) (liftIO . FN.stopManager) $ \mgr -> do
+        stop <- (liftBaseOpDiscard $
+                    FN.watchDir
+                        mgr
+                        dir
+                        ((== fn) . filename . FN.eventPath)
+                ) handle_evt
+        liftIO $ block_until_exit >> stop
+    where
+        dir = directory fp
+        fn = filename fp
+
+
+        handle_evt evt@(FN.Removed {}) = do
+            $logWarnS wxppLogSource $ "menu config file has been removed: "
+                                        <> (either id id $ toText (FN.eventPath evt))
+
+        handle_evt evt = do
+            m_atk <- get_atk
+            case m_atk of
+                Nothing             -> do
+                    $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
+                Just access_token   ->  do
+                    err_or <- wxppCreateWithYaml access_token (FN.eventPath evt)
+                    case err_or of
+                        Left err    -> $logErrorS  wxppLogSource $ fromString $
+                                                "Failed to create menu: " <> err
+                        Right _     -> $logInfoS wxppLogSource $ "menu reloaded."
+

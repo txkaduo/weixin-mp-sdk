@@ -25,7 +25,6 @@ import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
 import Data.Yaml                            (encode)
-import Filesystem.Path.CurrentOS            (encodeString)
 
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
@@ -167,6 +166,8 @@ postMessageR = do
 
 
 -- | reload menu from config/menu.yml
+-- see also: 'wxppWatchMenuYaml'
+-- XXX: this function hard-coded a file path
 getReloadMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) String
 getReloadMenuR = do
     foundation <- getYesod
@@ -175,7 +176,7 @@ getReloadMenuR = do
     case m_atk of
         Nothing             -> return $ "Failed to create menu: no access token available."
         Just access_token   ->  do
-            wxppCreateWithYaml access_token (encodeString $ data_dir </> "menu.yml")
+            wxppCreateWithYaml access_token (data_dir </> "menu.yml")
                 >>= return . either show (const "Menu reloaded successfully.")
 
 
