@@ -110,7 +110,7 @@ wxppWatchMenuYaml get_atk block_until_exit fp = do
     now <- liftIO getCurrentTime
     handle_evt $ FN.Added fp now
 
-    bracket (liftIO FN.startManager) (liftIO . FN.stopManager) $ \mgr -> do
+    bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
         stop <- (liftBaseOpDiscard $
                     FN.watchDir
                         mgr
@@ -122,6 +122,11 @@ wxppWatchMenuYaml get_atk block_until_exit fp = do
         dir = directory fp
         fn = filename fp
 
+        watch_cfg = FN.defaultConfig
+                        { FN.confDebounce = FN.Debounce (fromIntegral (1 :: Int)) }
+                        -- 把时间相近(1秒内)的事件合并
+                        -- 很多对文件操作的工具保存时都可能由多个文件系统操作完成
+                        -- 比如 vim
 
         handle_evt evt@(FN.Removed {}) = do
             $logWarnS wxppLogSource $ "menu config file has been removed: "
