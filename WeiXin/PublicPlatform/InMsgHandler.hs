@@ -15,6 +15,7 @@ import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
 import Filesystem.Path.CurrentOS            (encodeString, fromText)
+import qualified Filesystem.Path.CurrentOS  as FP
 
 import Yesod.Helpers.Aeson                  (parseArray)
 
@@ -261,12 +262,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     where
 
     processInMsg (WxppInMsgMenuItemClickSendMsg msg_dir) acid get_atk _bs m_ime = runExceptT $ do
-        m_fp <- case fmap wxppInMessage m_ime of
-                Just (WxppInMsgEvent (WxppEvtClickItem evt_key)) -> do
-                    case T.stripPrefix "send-msg:" evt_key of
-                        Nothing -> return Nothing
-                        Just x  -> return $ Just x
-                _ -> return Nothing
+        let m_fp = do
+                in_msg <- fmap wxppInMessage m_ime
+                case in_msg of
+                    WxppInMsgEvent (WxppEvtClickItem evt_key) -> do
+                            T.stripPrefix "send-msg:" evt_key
+
+                    _ -> Nothing
 
         case m_fp of
             Nothing -> return []
@@ -274,6 +276,47 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
                 outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile (fromText fp)
+                liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
+                                fromWxppOutMsgL acid atk outmsg
+
+
+-- | Handler: 回复原文本消息中路径指定的任意消息
+-- 为安全计，要保证文件的真实路径在约定的目录下
+-- 另外，还要求设置一个简单的口令作为前缀，同时也作为识别
+data WxppInMsgSendAsRequested = WxppInMsgSendAsRequested FilePath Text
+
+instance JsonConfigable WxppInMsgSendAsRequested where
+    type JsonConfigableUnconfigData WxppInMsgSendAsRequested = FilePath
+
+    isNameOfInMsgHandler _ x = x == "as-you-request"
+
+    parseWithExtraData _ msg_dir obj = WxppInMsgSendAsRequested msg_dir <$> obj .: "magic-word"
+
+
+type instance WxppInMsgProcessResult WxppInMsgSendAsRequested = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m WxppInMsgSendAsRequested
+    where
+
+    processInMsg (WxppInMsgSendAsRequested msg_dir magic_word) acid get_atk _bs m_ime = runExceptT $ do
+        let m_fp = do
+                in_msg <- fmap wxppInMessage m_ime
+                case in_msg of
+                    WxppInMsgText content -> do
+                        fp <- fromText . T.strip <$> T.stripPrefix (magic_word <> " ") content
+                        fp2 <- FP.stripPrefix msg_dir (FP.collapse (msg_dir </> fp))
+                        when (fp /= fp2) mzero
+                        return fp
+
+                    _ -> Nothing
+
+        case m_fp of
+            Nothing -> return []
+            Just fp -> do
+                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        >>= maybe (throwE $ "no access token available") return
+                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
 
@@ -434,6 +477,7 @@ allBasicWxppInMsgHandlerPrototypes ::
 allBasicWxppInMsgHandlerPrototypes msg_dir =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
     ]
