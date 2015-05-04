@@ -13,6 +13,7 @@ import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Numeric                              (readDec, readFloat)
 
 import WeiXin.PublicPlatform.Security
+import WeiXin.PublicPlatform.Utils
 
 
 wxppInMsgEntityFromLbs :: LB.ByteString -> Either String WxppInMsgEntity

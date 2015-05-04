@@ -17,8 +17,6 @@ import Data.Byteable                        (toBytes)
 import Crypto.Cipher                        (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
-import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
-                                            , utcTimeToPOSIXSeconds)
 import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
 import Filesystem.Path.CurrentOS            (encodeString, fromText)
@@ -26,13 +24,10 @@ import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(SqlString))
 
-import Yesod.Helpers.Aeson                  (parseBase64ByteString)
+import Yesod.Helpers.Aeson                  (parseBase64ByteString, parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
-import Data.Yaml                            (ParseException)
 
-
-epochIntToUtcTime :: Int64 -> UTCTime
-epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
+import WeiXin.PublicPlatform.Utils
 
 -- | 客服帐号
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
@@ -187,6 +182,8 @@ data WxppArticle = WxppArticle {
                     }
                     deriving (Show, Eq)
 
+type WxppArticleLoader = DelayedYamlLoader WxppArticle
+
 instance FromJSON WxppArticle where
     parseJSON = withObject "WxppArticle" $ \obj -> do
                 title <- obj .:? "title"
@@ -218,11 +215,12 @@ data WxppOutMsgL = WxppOutMsgTextL Text
                     -- ^ media_id title description
                 | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
-                | WxppOutMsgArticleL [WxppArticle]
+                | WxppOutMsgArticleL [WxppArticleLoader]
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerServiceL
                     -- ^ 把信息转发至客服
-                deriving (Show, Eq)
+
+type WxppOutMsgLoader = DelayedYamlLoader WxppOutMsgL
 
 instance FromJSON WxppOutMsgL where
     parseJSON = withObject "WxppOutMsgL" $ \obj -> do
@@ -244,7 +242,14 @@ instance FromJSON WxppOutMsgL where
                                     url <- fmap UrlText <$> obj .:? "url"
                                     hq_url <- fmap UrlText <$> obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL path title desc url hq_url
-                        "article" -> WxppOutMsgArticleL <$> obj .: "articles"
+
+                        "article" -> WxppOutMsgArticleL <$>
+                                      ( obj .: "articles"
+                                        >>= parseArray "[WxppArticleLoader]"
+                                            (withObject "WxppArticleLoader" $
+                                                parseDelayedYamlLoader Nothing "file")
+                                      )
+
                         "transfer-cs" -> return WxppOutMsgTransferToCustomerServiceL
                         _       -> fail $ "unknown type: " <> type_s
 
@@ -474,20 +479,7 @@ instance FromJSON UploadResult where
         return $ UploadResult typ media_id t
 
 
--- | 在实现允许在解释一个 YAML 时，引用另一个 YAML这样的功能时
--- 在第一次解释时，结果不再是一个简单的值，而是一个 IO 函数。
--- 以下类型就是表达这种延期加载的函数
--- r 是计算第二次加载函数时要知道的一些额外信息
-type DelayedYamlLoader r a = ReaderT r IO (Either ParseException a)
-
-type WxppOutMsgLoader = DelayedYamlLoader FilePath WxppOutMsgL
-
-type WxppArticleLoader = DelayedYamlLoader FilePath WxppArticle
-
 --------------------------------------------------------------------------------
-
-utcTimeToEpochInt :: UTCTime -> Int64
-utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"

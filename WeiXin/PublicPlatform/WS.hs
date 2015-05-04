@@ -4,7 +4,7 @@ import ClassyPrelude hiding (catch)
 import Network.Wreq
 import Control.Lens
 import qualified Data.ByteString.Lazy       as LB
-import Control.Monad.Catch                  ( catch )
+import Control.Monad.Catch                  ( Handler(..), catches )
 --import Control.Monad.Trans.Control          (MonadBaseControl)
 
 import Network.HTTP.Client                  (HttpException(..))
@@ -56,14 +56,16 @@ data WxppWsCallError =  WxppWsErrorHttp HttpException
 instance Exception WxppWsCallError
 
 
-tryWxppWsResult :: MonadCatch m =>
-    m a -> m (Either WxppWsCallError a)
-tryWxppWsResult f = do
-    liftM Right f `catch` h1 `catch` h2 `catch` h3
+wxppWsExcHandlers :: Monad m => [Handler m (Either WxppWsCallError a)]
+wxppWsExcHandlers = [ Handler h1, Handler h2, Handler h3 ]
     where
         h1 = return . Left . WxppWsErrorHttp
         h2 = return . Left . WxppWsErrorJson
         h3 = return . Left . WxppWsErrorApp
+
+tryWxppWsResult :: MonadCatch m =>
+    m a -> m (Either WxppWsCallError a)
+tryWxppWsResult f = liftM Right f `catches` wxppWsExcHandlers
 
 
 asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>

@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
-import ClassyPrelude
+import ClassyPrelude hiding (catch)
 import Data.Proxy
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
@@ -14,8 +14,9 @@ import Data.Yaml                            (decodeFileEither, parseEither, Pars
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
-import Filesystem.Path.CurrentOS            (encodeString, fromText, extension)
+import Filesystem.Path.CurrentOS            (fromText)
 import qualified Filesystem.Path.CurrentOS  as FP
+import Control.Monad.Catch                  (catch)
 
 import Yesod.Helpers.Aeson                  (parseArray)
 
@@ -23,6 +24,7 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.Acid
+import WeiXin.PublicPlatform.Utils
 
 
 -- | 对收到的消息处理的函数
@@ -179,32 +181,12 @@ tryWxppWsResultE op f =
     tryWxppWsResult f
         >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
 
+tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b
+tryYamlExcE f =
+    f `catch` (\e -> throwE $ show (e :: ParseException))
 
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
-parseWxppOutMsgLoader obj =
-    (return . Right <$> obj .: "msg") <|>
-        (decodeOutMsgFile . setExtIfNotExist "yml" . fromText <$> obj .: "file")
-
-decodeOutMsgFile :: FilePath -> WxppOutMsgLoader
-decodeOutMsgFile fp = do
-    msg_dir <- ask
-    liftIO $ decodeFileEither (encodeString $ msg_dir </> fp)
-
-
--- | 执行 WxppOutMsgLoader 的操作，把结果转换成 WxppInMsgProcessor 所需的格式
-runWxppOutMsgLoader :: MonadIO m =>
-    FilePath    -- ^ 消息文件存放目录
-    -> WxppOutMsgLoader
-    -> m (Either String WxppOutMsgL)
-runWxppOutMsgLoader msg_dir get_outmsg = liftIO $ do
-    err_or_msg <- tryIOError $ runReaderT get_outmsg msg_dir
-    case err_or_msg of
-        Left err    -> return $ Left $ "failed to load message from file: " ++ show err
-        Right x     -> return $ parseMsgErrorToString x
-
-parseMsgErrorToString :: Either ParseException a -> Either String a
-parseMsgErrorToString (Left err)   = Left $ "failed to parse message from file: " ++ show err
-parseMsgErrorToString (Right x)    = Right x
+parseWxppOutMsgLoader = parseDelayedYamlLoader (Just "msg") "file"
 
 
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
@@ -237,9 +219,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir get_outmsg
+                outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                fromWxppOutMsgL acid atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
             else return []
 
 
@@ -276,9 +258,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
                 let fp = setExtIfNotExist "yml" $ fromText fp'
-                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ decodeOutMsgFile fp
+                outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                fromWxppOutMsgL acid atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
 
 
 -- | Handler: 回复原文本消息中路径指定的任意消息
@@ -317,9 +299,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just fp -> do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ decodeOutMsgFile fp
+                outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                fromWxppOutMsgL acid atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
 
 
 -- | Handler: 根据所带的 Predictor 与 Handler 对应表，分发到不同的 Handler 处理收到消息
@@ -465,9 +447,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     processInMsg (ConstResponse msg_dir is_primary get_outmsg) acid get_atk _bs _m_ime = runExceptT $ do
         atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                 >>= maybe (throwE $ "no access token available") return
-        outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir get_outmsg
+        outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                        fromWxppOutMsgL acid atk outmsg
+                        tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
 
 
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
@@ -492,9 +474,3 @@ allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOfRe) ()
     ]
-
---------------------------------------------------------------------------------
-
-setExtIfNotExist :: Text -> FilePath -> FilePath
-setExtIfNotExist def_ext fp =
-    maybe (fp <.> def_ext) (const fp) $ extension fp

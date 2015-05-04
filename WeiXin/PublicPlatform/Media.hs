@@ -11,10 +11,13 @@ import Control.Monad.Logger
 import Filesystem.Path.CurrentOS            (encodeString)
 import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB
+import Control.Monad.Catch                  (catches, Handler(..))
+import Data.Yaml                            (ParseException)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Utils
 
 
 -- | 下载一个多媒体文件
@@ -82,28 +85,55 @@ wxppUploadMediaCached acid atk mtype fp = do
         dt = fromIntegral (60 * 60 * 24 :: Int)
 
 
--- | 把 WxppOutMsgL 里的文件路径变换成 WxppMediaID
+-- | 从 WxppOutMsgL 计算出 WxppOutMsg
+-- 工作包括：
+-- * 把 WxppOutMsgL 里的文件路径变换成 WxppMediaID
+-- * 执行必要的延迟加载
+-- 这个函数会抛出异常 见 tryWxppWsResult
+-- 下面还有个尽量不抛出异常的版本
 fromWxppOutMsgL ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AcidState WxppAcidState
+    FilePath
+    -> AcidState WxppAcidState
     -> AccessToken
     -> WxppOutMsgL
     -> m WxppOutMsg
-fromWxppOutMsgL _       _   (WxppOutMsgTextL x)     = return (WxppOutMsgText x)
-fromWxppOutMsgL _       _   (WxppOutMsgArticleL x)  = return (WxppOutMsgArticle x)
-fromWxppOutMsgL acid    atk (WxppOutMsgImageL fp)   = do
+fromWxppOutMsgL _       _   _   (WxppOutMsgTextL x)     = return (WxppOutMsgText x)
+
+fromWxppOutMsgL msg_dir _   _   (WxppOutMsgArticleL loaders)  =
+        liftM WxppOutMsgArticle $ do
+            sequence $ map (runDelayedYamlLoaderExc msg_dir) loaders
+
+fromWxppOutMsgL _ acid    atk (WxppOutMsgImageL fp)   = do
         liftM (WxppOutMsgImage . urMediaId) $
             wxppUploadMediaCached acid atk WxppMediaTypeImage fp
-fromWxppOutMsgL acid    atk (WxppOutMsgVoiceL fp)   = do
+
+fromWxppOutMsgL _ acid    atk (WxppOutMsgVoiceL fp)   = do
         liftM (WxppOutMsgVoice . urMediaId) $
             wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
-fromWxppOutMsgL acid    atk (WxppOutMsgVideoL fp fp2 x1 x2)   = do
+
+fromWxppOutMsgL _ acid    atk (WxppOutMsgVideoL fp fp2 x1 x2)   = do
         liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
             (liftM urMediaId $ wxppUploadMediaCached acid atk WxppMediaTypeVoice fp)
             (liftM urMediaId $ wxppUploadMediaCached acid atk WxppMediaTypeVoice fp2)
-fromWxppOutMsgL acid    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
+
+fromWxppOutMsgL _ acid    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . urMediaId) $
             wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
-fromWxppOutMsgL _       _   WxppOutMsgTransferToCustomerServiceL =
+
+fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
 
+
+fromWxppOutMsgL' ::
+    ( MonadIO m, MonadLogger m, MonadCatch m) =>
+    FilePath
+    -> AcidState WxppAcidState
+    -> AccessToken
+    -> WxppOutMsgL
+    -> m (Either String WxppOutMsg)
+fromWxppOutMsgL' fp acid atk out_msg_l =
+    (liftM Right $ fromWxppOutMsgL fp acid atk out_msg_l) `catches`
+        (Handler h_yaml_exc : map unifyExcHandler wxppWsExcHandlers)
+    where
+        h_yaml_exc e = return $ Left $ show (e :: ParseException)

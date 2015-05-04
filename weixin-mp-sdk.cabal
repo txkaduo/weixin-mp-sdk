@@ -31,6 +31,7 @@ library
                        WeiXin.PublicPlatform.Yesod.Site.Function
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
+                       WeiXin.PublicPlatform.Utils
 
   -- other-modules:       
   default-extensions:  NoImplicitPrelude
