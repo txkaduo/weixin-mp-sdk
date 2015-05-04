@@ -67,6 +67,12 @@ instance PersistField WxppOpenID where
 instance PersistFieldSql WxppOpenID where
     sqlType _ = SqlString
 
+instance ToJSON WxppOpenID where
+    toJSON = toJSON . unWxppOpenID
+
+instance FromJSON WxppOpenID where
+    parseJSON = fmap WxppOpenID . parseJSON
+
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord)
@@ -77,6 +83,12 @@ instance PersistField WxppInMsgID where
 
 instance PersistFieldSql WxppInMsgID where
     sqlType _ = SqlString
+
+instance ToJSON WxppInMsgID where
+    toJSON = toJSON . unWxppInMsgID
+
+instance FromJSON WxppInMsgID where
+    parseJSON = fmap WxppInMsgID . parseJSON
 
 newtype WxppSceneID = WxppSceneID { unWxppSceneID :: Word32 }
                     deriving (Show, Eq, Ord)
@@ -145,6 +157,7 @@ instance FromJSON WxppAppConfig where
                                         xs
 
 
+-- | 事件推送的各种值
 data WxppEvent = WxppEvtSubscribe
                 | WxppEvtUnsubscribe
                 | WxppEvtSubscribeAtScene WxppSceneID QRTicket
@@ -152,8 +165,69 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtReportLocation (Double, Double) Double
                     -- ^ (纬度，经度） 精度
                 | WxppEvtClickItem Text
-                | WxppEvtFollowUrl Text
+                | WxppEvtFollowUrl UrlText
                 deriving (Show, Eq)
+
+wxppEventTypeString :: IsString a => WxppEvent -> a
+wxppEventTypeString WxppEvtSubscribe              = "subscribe"
+wxppEventTypeString WxppEvtUnsubscribe            = "unsubscribe"
+wxppEventTypeString (WxppEvtSubscribeAtScene {})  = "subscribe_at_scene"
+wxppEventTypeString (WxppEvtScan {})              = "scan"
+wxppEventTypeString (WxppEvtReportLocation {})    = "report_location"
+wxppEventTypeString (WxppEvtClickItem {})         = "click_item"
+wxppEventTypeString (WxppEvtFollowUrl {})         = "follow_url"
+
+instance ToJSON WxppEvent where
+    toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
+      where
+        get_others WxppEvtSubscribe     = []
+        get_others WxppEvtUnsubscribe   = []
+
+        get_others (WxppEvtSubscribeAtScene scene_id qrt) =
+                                          [ "scene"     .= unWxppSceneID scene_id
+                                          , "qr_ticket" .= unQRTicket qrt
+                                          ]
+
+        get_others (WxppEvtScan scene_id qrt) =
+                                          [ "scene"     .= unWxppSceneID scene_id
+                                          , "qr_ticket" .= unQRTicket qrt
+                                          ]
+
+        get_others (WxppEvtReportLocation (latitude, longitude) scale) =
+                                          [ "latitude"  .= latitude
+                                          , "longitude" .= longitude
+                                          , "scale"     .= scale
+                                          ]
+
+        get_others (WxppEvtClickItem key) = [ "key" .= key ]
+
+        get_others (WxppEvtFollowUrl url) = [ "url" .= unUrlText url ]
+
+
+instance FromJSON WxppEvent where
+    parseJSON = withObject "WxppEvent" $ \obj -> do
+        typ <- obj .: "type"
+        case typ of
+          "subscribe"   -> return WxppEvtSubscribe
+          "unsubscribe" -> return WxppEvtUnsubscribe
+
+          "subscribe_at_scene" -> liftM2 WxppEvtSubscribeAtScene
+                                      (WxppSceneID <$> obj .: "scene")
+                                      (QRTicket <$> obj .: "qr_ticket")
+
+          "scan"  -> liftM2 WxppEvtScan
+                              (WxppSceneID <$> obj .: "scene")
+                              (QRTicket <$> obj .: "qr_ticket")
+
+          "report_location" -> liftM2 WxppEvtReportLocation
+                                  (liftM2 (,) (obj .: "latitude") (obj .: "longitude"))
+                                  (obj .: "scale")
+
+          "click_item"  -> WxppEvtClickItem <$> obj .: "key"
+
+          "follow_url"  -> WxppEvtFollowUrl . UrlText <$> obj .: "url"
+
+          _ -> fail $ "unknown type: " ++ typ
 
 
 -- | 收到的各种消息: 包括普通消息和事件推送
@@ -162,13 +236,91 @@ data WxppInMsg =  WxppInMsgText Text
                 | WxppInMsgImage WxppMediaID UrlText
                     -- ^ 消息
                 | WxppInMsgVoice WxppMediaID Text (Maybe Text)
+                    -- ^ format recognition
                 | WxppInMsgVideo WxppMediaID WxppMediaID
+                    -- ^ media_id, thumb_media_id
                 | WxppInMsgLocation (Double, Double) Double Text
                     -- ^ (latitude, longitude) scale label
                 | WxppInMsgLink UrlText Text Text
                     -- ^ url title description
                 | WxppInMsgEvent WxppEvent
                 deriving (Show, Eq)
+
+wxppInMsgTypeString :: IsString a => WxppInMsg -> a
+wxppInMsgTypeString (WxppInMsgText {})      = "text"
+wxppInMsgTypeString (WxppInMsgImage {})     = "image"
+wxppInMsgTypeString (WxppInMsgVoice {})     = "voice"
+wxppInMsgTypeString (WxppInMsgVideo {})     = "video"
+wxppInMsgTypeString (WxppInMsgLocation {})  = "location"
+wxppInMsgTypeString (WxppInMsgLink {})      = "link"
+wxppInMsgTypeString (WxppInMsgEvent {})     = "event"
+
+instance ToJSON WxppInMsg where
+    toJSON msg = object $ ("type" .= (wxppInMsgTypeString msg :: Text)) : get_others msg
+      where
+        get_others (WxppInMsgText t)              = [ "content" .= t ]
+
+        get_others (WxppInMsgImage media_id url)  = [ "media_id"  .= media_id
+                                                    , "url"       .= unUrlText url
+                                                    ]
+
+        get_others (WxppInMsgVoice media_id format reg) =
+                                                    [ "media_id"    .= media_id
+                                                    , "format"      .= format
+                                                    , "recognition" .= reg
+                                                    ]
+
+        get_others (WxppInMsgVideo media_id thumb_media_id) =
+                                                    [ "media_id"        .= media_id
+                                                    , "thumb_media_id"  .= thumb_media_id
+                                                    ]
+
+        get_others (WxppInMsgLocation (latitude, longitude) scale label) =
+                                                    [ "latitude"  .= latitude
+                                                    , "longitude" .= longitude
+                                                    , "scale"     .= scale
+                                                    , "label"     .= label
+                                                    ]
+
+        get_others (WxppInMsgLink url title desc) = [ "url"   .= unUrlText url
+                                                    , "title" .= title
+                                                    , "desc"  .= desc
+                                                    ]
+
+        get_others (WxppInMsgEvent evt) = [ "event" .= evt ]
+
+
+instance FromJSON WxppInMsg where
+    parseJSON = withObject "WxppInMsg" $ \obj -> do
+      typ <- obj .: "type"
+      case typ of
+        "text" -> WxppInMsgText <$> obj .: "content"
+
+        "image" -> liftM2 WxppInMsgImage
+                    (obj .: "media_id")
+                    (UrlText <$> obj .: "url")
+
+        "voice" -> liftM3 WxppInMsgVoice
+                    (obj .: "media_id")
+                    (obj .: "format")
+                    (obj .:? "recognition")
+
+        "video" -> liftM2 WxppInMsgVideo
+                    (obj .: "media_id")
+                    (obj .: "thumb_media_id")
+
+        "location" -> liftM3 WxppInMsgLocation
+                        (liftM2 (,) (obj .: "latitude") (obj .: "longitude"))
+                        (obj .: "scale")
+                        (obj .: "label")
+        "link"  -> liftM3 WxppInMsgLink
+                        (UrlText <$> obj .: "url")
+                        (obj .: "title")
+                        (obj .: "desc")
+
+        "event" -> WxppInMsgEvent <$> obj .: "event"
+
+        _ -> fail $ "unknown type: " ++ typ
 
 
 data WxppInMsgEntity = WxppInMsgEntity
@@ -181,6 +333,23 @@ data WxppInMsgEntity = WxppInMsgEntity
                             , wxppInMessage         :: WxppInMsg
                         }
                         deriving (Show, Eq)
+
+instance ToJSON WxppInMsgEntity where
+    toJSON e = object [ "to"            .= wxppInToUserName e
+                      , "from"          .= wxppInFromUserName e
+                      , "created_time"  .= wxppInCreatedTime e
+                      , "msg_id"        .= wxppInMessageID e
+                      , "msg"           .= wxppInMessage e
+                      ]
+
+instance FromJSON WxppInMsgEntity where
+    parseJSON = withObject "WxppInMsgEntity" $ \obj -> do
+                  liftM5 WxppInMsgEntity
+                      (obj .: "to")
+                      (obj .: "from")
+                      (obj .: "created_time")
+                      (obj .:? "msg_id")
+                      (obj .: "msg")
 
 -- | 图文信息
 data WxppArticle = WxppArticle {

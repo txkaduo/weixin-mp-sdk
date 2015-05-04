@@ -265,7 +265,7 @@ wxppEventFromDocument doc = do
                     return $ WxppEvtClickItem ek
         "VIEW"  -> do
                     url <- get_ele_s "EventKey"
-                    return $ WxppEvtFollowUrl url
+                    return $ WxppEvtFollowUrl $ UrlText url
 
         _       -> fail $ T.unpack $
                     "unknown/unsupported Event type: " <> evt_type
