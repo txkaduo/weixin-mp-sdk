@@ -51,6 +51,11 @@ instance PersistField WxppMediaID where
 instance PersistFieldSql WxppMediaID where
     sqlType _ = SqlString
 
+instance ToJSON WxppMediaID where
+    toJSON = toJSON . unWxppMediaID
+
+instance FromJSON WxppMediaID where
+    parseJSON = fmap WxppMediaID . parseJSON
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Eq, Ord)
@@ -186,6 +191,14 @@ data WxppArticle = WxppArticle {
                     }
                     deriving (Show, Eq)
 
+instance ToJSON WxppArticle where
+    toJSON wa = object
+                  [ "title"   .= wxppArticleTitle wa
+                  , "desc"    .= wxppArticleDesc wa
+                  , "pic-url" .= (unUrlText <$> wxppArticlePicUrl wa)
+                  , "url"     .= (unUrlText <$> wxppArticleUrl wa)
+                  ]
+
 instance FromJSON WxppArticle where
     parseJSON = withObject "WxppArticle" $ \obj -> do
                 title <- obj .:? "title"
@@ -207,6 +220,66 @@ data WxppOutMsg = WxppOutMsgText Text
                 | WxppOutMsgTransferToCustomerService
                     -- ^ 把信息转发至客服
                 deriving (Show, Eq)
+
+wxppOutMsgTypeString :: IsString a => WxppOutMsg -> a
+wxppOutMsgTypeString (WxppOutMsgText {})                    = "text"
+wxppOutMsgTypeString (WxppOutMsgImage {})                   = "image"
+wxppOutMsgTypeString (WxppOutMsgVoice {})                   = "voice"
+wxppOutMsgTypeString (WxppOutMsgVideo {})                   = "video"
+wxppOutMsgTypeString (WxppOutMsgMusic {})                   = "music"
+wxppOutMsgTypeString (WxppOutMsgArticle {})                 = "article"
+wxppOutMsgTypeString (WxppOutMsgTransferToCustomerService)  = "transfer-cs"
+
+instance ToJSON WxppOutMsg where
+    toJSON outmsg = object $ ("type" .= (wxppOutMsgTypeString outmsg :: Text)) : get_others outmsg
+      where
+        get_others (WxppOutMsgText t) = [ "text" .= t ]
+        get_others (WxppOutMsgImage media_id) = [ "media_id" .= media_id ]
+        get_others (WxppOutMsgVoice media_id) = [ "media_id" .= media_id ]
+        get_others (WxppOutMsgVideo media_id thumb_media_id title desc) =
+                                                [ "media_id"        .= media_id
+                                                , "thumb_media_id"  .= thumb_media_id
+                                                , "title"           .= title
+                                                , "desc"            .= desc
+                                                ]
+        get_others (WxppOutMsgMusic thumb_media_id title desc url hq_url) =
+                                                [ "thumb_media_id"  .= thumb_media_id
+                                                , "title"           .= title
+                                                , "desc"            .= desc
+                                                , "url"             .= (unUrlText <$> url)
+                                                , "hq_url"          .= (unUrlText <$> hq_url)
+                                                ]
+        get_others (WxppOutMsgArticle articles) = [ "articles" .= articles ]
+        get_others (WxppOutMsgTransferToCustomerService) = []
+
+
+instance FromJSON WxppOutMsg where
+    parseJSON = withObject "WxppOutMsg" $ \obj -> do
+      typ <- obj .: "type"
+      case (typ :: String) of
+          "text"  -> WxppOutMsgText <$> obj .: "text"
+          "image" -> WxppOutMsgImage <$> obj .: "media_id"
+          "voice" -> WxppOutMsgVoice <$> obj .: "media_id"
+
+          "video" -> liftM4 WxppOutMsgVideo
+                        (obj .: "media_id")
+                        (obj .: "thumb_media_id")
+                        (obj .:? "title")
+                        (obj .:? "desc")
+
+          "music" -> liftM5 WxppOutMsgMusic
+                        (obj .: "thumb_media_id")
+                        (obj .:? "title")
+                        (obj .:? "desc")
+                        (fmap UrlText <$> obj .:? "url")
+                        (fmap UrlText <$> obj .:? "hq_url")
+
+          "article" -> WxppOutMsgArticle <$> obj .: "articles"
+
+          "transfer-cs" -> return WxppOutMsgTransferToCustomerService
+
+          _   -> fail $ "unknown type: " ++ typ
+
 
 -- | 外发的信息的本地信息
 -- 因 WxppOutMsg 包含 media id，它只在上传3天内有效，这个类型的值代表的就是相应的本地长期有效的信息
