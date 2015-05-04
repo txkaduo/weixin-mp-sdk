@@ -478,6 +478,28 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
             _                       -> return False
 
 
+-- | Predictor: 只要是文本消息就通过
+-- 主要用于转发：通常转发只转发文本。
+-- 而为了不在本地重复下游服务器的逻辑，全部转发也是一种合理的选择。
+data WxppInMsgAnyText = WxppInMsgAnyText
+                    deriving (Show, Typeable)
+
+instance JsonConfigable WxppInMsgAnyText where
+    type JsonConfigableUnconfigData WxppInMsgAnyText = ()
+
+    isNameOfInMsgHandler _ x = x == "any-text"
+
+    parseWithExtraData _ _ _obj = return WxppInMsgAnyText
+
+type instance WxppInMsgProcessResult WxppInMsgAnyText = Bool
+
+instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgAnyText where
+    processInMsg WxppInMsgAnyText _acid _get_atk _bs m_ime = runExceptT $ do
+        case wxppInMessage <$> m_ime of
+            Just (WxppInMsgText {}) -> return True
+            _                       -> return False
+
+
 -- | Handler: 固定地返回一个某个信息
 data ConstResponse = ConstResponse FilePath Bool WxppOutMsgLoader
                     deriving (Typeable)
@@ -529,6 +551,7 @@ allBasicWxppInMsgPredictorPrototypes ::
 allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOfRe) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgAnyText) ()
     ]
 
 --------------------------------------------------------------------------------
