@@ -180,24 +180,24 @@ tryWxppWsResultE op f =
         >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
 
 
--- |允许从另外文件加载 WxppOutMsgL ，而不是inline写在当前配置文件
--- FilePath 参数是消息文件存放目录
-type WxppOutMsgLoader = FilePath -> IO (Either ParseException WxppOutMsgL)
-
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
 parseWxppOutMsgLoader obj =
-    (const . return . Right <$> obj .: "msg") <|>
-        (flip decodeOutMsgFile . setExtIfNotExist "yml" . fromText <$> obj .: "file")
+    (return . Right <$> obj .: "msg") <|>
+        (decodeOutMsgFile . setExtIfNotExist "yml" . fromText <$> obj .: "file")
 
-decodeOutMsgFile :: FilePath -> FilePath -> IO (Either ParseException WxppOutMsgL)
-decodeOutMsgFile msg_dir fp = decodeFileEither (encodeString $ msg_dir </> fp)
+decodeOutMsgFile :: FilePath -> WxppOutMsgLoader
+decodeOutMsgFile fp = do
+    msg_dir <- ask
+    liftIO $ decodeFileEither (encodeString $ msg_dir </> fp)
+
 
 -- | 执行 WxppOutMsgLoader 的操作，把结果转换成 WxppInMsgProcessor 所需的格式
 runWxppOutMsgLoader :: MonadIO m =>
     FilePath    -- ^ 消息文件存放目录
-    -> WxppOutMsgLoader -> m (Either String WxppOutMsgL)
+    -> WxppOutMsgLoader
+    -> m (Either String WxppOutMsgL)
 runWxppOutMsgLoader msg_dir get_outmsg = liftIO $ do
-    err_or_msg <- tryIOError $ get_outmsg msg_dir
+    err_or_msg <- tryIOError $ runReaderT get_outmsg msg_dir
     case err_or_msg of
         Left err    -> return $ Left $ "failed to load message from file: " ++ show err
         Right x     -> return $ parseMsgErrorToString x
@@ -276,7 +276,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
                 let fp = setExtIfNotExist "yml" $ fromText fp'
-                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile fp
+                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ decodeOutMsgFile fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
 
@@ -317,7 +317,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just fp -> do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ flip decodeOutMsgFile fp
+                outmsg <- ExceptT $ runWxppOutMsgLoader msg_dir $ decodeOutMsgFile fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 fromWxppOutMsgL acid atk outmsg
 

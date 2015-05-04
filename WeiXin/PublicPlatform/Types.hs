@@ -28,6 +28,7 @@ import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(.
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
+import Data.Yaml                            (ParseException)
 
 
 epochIntToUtcTime :: Int64 -> UTCTime
@@ -472,6 +473,16 @@ instance FromJSON UploadResult where
         t <- epochIntToUtcTime <$> obj .: "created_at"
         return $ UploadResult typ media_id t
 
+
+-- | 在实现允许在解释一个 YAML 时，引用另一个 YAML这样的功能时
+-- 在第一次解释时，结果不再是一个简单的值，而是一个 IO 函数。
+-- 以下类型就是表达这种延期加载的函数
+-- r 是计算第二次加载函数时要知道的一些额外信息
+type DelayedYamlLoader r a = ReaderT r IO (Either ParseException a)
+
+type WxppOutMsgLoader = DelayedYamlLoader FilePath WxppOutMsgL
+
+type WxppArticleLoader = DelayedYamlLoader FilePath WxppArticle
 
 --------------------------------------------------------------------------------
 
