@@ -2,9 +2,12 @@
 module WeiXin.PublicPlatform.InMsgHandler where
 
 import ClassyPrelude
+import Network.Wreq hiding (Proxy)
+import Control.Lens hiding ((<.>), op)
 import Data.Proxy
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
+import Control.Monad.Catch                  ( catchAll )
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
 import Data.Aeson
@@ -322,6 +325,40 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                                 fromWxppOutMsgL acid atk outmsg
 
 
+-- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
+data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson UrlText
+
+instance JsonConfigable WxppInMsgForwardAsJson where
+    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = ()
+
+    isNameOfInMsgHandler _ x = x == "forward-as-json"
+
+    parseWithExtraData _ _ obj = WxppInMsgForwardAsJson . UrlText <$> obj .: "url"
+
+type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m WxppInMsgForwardAsJson
+    where
+
+    processInMsg (WxppInMsgForwardAsJson url) _acid _get_atk _bs m_ime = runExceptT $ do
+        case m_ime of
+            Nothing -> do
+                $logWarnS wxppLogSource $
+                    "Cannot forward incoming message as JSON because it could not be parsed."
+                return []
+
+            Just ime -> do
+                let opts = defaults
+                ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON ime)
+                    >>= liftM (view responseBody) . asJSON)
+                    `catchAll` handle_exc
+
+        where
+            handle_exc ex =
+                throwE $ "Failed to forward incoming message: " ++ show ex
+
+
 -- | Handler: 根据所带的 Predictor 与 Handler 对应表，分发到不同的 Handler 处理收到消息
 data WxppInMsgDispatchHandler m =
         WxppInMsgDispatchHandler [(SomeWxppInMsgPredictor m, SomeWxppInMsgHandler m)]
@@ -479,6 +516,7 @@ allBasicWxppInMsgHandlerPrototypes msg_dir =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
     ]
