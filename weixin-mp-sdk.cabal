@@ -15,6 +15,11 @@ build-type:          Simple
 -- extra-source-files:  
 cabal-version:       >=1.10
 
+
+Flag library-only
+    Description:   Build for library only
+    Default:       False
+
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
                        WeiXin.PublicPlatform.Types
@@ -99,6 +104,27 @@ library
 
   ghc-options:         -Wall
 
+
+executable wxpp-manage
+  if flag(library-only)
+      Buildable: False
+
+  main-is:             manage.hs
+  hs-source-dirs:      tools
+
+  build-depends:       base >=4.7 && <4.8
+                     , weixin-mp-sdk
+                     , classy-prelude
+                     , optparse-applicative >= 0.10
+                     , monad-logger
+                     , fast-logger
+                     , yaml
+                     , bytestring
+
+  default-extensions:  NoImplicitPrelude
+                       CPP
+
+  ghc-options:         -Wall
 
 test-suite test
   type:                exitcode-stdio-1.0
