@@ -24,7 +24,7 @@ import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(SqlString))
 
-import Yesod.Helpers.Aeson                  (parseBase64ByteString, parseArray)
+import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import qualified Data.HashMap.Strict        as HM
 
@@ -101,10 +101,16 @@ newtype AesKey = AesKey { unAesKey :: Key AES }
 instance Show AesKey where
     show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
 
+
+decodeBase64Encoded :: Text -> Either String ByteString
+decodeBase64Encoded = B64.decode . encodeUtf8
+
+decodeBase64AesKey :: Text -> Either String AesKey
+decodeBase64AesKey t = fmap AesKey $ do
+    decodeBase64Encoded t >>= either (Left . show) Right . makeKey
+
 parseAesKeyFromText :: Text -> Parser AesKey
-parseAesKeyFromText t = fmap AesKey $ do
-    bs <- parseBase64ByteString "AesKey" t
-    either (fail . show) return $ makeKey bs
+parseAesKeyFromText t = either fail return $ decodeBase64AesKey t
 
 instance FromJSON AesKey where
     parseJSON = withText "AesKey" parseAesKeyFromText
