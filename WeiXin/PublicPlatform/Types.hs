@@ -201,7 +201,7 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ media_id thumb_media_id title description
                 | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
-                | WxppOutMsgArticle [WxppArticle]
+                | WxppOutMsgNews [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerService
                     -- ^ 把信息转发至客服
@@ -216,7 +216,7 @@ data WxppOutMsgL = WxppOutMsgTextL Text
                     -- ^ media_id title description
                 | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
-                | WxppOutMsgArticleL [WxppArticleLoader]
+                | WxppOutMsgNewsL [WxppArticleLoader]
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerServiceL
                     -- ^ 把信息转发至客服
@@ -244,7 +244,7 @@ instance FromJSON WxppOutMsgL where
                                     hq_url <- fmap UrlText <$> obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL path title desc url hq_url
 
-                        "article" -> WxppOutMsgArticleL <$>
+                        "news" -> WxppOutMsgNewsL <$>
                                       ( obj .: "articles"
                                         >>= parseArray "[WxppArticleLoader]" parse_article)
 

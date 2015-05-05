@@ -352,7 +352,7 @@ $maybe hq_url <- unUrlText <$> m_hq_url
     <HQMusicUrl>#{hq_url}
 |]
 
-wxppOutMsgToNodes (WxppOutMsgArticle articles) = [xml|
+wxppOutMsgToNodes (WxppOutMsgNews articles) = [xml|
 <MsgType>news
 <ArticleCount>#{T.pack $ show $ length articles}
 <Articles>

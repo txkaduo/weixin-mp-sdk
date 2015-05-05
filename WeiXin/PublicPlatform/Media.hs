@@ -100,8 +100,8 @@ fromWxppOutMsgL ::
     -> m WxppOutMsg
 fromWxppOutMsgL _       _   _   (WxppOutMsgTextL x)     = return (WxppOutMsgText x)
 
-fromWxppOutMsgL msg_dir _   _   (WxppOutMsgArticleL loaders)  =
-        liftM WxppOutMsgArticle $ do
+fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
+        liftM WxppOutMsgNews $ do
             sequence $ map (runDelayedYamlLoaderExc msg_dir) loaders
 
 fromWxppOutMsgL _ acid    atk (WxppOutMsgImageL fp)   = do
