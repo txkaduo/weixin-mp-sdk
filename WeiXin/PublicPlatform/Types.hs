@@ -26,6 +26,7 @@ import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(.
 
 import Yesod.Helpers.Aeson                  (parseBase64ByteString, parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
+import qualified Data.HashMap.Strict        as HM
 
 import WeiXin.PublicPlatform.Utils
 
@@ -245,13 +246,16 @@ instance FromJSON WxppOutMsgL where
 
                         "article" -> WxppOutMsgArticleL <$>
                                       ( obj .: "articles"
-                                        >>= parseArray "[WxppArticleLoader]"
-                                            (withObject "WxppArticleLoader" $
-                                                parseDelayedYamlLoader Nothing "file")
-                                      )
+                                        >>= parseArray "[WxppArticleLoader]" parse_article)
 
                         "transfer-cs" -> return WxppOutMsgTransferToCustomerServiceL
                         _       -> fail $ "unknown type: " <> type_s
+        where
+
+          parse_article_obj = parseDelayedYamlLoader Nothing "file"
+
+          parse_article (A.String t)  = parse_article_obj $ HM.fromList [ "file" .= t ]
+          parse_article v             = withObject "WxppArticleLoader" parse_article_obj v
 
 
 -- | 上传多媒体文件接口中的 type 参数
