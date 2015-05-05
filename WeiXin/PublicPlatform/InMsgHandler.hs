@@ -186,7 +186,19 @@ tryYamlExcE f =
     f `catch` (\e -> throwE $ show (e :: ParseException))
 
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
-parseWxppOutMsgLoader = parseDelayedYamlLoader (Just "msg") "file"
+parseWxppOutMsgLoader obj = do
+    -- parseDelayedYamlLoader (Just "msg") "file"
+    -- 逐一尝试以下字段
+    -- msg: 内嵌表示的完整消息
+    -- artcile-file: 外部文件定义的单图文消息
+    -- file: 外部文件定义的完整消息
+    parse_direct
+        <|> (fmap (fmap $ \x -> WxppOutMsgNewsL [ return (Right x) ] ) <$> parse_indirect1)
+        <|> parse_indirect2
+    where
+        parse_indirect1 = mkDelayedYamlLoader . setExtIfNotExist "yml" . fromText <$> obj .: "article-file"
+        parse_indirect2 = mkDelayedYamlLoader . setExtIfNotExist "yml" . fromText <$> obj .: "file"
+        parse_direct    = return . Right <$> obj .: "msg"
 
 
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
