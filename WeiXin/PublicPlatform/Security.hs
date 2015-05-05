@@ -49,7 +49,17 @@ instance FromJSON AccessTokenResp where
 refreshAccessToken ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     WxppAppConfig -> m AccessTokenResp
-refreshAccessToken wac = do
+refreshAccessToken wac = refreshAccessToken' app_id app_secret
+    where
+        app_id      = wxppConfigAppID wac
+        app_secret  = wxppConfigAppSecret wac
+
+refreshAccessToken' ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    WxppAppID
+    -> WxppAppSecret
+    -> m AccessTokenResp
+refreshAccessToken' app_id app_secret = do
     let url = wxppRemoteApiBaseUrl <> "/token"
         opts = defaults & param "grant_type" .~ [ "client_credential" ]
                         & param "appid" .~ [ unWxppAppID app_id ]
@@ -58,9 +68,6 @@ refreshAccessToken wac = do
                 >>= asWxppWsResponseNormal'
     $(logDebugS) wxppLogSource $ "access token has been refreshed."
     return atk
-    where
-        app_id      = wxppConfigAppID wac
-        app_secret  = wxppConfigAppSecret wac
 
 
 
