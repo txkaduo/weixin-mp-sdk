@@ -67,7 +67,7 @@ wxppCsSendOutMsg (AccessToken atk) m_kf_account out_msg_entity = do
                                                 , "description"     .= desc
                                                 ]
                                 ]
-        obj_for_out_msg (WxppOutMsgArticle articles) = Just $
+        obj_for_out_msg (WxppOutMsgNews articles) = Just $
                             object
                                 [ "msgtype" .= ("news" :: Text)
                                 , "news"    .= object

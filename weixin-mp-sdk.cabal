@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                weixin-mp-sdk
-version:             0.4.1.0
+version:             0.5.0.0
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -32,6 +32,7 @@ library
                        WeiXin.PublicPlatform.Yesod.Site.Function
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
+                       WeiXin.PublicPlatform.Utils
 
   -- other-modules:       
   default-extensions:  NoImplicitPrelude

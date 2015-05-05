@@ -17,8 +17,6 @@ import Data.Byteable                        (toBytes)
 import Crypto.Cipher                        (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
-import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
-                                            , utcTimeToPOSIXSeconds)
 import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
 import Filesystem.Path.CurrentOS            (encodeString, fromText)
@@ -26,12 +24,11 @@ import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(SqlString))
 
-import Yesod.Helpers.Aeson                  (parseBase64ByteString)
+import Yesod.Helpers.Aeson                  (parseBase64ByteString, parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
+import qualified Data.HashMap.Strict        as HM
 
-
-epochIntToUtcTime :: Int64 -> UTCTime
-epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
+import WeiXin.PublicPlatform.Utils
 
 -- | 客服帐号
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
@@ -368,6 +365,8 @@ instance ToJSON WxppArticle where
                   , "url"     .= (unUrlText <$> wxppArticleUrl wa)
                   ]
 
+type WxppArticleLoader = DelayedYamlLoader WxppArticle
+
 instance FromJSON WxppArticle where
     parseJSON = withObject "WxppArticle" $ \obj -> do
                 title <- obj .:? "title"
@@ -384,7 +383,7 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ media_id thumb_media_id title description
                 | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
-                | WxppOutMsgArticle [WxppArticle]
+                | WxppOutMsgNews [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerService
                     -- ^ 把信息转发至客服
@@ -396,7 +395,7 @@ wxppOutMsgTypeString (WxppOutMsgImage {})                   = "image"
 wxppOutMsgTypeString (WxppOutMsgVoice {})                   = "voice"
 wxppOutMsgTypeString (WxppOutMsgVideo {})                   = "video"
 wxppOutMsgTypeString (WxppOutMsgMusic {})                   = "music"
-wxppOutMsgTypeString (WxppOutMsgArticle {})                 = "article"
+wxppOutMsgTypeString (WxppOutMsgNews {})                    = "news"
 wxppOutMsgTypeString (WxppOutMsgTransferToCustomerService)  = "transfer-cs"
 
 instance ToJSON WxppOutMsg where
@@ -418,7 +417,7 @@ instance ToJSON WxppOutMsg where
                                                 , "url"             .= (unUrlText <$> url)
                                                 , "hq_url"          .= (unUrlText <$> hq_url)
                                                 ]
-        get_others (WxppOutMsgArticle articles) = [ "articles" .= articles ]
+        get_others (WxppOutMsgNews articles) = [ "articles" .= articles ]
         get_others (WxppOutMsgTransferToCustomerService) = []
 
 
@@ -443,7 +442,7 @@ instance FromJSON WxppOutMsg where
                         (fmap UrlText <$> obj .:? "url")
                         (fmap UrlText <$> obj .:? "hq_url")
 
-          "article" -> WxppOutMsgArticle <$> obj .: "articles"
+          "news" -> WxppOutMsgNews <$> obj .: "articles"
 
           "transfer-cs" -> return WxppOutMsgTransferToCustomerService
 
@@ -459,11 +458,12 @@ data WxppOutMsgL = WxppOutMsgTextL Text
                     -- ^ media_id title description
                 | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
-                | WxppOutMsgArticleL [WxppArticle]
+                | WxppOutMsgNewsL [WxppArticleLoader]
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerServiceL
                     -- ^ 把信息转发至客服
-                deriving (Show, Eq)
+
+type WxppOutMsgLoader = DelayedYamlLoader WxppOutMsgL
 
 instance FromJSON WxppOutMsgL where
     parseJSON = withObject "WxppOutMsgL" $ \obj -> do
@@ -485,9 +485,19 @@ instance FromJSON WxppOutMsgL where
                                     url <- fmap UrlText <$> obj .:? "url"
                                     hq_url <- fmap UrlText <$> obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL path title desc url hq_url
-                        "article" -> WxppOutMsgArticleL <$> obj .: "articles"
+
+                        "news" -> WxppOutMsgNewsL <$>
+                                      ( obj .: "articles"
+                                        >>= parseArray "[WxppArticleLoader]" parse_article)
+
                         "transfer-cs" -> return WxppOutMsgTransferToCustomerServiceL
                         _       -> fail $ "unknown type: " <> type_s
+        where
+
+          parse_article_obj = parseDelayedYamlLoader Nothing "file"
+
+          parse_article (A.String t)  = parse_article_obj $ HM.fromList [ "file" .= t ]
+          parse_article v             = withObject "WxppArticleLoader" parse_article_obj v
 
 
 -- | 上传多媒体文件接口中的 type 参数
@@ -716,9 +726,6 @@ instance FromJSON UploadResult where
 
 
 --------------------------------------------------------------------------------
-
-utcTimeToEpochInt :: UTCTime -> Int64
-utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
