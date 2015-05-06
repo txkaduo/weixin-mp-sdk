@@ -44,6 +44,8 @@ wxppCreateMenu (AccessToken access_token) menus = do
 
 
 -- | 调用服务器接口，查询菜单
+-- 据文档，此接口只能查询到由 wxppCreateMenu 所用接口设置的菜单
+-- CAUTION: 还有一个类似的接口叫 “获取自定义菜单配置接口”
 wxppQueryMenu ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> m [MenuItem]
@@ -54,6 +56,18 @@ wxppQueryMenu (AccessToken access_token) = do
                         >>= asWxppWsResponseNormal'
     return items
 
+
+-- | 获取自定义菜单配置接口定义的返回值
+data WxppMenuConfig = WxppMenuConfig {
+                            wxppMenuConfigEnabled   :: Bool
+                            , wxppMenuConfigItems   :: [MenuItem]
+                        }
+
+-- | 获取自定义菜单配置接口
+wxppQueryMenuConfig ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> m [MenuItem]
+wxppQueryMenuConfig atk = undefined
 
 -- | 调用服务器接口，删除菜单
 wxppDeleteMenu ::

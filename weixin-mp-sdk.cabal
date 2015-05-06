@@ -27,6 +27,7 @@ library
                        WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Media
+                       WeiXin.PublicPlatform.Material
                        WeiXin.PublicPlatform.AutoReplyRules
                        WeiXin.PublicPlatform.Message
                        WeiXin.PublicPlatform.InMsgHandler

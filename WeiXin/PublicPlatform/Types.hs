@@ -34,6 +34,8 @@ import WeiXin.PublicPlatform.Utils
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
                         deriving (Show, Eq, Ord)
 
+
+-- | 为区分临时素材和永久素材，这个值专指 临时素材
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
                         deriving (Show, Eq, Ord)
 
@@ -53,6 +55,30 @@ instance ToJSON WxppMediaID where
 
 instance FromJSON WxppMediaID where
     parseJSON = fmap WxppMediaID . parseJSON
+
+
+-- | 为区分临时素材和永久素材，这个值专指 永久素材
+-- 虽然文档叫这种值 media id，但接口用的词是 material
+newtype WxppMaterialID = WxppMaterialID { unWxppMaterialID :: Text }
+                        deriving (Show, Eq, Ord)
+
+instance SafeCopy WxppMaterialID where
+    getCopy                 = contain $ safeGet
+    putCopy (WxppMaterialID x) = contain $ safePut x
+
+instance PersistField WxppMaterialID where
+    toPersistValue      = toPersistValue . unWxppMaterialID
+    fromPersistValue    = fmap WxppMaterialID . fromPersistValue
+
+instance PersistFieldSql WxppMaterialID where
+    sqlType _ = SqlString
+
+instance ToJSON WxppMaterialID where
+    toJSON = toJSON . unWxppMaterialID
+
+instance FromJSON WxppMaterialID where
+    parseJSON = fmap WxppMaterialID . parseJSON
+
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Eq, Ord)
