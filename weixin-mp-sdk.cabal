@@ -120,10 +120,15 @@ executable wxpp-manage
                      , monad-logger
                      , fast-logger
                      , yaml
+                     , aeson
                      , bytestring
+                     , mime-types
+                     , text
+                     , containers
 
   default-extensions:  NoImplicitPrelude
                        CPP
+                       OverloadedStrings
 
   ghc-options:         -Wall
 

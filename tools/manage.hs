@@ -3,8 +3,13 @@ module Main where
 import ClassyPrelude hiding ((<>))
 import Control.Monad.Logger
 import Options.Applicative
+import Data.Aeson
 import qualified Data.ByteString            as B
+import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Yaml                  as Y
+import qualified Data.Text                  as T
+import qualified Data.Map.Lazy              as LM
+import Network.Mime                         (defaultMimeMap, MimeType)
 -- import Control.Monad.Reader                 (asks)
 
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
@@ -12,11 +17,14 @@ import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
 
 import WeiXin.PublicPlatform.AutoReplyRules
 import WeiXin.PublicPlatform.Menu
+import WeiXin.PublicPlatform.Material
 -- import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
 
 data ManageCmd = QueryAutoReplyRules
                 | QueryMenu
+                | GetMaterial WxppMaterialID
+                | CountMaterial
                 deriving (Show, Eq, Ord)
 
 
@@ -33,11 +41,18 @@ data Options = Options {
 manageCmdParser :: Parser ManageCmd
 manageCmdParser = subparser $
     command "query-autoreply-rules"
-        (info (pure QueryAutoReplyRules)
+        (info (helper <*> pure QueryAutoReplyRules)
             (progDesc "取当前自动回复规则设置"))
     <> command "query-menu"
-        (info (pure QueryMenu)
+        (info (helper <*> pure QueryMenu)
             (progDesc "取菜单配置"))
+    <> command "get-material"
+        (info (helper <*> (fmap GetMaterial $ fmap (WxppMaterialID . fromString) $
+                                argument str (metavar "MEDIA_ID")))
+            (progDesc "下载（获取）永久素材"))
+    <> command "count-material"
+        (info (helper <*> pure CountMaterial)
+            (progDesc "统计永久素材数量"))
 
 aesKeyReader ::
 #if MIN_VERSION_optparse_applicative(0, 11, 0)
@@ -73,7 +88,7 @@ optionsParse = Options
                 <*> manageCmdParser
 
 
-start :: (MonadLogger m, MonadThrow m, MonadIO m) => ReaderT Options m ()
+start :: (MonadLogger m, MonadThrow m, MonadCatch m, MonadIO m) => ReaderT Options m ()
 start = do
     opts <- ask
     let app_id = optAppID opts
@@ -94,6 +109,42 @@ start = do
             result <- wxppQueryMenuConfig atk
             liftIO $ B.putStr $ Y.encode result
 
+        GetMaterial mid -> do
+            atk <- get_atk
+            result <- wxppGetMaterial atk mid
+
+            case result of
+                WxppGetMaterialNews articles -> do
+                    liftIO $ B.putStr $ Y.encode articles
+
+                WxppGetMaterialVideo title desc down_url -> do
+                    liftIO $ B.putStr $ Y.encode $ object
+                        [ "title"           .= title
+                        , "description"     .= desc
+                        , "introduction"    .= desc
+                        , "download_url"    .= unUrlText down_url
+                        ]
+
+                WxppGetMaterialRaw mime bs -> do
+                    let ext = fromMaybe "dat" $ extByMime mime
+                        fn  = unWxppMaterialID mid <> "." <> ext
+                    liftIO $ do
+                        putStr "Content-Type: "
+                        B.putStr mime
+                        putStrLn ""
+                        LB.writeFile (T.unpack fn) bs
+                        putStrLn $ "Saved to file: " <> fn
+
+        CountMaterial -> do
+            atk <- get_atk
+            result <- wxppCountMaterial atk
+            liftIO $ B.putStr $ Y.encode result
+
+
+-- | 根据 mime 反查出一个扩展名
+extByMime :: MimeType -> Maybe Text
+extByMime mime =
+    listToMaybe $ LM.keys $ LM.filter (== mime) defaultMimeMap
 
 start' :: Options -> IO ()
 start' opts = do
