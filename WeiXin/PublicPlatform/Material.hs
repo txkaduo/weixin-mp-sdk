@@ -137,3 +137,38 @@ wxppGetMaterial (AccessToken atk) (WxppMaterialID mid) = do
                         (r ^. responseHeader "Content-Type")
                         (r ^. responseBody)
             )
+
+
+-- | 永久素材统计数
+data WxppMaterialCount = WxppMaterialCount {
+                            wxppMaterialCountVoice      :: Int
+                            , wxppMaterialCountVideo    :: Int
+                            , wxppMaterialCountImage    :: Int
+                            , wxppMaterialCountNews     :: Int
+                        }
+
+instance FromJSON WxppMaterialCount where
+    parseJSON = withObject "WxppMaterialCount" $ \obj -> do
+                    WxppMaterialCount
+                        <$> ( obj .: "voice_count" )
+                        <*> ( obj .: "video_count" )
+                        <*> ( obj .: "image_count" )
+                        <*> ( obj .: "news_count" )
+
+instance ToJSON WxppMaterialCount where
+    toJSON x = object
+                [ "voice_count" .= wxppMaterialCountVoice x
+                , "video_count" .= wxppMaterialCountVideo x
+                , "image_count" .= wxppMaterialCountImage x
+                , "news_count"  .= wxppMaterialCountNews x
+                ]
+
+wxppCountMaterial ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    AccessToken
+    -> m WxppMaterialCount
+wxppCountMaterial (AccessToken atk) = do
+    let url = wxppRemoteApiBaseUrl <> "/material/get_materialcount"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ getWith opts url)
+            >>= asWxppWsResponseNormal'
