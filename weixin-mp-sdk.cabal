@@ -87,6 +87,7 @@ library
                      , xml-hamlet
                      , wai
                      , conduit
+                     , conduit-combinators
                      , scientific
                      , yaml
                      , system-filepath
@@ -125,6 +126,7 @@ executable wxpp-manage
                      , mime-types
                      , text
                      , containers
+                     , conduit
 
   default-extensions:  NoImplicitPrelude
                        CPP

@@ -14,11 +14,13 @@ import Filesystem.Path.CurrentOS            (encodeString)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch)
 -- import Data.Yaml                            (ParseException)
+import Data.Conduit
+import Data.Conduit.Combinators hiding (null)
 
 import WeiXin.PublicPlatform.Types
 -- import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
--- import WeiXin.PublicPlatform.Utils
+import WeiXin.PublicPlatform.Utils
 
 
 newtype MaterialUploadResult = MaterialUploadResult WxppMaterialID
@@ -38,17 +40,11 @@ wxppUploadMaterialMediaInternal ::
         -- ^ 上传视频素材所需的额外信息：标题，简介
     -> m MaterialUploadResult
 wxppUploadMaterialMediaInternal (AccessToken atk) mtype fp m_title_intro = do
-    let type_s = case mtype of
-                    WxppMediaTypeImage -> "image"
-                    WxppMediaTypeVoice -> "voice"
-                    WxppMediaTypeVideo -> "video"
-                    WxppMediaTypeThumb -> "thumb"
-
     let url = wxppRemoteApiBaseUrl <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $
                 [ partFileSource "media" $ encodeString fp
-                , partText "type" type_s
+                , partText "type" (wxppMediaTypeString mtype)
                 ]
                 ++ (case m_title_intro of
                         Nothing             -> []
@@ -172,3 +168,118 @@ wxppCountMaterial (AccessToken atk) = do
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ getWith opts url)
             >>= asWxppWsResponseNormal'
+
+
+-- | 批量取永久素材接口，无论是图文还是一般的多媒体
+-- 都是这样子的结构
+data WxppBatchGetMaterialResult a = WxppBatchGetMaterialResult {
+                                        wxppBatchGetMaterialResultTotal     :: Int
+                                        , wxppBatchGetMaterialResultCount   :: Int
+                                        , wxppBatchGetMaterialResultItems   :: [a]
+                                    }
+
+instance FromJSON a => FromJSON (WxppBatchGetMaterialResult a) where
+    parseJSON = withObject "WxppBatchGetMaterialResult" $ \obj -> do
+                    WxppBatchGetMaterialResult
+                        <$> ( obj .: "total_count" )
+                        <*> ( obj .: "item_count" )
+                        <*> ( obj .: "item" )
+
+data WxppBatchGetMaterialMediaItem = WxppBatchGetMaterialMediaItem {
+                                        wxppBatchGetMaterialMediaItemID     :: WxppMaterialID
+                                        , wxppBatchGetMaterialMediaItemName :: Text
+                                        , wxppBatchGetMaterialMediaItemTime :: UTCTime
+                                    }
+
+instance FromJSON WxppBatchGetMaterialMediaItem where
+    parseJSON = withObject "WxppBatchGetMaterialMediaItem" $ \obj -> do
+                    WxppBatchGetMaterialMediaItem
+                        <$> ( obj .: "media_id" )
+                        <*> ( obj .: "name")
+                        <*> ( epochIntToUtcTime <$> obj .: "update_time")
+
+instance ToJSON WxppBatchGetMaterialMediaItem where
+    toJSON x = object
+                    [ "media_id" .= wxppBatchGetMaterialMediaItemID x
+                    , "name" .= wxppBatchGetMaterialMediaItemName x
+                    , "update_time" .= wxppBatchGetMaterialMediaItemTime x
+                    ]
+
+wxppBatchGetMaterialMedia ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    AccessToken
+    -> WxppMediaType
+    -> Int      -- ^ limit
+    -> Int      -- ^ offset
+    -> m (WxppBatchGetMaterialResult WxppBatchGetMaterialMediaItem)
+wxppBatchGetMaterialMedia (AccessToken atk) mtype limit' offset' = do
+    let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ object $
+                [ "type"    .= (wxppMediaTypeString mtype :: Text)
+                , "count"   .= show limit
+                , "offset"  .= show offset
+                ])
+            >>= asWxppWsResponseNormal'
+    where
+        limit = max 1 $ min 20 $ limit'
+        offset = max 1 $ offset'
+
+
+data WxppBatchGetMaterialNewsItem = WxppBatchGetMaterialNewsItem {
+                                        wxppBatchGetMaterialNewsItemID          :: WxppMaterialID
+                                        , wxppBatchGetMaterialNewsItemContent   :: [WxppMaterialArticle]
+                                        , wxppBatchGetMaterialNewsItemTime      :: UTCTime
+                                    }
+
+instance FromJSON WxppBatchGetMaterialNewsItem where
+    parseJSON = withObject "WxppBatchGetMaterialNewsItem" $ \obj -> do
+                    WxppBatchGetMaterialNewsItem
+                        <$> ( obj .: "media_id" )
+                        <*> ( obj .: "content" >>= (\o -> o .: "news_item"))
+                        <*> ( epochIntToUtcTime <$> obj .: "update_time")
+
+instance ToJSON WxppBatchGetMaterialNewsItem where
+    toJSON x = object
+                    [ "media_id" .= wxppBatchGetMaterialNewsItemID x
+                    , "content" .= object [ "news_item" .= wxppBatchGetMaterialNewsItemContent x ]
+                    , "update_time" .= wxppBatchGetMaterialNewsItemTime x
+                    ]
+
+wxppBatchGetMaterialNews ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    AccessToken
+    -> Int      -- ^ limit
+    -> Int      -- ^ offset
+    -> m (WxppBatchGetMaterialResult WxppBatchGetMaterialNewsItem)
+wxppBatchGetMaterialNews (AccessToken atk) limit' offset' = do
+    let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ object $
+                [ "type"    .= ("news" :: Text)
+                , "count"   .= limit
+                , "offset"  .= offset
+                ])
+            >>= asWxppWsResponseNormal'
+    where
+        limit = max 1 $ min 20 $ limit'
+        offset = max 1 $ offset'
+
+-- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
+wxppBatchGetMaterialToSrc ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    (Int     -- ^ offset
+        -> m (WxppBatchGetMaterialResult a)
+    )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到
+    -> Source m a
+wxppBatchGetMaterialToSrc get_by_offset = go 0
+    where
+        go offset = do
+            result <- lift $ get_by_offset offset
+            let items = wxppBatchGetMaterialResultItems result
+            if null items
+                then return ()
+                else do
+                    yieldMany items
+                    let batch_count = wxppBatchGetMaterialResultCount result
+                    go $ offset + batch_count

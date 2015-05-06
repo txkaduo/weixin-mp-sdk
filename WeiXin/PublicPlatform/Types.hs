@@ -598,6 +598,13 @@ data WxppOutMsgEntity = WxppOutMsgEntity
                         }
                         deriving (Show, Eq)
 
+wxppMediaTypeString :: IsString a => WxppMediaType -> a
+wxppMediaTypeString mtype =
+    case mtype of
+        WxppMediaTypeImage -> "image"
+        WxppMediaTypeVoice -> "voice"
+        WxppMediaTypeVideo -> "video"
+        WxppMediaTypeThumb -> "thumb"
 
 
 -- | 可以点击的菜单所携带的数据及菜单的类型

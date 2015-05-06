@@ -10,6 +10,8 @@ import qualified Data.Yaml                  as Y
 import qualified Data.Text                  as T
 import qualified Data.Map.Lazy              as LM
 import Network.Mime                         (defaultMimeMap, MimeType)
+import Data.Conduit
+import qualified Data.Conduit.List          as CL
 -- import Control.Monad.Reader                 (asks)
 
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
@@ -25,6 +27,9 @@ data ManageCmd = QueryAutoReplyRules
                 | QueryMenu
                 | GetMaterial WxppMaterialID
                 | CountMaterial
+                | ListAllMaterialMedia WxppMediaType
+                | GetAllMaterialNews
+                    Bool    -- ^ show material id only
                 deriving (Show, Eq, Ord)
 
 
@@ -50,9 +55,32 @@ manageCmdParser = subparser $
         (info (helper <*> (fmap GetMaterial $ fmap (WxppMaterialID . fromString) $
                                 argument str (metavar "MEDIA_ID")))
             (progDesc "下载（获取）永久素材"))
+    <> command "list-all-material-media"
+        (info (helper <*> (ListAllMaterialMedia <$> argument mediaTypeReader (metavar "MEDIA_TYPE")))
+            (progDesc "列出特定类型的所有多媒体永久素材"))
+    <> command "get-all-material-news"
+        (info (helper <*> (GetAllMaterialNews
+                            <$> switch (long "show-id-only" <> help "show material id only")))
+            (progDesc "取永久素材中的所有图文消息"))
     <> command "count-material"
         (info (helper <*> pure CountMaterial)
             (progDesc "统计永久素材数量"))
+
+
+mediaTypeReader ::
+#if MIN_VERSION_optparse_applicative(0, 11, 0)
+    ReadM WxppMediaType
+mediaTypeReader = do
+    s <- str
+#else
+    (Monad m) => String -> m WxppMediaType
+mediaTypeReader s = do
+#endif
+    maybe (fail $ "invalid media type: " <> s) return $
+        lookup s s_to_type_list
+    where
+        s_to_type_list = map (wxppMediaTypeString &&& id) [minBound..maxBound]
+
 
 aesKeyReader ::
 #if MIN_VERSION_optparse_applicative(0, 11, 0)
@@ -139,6 +167,21 @@ start = do
             atk <- get_atk
             result <- wxppCountMaterial atk
             liftIO $ B.putStr $ Y.encode result
+
+        ListAllMaterialMedia mtype -> do
+            atk <- get_atk
+            wxppBatchGetMaterialToSrc (wxppBatchGetMaterialMedia atk mtype 20)
+                $=  CL.map toJSON
+                $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
+
+        GetAllMaterialNews show_id_only -> do
+            atk <- get_atk
+            wxppBatchGetMaterialToSrc (wxppBatchGetMaterialNews atk 20)
+                $=  CL.map (if show_id_only
+                                then toJSON . unWxppMaterialID . wxppBatchGetMaterialNewsItemID
+                                else toJSON
+                            )
+                $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
 
 
 -- | 根据 mime 反查出一个扩展名

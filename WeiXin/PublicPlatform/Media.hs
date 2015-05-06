@@ -52,15 +52,9 @@ wxppUploadMedia ::
     -> FilePath
     -> m UploadResult
 wxppUploadMedia (AccessToken atk) mtype fp = do
-    let type_s = case mtype of
-                    WxppMediaTypeImage -> "image"
-                    WxppMediaTypeVoice -> "voice"
-                    WxppMediaTypeVideo -> "video"
-                    WxppMediaTypeThumb -> "thumb"
-
     let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
-                        & param "type" .~ [ type_s :: Text]
+                        & param "type" .~ [ wxppMediaTypeString mtype :: Text]
     (liftIO $ postWith opts url $ partFileSource "media" $ encodeString fp)
             >>= asWxppWsResponseNormal'
 
