@@ -64,10 +64,16 @@ data WxppMenuConfig = WxppMenuConfig {
                         }
 
 -- | 获取自定义菜单配置接口
+-- XXX: 由于返回的 JSON 结构有点混乱，不同设置方式下得到的值不一样
+-- 目前暂时不作进一步解释，只当作一个字典保存
 wxppQueryMenuConfig ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> m [MenuItem]
-wxppQueryMenuConfig atk = undefined
+    AccessToken -> m Value
+wxppQueryMenuConfig (AccessToken atk) = do
+    let url = wxppRemoteApiBaseUrl <> "/get_current_selfmenu_info"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
+
 
 -- | 调用服务器接口，删除菜单
 wxppDeleteMenu ::

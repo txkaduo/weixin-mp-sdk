@@ -11,10 +11,12 @@ import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
                                             , LoggerSet, LogStr)
 
 import WeiXin.PublicPlatform.AutoReplyRules
+import WeiXin.PublicPlatform.Menu
 -- import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
 
 data ManageCmd = QueryAutoReplyRules
+                | QueryMenu
                 deriving (Show, Eq, Ord)
 
 
@@ -33,6 +35,9 @@ manageCmdParser = subparser $
     command "query-autoreply-rules"
         (info (pure QueryAutoReplyRules)
             (progDesc "取当前自动回复规则设置"))
+    <> command "query-menu"
+        (info (pure QueryMenu)
+            (progDesc "取菜单配置"))
 
 aesKeyReader ::
 #if MIN_VERSION_optparse_applicative(0, 11, 0)
@@ -73,11 +78,22 @@ start = do
     opts <- ask
     let app_id = optAppID opts
         app_secret = optAppSecret opts
-    case optCommand opts of
-        QueryAutoReplyRules -> do
+        get_atk = do
             AccessTokenResp atk _ttl <- refreshAccessToken' app_id app_secret
+            return atk
+
+    case optCommand opts of
+
+        QueryAutoReplyRules -> do
+            atk <- get_atk
             obj <- wxppQueryOriginAutoReplyRules atk
             liftIO $ B.putStr $ Y.encode obj
+
+        QueryMenu -> do
+            atk <- get_atk
+            result <- wxppQueryMenuConfig atk
+            liftIO $ B.putStr $ Y.encode result
+
 
 start' :: Options -> IO ()
 start' opts = do
