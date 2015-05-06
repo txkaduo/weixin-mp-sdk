@@ -4,15 +4,15 @@ module WeiXin.PublicPlatform.Material
     , module WeiXin.PublicPlatform.Types
     ) where
 
-import ClassyPrelude
+import ClassyPrelude hiding (catch)
 import Network.Wreq
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Data.Aeson
 import Control.Monad.Logger
 import Filesystem.Path.CurrentOS            (encodeString)
 -- import Data.Acid                            (query)
--- import qualified Data.ByteString.Lazy       as LB
--- import Control.Monad.Catch                  (catches, Handler(..))
+import qualified Data.ByteString.Lazy       as LB
+import Control.Monad.Catch                  (catch)
 -- import Data.Yaml                            (ParseException)
 
 import WeiXin.PublicPlatform.Types
@@ -100,3 +100,40 @@ wxppUploadMaterialNews (AccessToken atk) news = do
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ encode $ toJSON news)
             >>= asWxppWsResponseNormal'
+
+
+-- | 查询永久素材的结果内容完全只能通过尝试的方式决定
+-- 混合了多种情况
+data WxppGetMaterialResult =    WxppGetMaterialNews [WxppMaterialArticle]
+                            |   WxppGetMaterialVideo Text Text UrlText
+                                -- ^ title description download_url
+                            |   WxppGetMaterialRaw ByteString LB.ByteString
+
+instance FromJSON WxppGetMaterialResult where
+    -- 这个函数不用处理 WxppGetMaterialRaw，因为这种情况并非用 JSON 表示
+    parseJSON = withObject "WxppGetMaterialResult" $ \obj -> do
+                    let parse_as_news = WxppGetMaterialNews <$> obj .: "news_item"
+                        parse_as_video = WxppGetMaterialVideo
+                                            <$> obj .: "title"
+                                            <*> obj .: "description"
+                                            <*> (UrlText <$> obj .: "down_url")
+                    parse_as_news <|> parse_as_video
+
+
+-- | 获取永久素材
+wxppGetMaterial ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    AccessToken
+    -> WxppMaterialID
+    -> m WxppGetMaterialResult
+wxppGetMaterial (AccessToken atk) (WxppMaterialID mid) = do
+    let url = wxppRemoteApiBaseUrl <> "/material/get_material"
+        opts = defaults & param "access_token" .~ [ atk ]
+    r <- liftIO $ postWith opts url $ object [ "media_id" .= mid ]
+    asWxppWsResponseNormal' r
+        `catch`
+        (\(_ :: JSONError) -> do
+            return $ WxppGetMaterialRaw
+                        (r ^. responseHeader "Content-Type")
+                        (r ^. responseBody)
+            )
