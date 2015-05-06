@@ -44,7 +44,7 @@ wxppUploadMaterialMediaInternal (AccessToken atk) mtype fp m_title_intro = do
                     WxppMediaTypeVideo -> "video"
                     WxppMediaTypeThumb -> "thumb"
 
-    let url = wxppRemoteFileApiBaseUrl <> "/material/add_material"
+    let url = wxppRemoteApiBaseUrl <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $
                 [ partFileSource "media" $ encodeString fp
@@ -96,7 +96,7 @@ wxppUploadMaterialNews ::
     -> WxppMaterialNews
     -> m MaterialUploadResult
 wxppUploadMaterialNews (AccessToken atk) news = do
-    let url = wxppRemoteFileApiBaseUrl <> "/material/add_news"
+    let url = wxppRemoteApiBaseUrl <> "/material/add_news"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ encode $ toJSON news)
             >>= asWxppWsResponseNormal'
