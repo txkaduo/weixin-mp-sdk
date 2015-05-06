@@ -532,6 +532,50 @@ instance FromJSON WxppOutMsgL where
           parse_article v             = withObject "WxppArticleLoader" parse_article_obj v
 
 
+-- | 永久图文素材结构中的一个文章
+data WxppMaterialArticle = WxppMaterialArticle {
+                                wxppMaterialArticleTitle            :: Text
+                                , wxppMaterialArticleThumb          :: WxppMaterialID
+                                , wxppMaterialArticleAuthor         :: Maybe Text
+                                , wxppMaterialArticleDigest         :: Maybe Text
+                                , wxppMaterialArticleShowCoverPic   :: Bool
+                                , wxppMaterialArticleContent        :: Text
+                                , wxppMaterialArticleContentSrcUrl  :: UrlText
+                            }
+
+instance FromJSON WxppMaterialArticle where
+    parseJSON = withObject "WxppMaterialArticle" $ \obj -> do
+                    WxppMaterialArticle
+                        <$> ( obj .: "title" )
+                        <*> ( obj .: "thumb_media_id" )
+                        <*> ( obj .:? "author" )
+                        <*> ( obj .:? "digest" )
+                        <*> ( obj .: "show_cover_pic" )
+                        <*> ( obj .: "content" )
+                        <*> ( UrlText <$> obj .: "content_source_url" )
+
+
+instance ToJSON WxppMaterialArticle where
+    toJSON x = object   [ "title"           .= wxppMaterialArticleTitle x
+                        , "thumb_media_id"  .= wxppMaterialArticleThumb x
+                        , "author"          .= (fromMaybe "" $ wxppMaterialArticleAuthor x)
+                        , "digest"          .= (fromMaybe "" $ wxppMaterialArticleDigest x)
+                        , "show_cover_pic"  .= wxppMaterialArticleShowCoverPic x
+                        , "content"         .= wxppMaterialArticleContent x
+                        , "content_source_url" .= unUrlText (wxppMaterialArticleContentSrcUrl x)
+                        ]
+
+-- | 永久图文素材结构
+newtype WxppMaterialNews = WxppMaterialNews [WxppMaterialArticle]
+
+instance FromJSON WxppMaterialNews where
+    parseJSON = withObject "WxppMaterialNews" $ \obj -> do
+                    WxppMaterialNews <$> obj .: "articles"
+
+instance ToJSON WxppMaterialNews where
+    toJSON (WxppMaterialNews articles) = object [ "articles" .= articles ]
+
+
 -- | 上传多媒体文件接口中的 type 参数
 data WxppMediaType = WxppMediaTypeImage
                     | WxppMediaTypeVoice

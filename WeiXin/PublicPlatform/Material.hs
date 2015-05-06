@@ -87,3 +87,16 @@ wxppUploadMaterialMediaNonVideo atk mtype fp = do
                 "wxppUploadMaterialMediaNonVideo cannot be used to upload video."
         _   -> return ()
     wxppUploadMaterialMediaInternal atk mtype fp Nothing
+
+
+-- | 上传一个图文素材成为永久素材
+wxppUploadMaterialNews ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMaterialNews
+    -> m MaterialUploadResult
+wxppUploadMaterialNews (AccessToken atk) news = do
+    let url = wxppRemoteFileApiBaseUrl <> "/material/add_news"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ encode $ toJSON news)
+            >>= asWxppWsResponseNormal'
