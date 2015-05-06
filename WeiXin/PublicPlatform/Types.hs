@@ -550,9 +550,11 @@ instance FromJSON WxppMaterialArticle where
                         <*> ( obj .: "thumb_media_id" )
                         <*> ( obj .:? "author" )
                         <*> ( obj .:? "digest" )
-                        <*> ( obj .: "show_cover_pic" )
+                        <*> ( int_to_bool <$> obj .: "show_cover_pic" )
                         <*> ( obj .: "content" )
                         <*> ( UrlText <$> obj .: "content_source_url" )
+            where
+                int_to_bool x = (x :: Int) /= 0
 
 
 instance ToJSON WxppMaterialArticle where
@@ -560,10 +562,12 @@ instance ToJSON WxppMaterialArticle where
                         , "thumb_media_id"  .= wxppMaterialArticleThumb x
                         , "author"          .= (fromMaybe "" $ wxppMaterialArticleAuthor x)
                         , "digest"          .= (fromMaybe "" $ wxppMaterialArticleDigest x)
-                        , "show_cover_pic"  .= wxppMaterialArticleShowCoverPic x
+                        , "show_cover_pic"  .= bool_to_int (wxppMaterialArticleShowCoverPic x)
                         , "content"         .= wxppMaterialArticleContent x
                         , "content_source_url" .= unUrlText (wxppMaterialArticleContentSrcUrl x)
                         ]
+            where
+                bool_to_int b = if b then 1 :: Int else 0
 
 -- | 永久图文素材结构
 newtype WxppMaterialNews = WxppMaterialNews [WxppMaterialArticle]
