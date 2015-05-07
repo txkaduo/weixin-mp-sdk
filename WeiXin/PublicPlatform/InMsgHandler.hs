@@ -10,6 +10,7 @@ import Control.Monad.Trans.Except
 import Control.Monad.Catch                  ( catchAll )
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.Map.Strict            as Map
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
@@ -399,6 +400,70 @@ instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHa
                     else go xs
 
 
+-- | Handler: 根据一个 YAML 的定义的表，找出可能配置的 article，打包是一个 news 消息返回
+-- 用户输入的字串作为查找关键字，以完全匹配的方式匹配
+data WxppMatchedKeywordArticles = WxppMatchedKeywordArticles
+                                    FilePath    -- ^ msg dir
+                                    Bool        -- ^ if primary
+                                    FilePath    -- ^ the YAML
+
+newtype ArtcileToKeywordsMap = ArtcileToKeywordsMap { unArtcileToKeywordsMap :: Map FilePath [Text] }
+
+instance FromJSON ArtcileToKeywordsMap where
+    parseJSON = withObject "ArtcileToKeywordsMap" $
+        \obj -> fmap ArtcileToKeywordsMap $ do
+                base_dir <- fromText <$> obj .:? "base" .!= "."
+                pairs <- obj .: "articles" >>= parseArray "[artcile-info]" parse_item
+                return $ Map.fromList $ map (\(x, y) -> (base_dir </> x, y)) pairs
+            where
+                parse_item = withObject "article-info" $ \o -> do
+                    (,) <$> (fromText <$> o .: "file")
+                        <*> (o .: "keywords")
+
+instance JsonConfigable WxppMatchedKeywordArticles where
+    -- | 不可配置部分是 out-msg 目录路径
+    type JsonConfigableUnconfigData WxppMatchedKeywordArticles = FilePath
+
+    isNameOfInMsgHandler _ x = x == "articles-match-keyword"
+
+    parseWithExtraData _ msg_dir obj = WxppMatchedKeywordArticles msg_dir
+                                    <$> ( obj .:? "primary" .!= False )
+                                    <*> ( fromText <$> obj .: "map-file" )
+
+type instance WxppInMsgProcessResult WxppMatchedKeywordArticles = WxppInMsgHandlerResult
+
+instance (Monad m, MonadLogger m, MonadIO m) => IsWxppInMsgProcessor m WxppMatchedKeywordArticles
+    where
+    processInMsg (WxppMatchedKeywordArticles msg_dir is_primary map_file) _acid _get_atk _bs m_ime = runExceptT $ do
+        let m_keyword = do
+                in_msg <- fmap wxppInMessage m_ime
+                case in_msg of
+                    WxppInMsgText content   -> return content
+                    _                       -> Nothing
+
+        case m_keyword of
+            Nothing -> return []
+            Just keyword -> do
+                ArtcileToKeywordsMap the_map <-
+                        (liftIO $ decodeFileEither (FP.encodeString map_file))
+                                >>= either (throwE . show) return
+                let files = catMaybes $ flip map (Map.toList the_map) $
+                                \(art_file, keywords) ->
+                                    let matched = isJust $ find (== keyword) keywords
+                                    in if matched
+                                        then Just art_file
+                                        else Nothing
+
+                if null files
+                    then return []
+                    else do
+                        articles <- forM files $ \article_file -> do
+                                        ExceptT $ runDelayedYamlLoader msg_dir
+                                                        (mkDelayedYamlLoader article_file)
+                        let outmsg = WxppOutMsgNews $ take 10 articles
+                        return $ return $ (is_primary, Just outmsg)
+
+
 -- | Handler: 将满足某些条件的用户信息转发至微信的“多客服”系统
 data TransferToCS = TransferToCS Bool
                     deriving (Show, Typeable)
@@ -532,6 +597,7 @@ allBasicWxppInMsgHandlerPrototypes msg_dir =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppMatchedKeywordArticles) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
