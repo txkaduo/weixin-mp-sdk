@@ -171,7 +171,7 @@ wxppCountMaterial (AccessToken atk) = do
 
 
 -- | 批量取永久素材接口，无论是图文还是一般的多媒体
--- 都是这样子的结构
+-- 返回报文都是这样子的结构
 data WxppBatchGetMaterialResult a = WxppBatchGetMaterialResult {
                                         wxppBatchGetMaterialResultTotal     :: Int
                                         , wxppBatchGetMaterialResultCount   :: Int
@@ -185,6 +185,7 @@ instance FromJSON a => FromJSON (WxppBatchGetMaterialResult a) where
                         <*> ( obj .: "item_count" )
                         <*> ( obj .: "item" )
 
+-- | 批量取多媒体类型的永久素材，返回报文中的项目
 data WxppBatchGetMaterialMediaItem = WxppBatchGetMaterialMediaItem {
                                         wxppBatchGetMaterialMediaItemID     :: WxppMaterialID
                                         , wxppBatchGetMaterialMediaItemName :: Text
@@ -205,6 +206,7 @@ instance ToJSON WxppBatchGetMaterialMediaItem where
                     , "update_time" .= wxppBatchGetMaterialMediaItemTime x
                     ]
 
+-- | 调用批量取多媒体类型的永久素材的接口
 wxppBatchGetMaterialMedia ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
@@ -226,6 +228,7 @@ wxppBatchGetMaterialMedia (AccessToken atk) mtype limit' offset' = do
         offset = max 1 $ offset'
 
 
+-- | 批量取图文类型的永久素材，返回报文中的项目
 data WxppBatchGetMaterialNewsItem = WxppBatchGetMaterialNewsItem {
                                         wxppBatchGetMaterialNewsItemID          :: WxppMaterialID
                                         , wxppBatchGetMaterialNewsItemContent   :: [WxppMaterialArticle]
@@ -246,6 +249,7 @@ instance ToJSON WxppBatchGetMaterialNewsItem where
                     , "update_time" .= wxppBatchGetMaterialNewsItemTime x
                     ]
 
+-- | 调用批量取图文消息类型的永久素材的接口
 wxppBatchGetMaterialNews ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
