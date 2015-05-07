@@ -445,7 +445,7 @@ instance (Monad m, MonadLogger m, MonadIO m) => IsWxppInMsgProcessor m WxppMatch
             Nothing -> return []
             Just keyword -> do
                 ArtcileToKeywordsMap the_map <-
-                        (liftIO $ decodeFileEither (FP.encodeString map_file))
+                        (liftIO $ decodeFileEither (FP.encodeString $ msg_dir </> map_file))
                                 >>= either (throwE . show) return
                 let files = catMaybes $ flip map (Map.toList the_map) $
                                 \(art_file, keywords) ->
