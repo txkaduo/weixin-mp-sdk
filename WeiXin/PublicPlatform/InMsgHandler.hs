@@ -459,7 +459,8 @@ instance (Monad m, MonadLogger m, MonadIO m) => IsWxppInMsgProcessor m WxppMatch
                     else do
                         articles <- forM files $ \article_file -> do
                                         ExceptT $ runDelayedYamlLoader msg_dir
-                                                        (mkDelayedYamlLoader article_file)
+                                                        (mkDelayedYamlLoader $
+                                                            setExtIfNotExist "yml" article_file)
                         let outmsg = WxppOutMsgNews $ take 10 articles
                         return $ return $ (is_primary, Just outmsg)
 
