@@ -268,6 +268,15 @@ wxppEventFromDocument doc = do
                     url <- get_ele_s "EventKey"
                     return $ WxppEvtFollowUrl $ UrlText url
 
+        -- XXX: scancode_push 事件文档并没有描述，这是根据实测结果描述的
+        "scancode_push" -> do
+                    ek <- get_ele_s "EventKey"
+                    scan_info <- maybe (Left "ScanCodeInfo element not found") return $
+                                    listToMaybe $ cursor $/ element "ScanCodeInfo"
+                    scan_type <- getElementContent scan_info "ScanType"
+                    scan_result <- getElementContent scan_info "ScanResult"
+                    return $ WxppEvtScanCodePush ek scan_type scan_result
+
         _       -> Left $ T.unpack $
                     "unknown/unsupported Event type: " <> evt_type
 

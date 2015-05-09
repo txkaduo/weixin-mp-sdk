@@ -191,6 +191,9 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtUnsubscribe
                 | WxppEvtSubscribeAtScene WxppSceneID QRTicket
                 | WxppEvtScan WxppSceneID QRTicket
+                | WxppEvtScanCodePush Text Text Text
+                    -- ^ event key, scan type, scan result
+                    -- XXX: 文档有提到这个事件类型，但没有细节
                 | WxppEvtReportLocation (Double, Double) Double
                     -- ^ (纬度，经度） 精度
                 | WxppEvtClickItem Text
@@ -205,6 +208,7 @@ wxppEventTypeString (WxppEvtScan {})              = "scan"
 wxppEventTypeString (WxppEvtReportLocation {})    = "report_location"
 wxppEventTypeString (WxppEvtClickItem {})         = "click_item"
 wxppEventTypeString (WxppEvtFollowUrl {})         = "follow_url"
+wxppEventTypeString (WxppEvtScanCodePush {})      = "scancode_push"
 
 instance ToJSON WxppEvent where
     toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
@@ -220,6 +224,12 @@ instance ToJSON WxppEvent where
         get_others (WxppEvtScan scene_id qrt) =
                                           [ "scene"     .= unWxppSceneID scene_id
                                           , "qr_ticket" .= unQRTicket qrt
+                                          ]
+
+        get_others(WxppEvtScanCodePush key scan_type scan_result) =
+                                          [ "key"         .= key
+                                          , "scan_type"   .= scan_type
+                                          , "scan_result" .= scan_result
                                           ]
 
         get_others (WxppEvtReportLocation (latitude, longitude) scale) =
@@ -247,6 +257,10 @@ instance FromJSON WxppEvent where
           "scan"  -> liftM2 WxppEvtScan
                               (WxppSceneID <$> obj .: "scene")
                               (QRTicket <$> obj .: "qr_ticket")
+
+          "scancode_push" -> WxppEvtScanCodePush <$> obj .: "key"
+                                                <*> obj .: "scan_type"
+                                                <*> obj .: "scan_result"
 
           "report_location" -> liftM2 WxppEvtReportLocation
                                   (liftM2 (,) (obj .: "latitude") (obj .: "longitude"))
