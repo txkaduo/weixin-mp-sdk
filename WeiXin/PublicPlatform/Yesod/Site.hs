@@ -161,7 +161,7 @@ postMessageR = do
 
     where
         parse_xml_lbs x  = case parseLBS def x of
-                                Left ex     -> fail $ "Failed to parse XML: " <> show ex
+                                Left ex     -> Left $ "Failed to parse XML: " <> show ex
                                 Right xdoc  -> return xdoc
 
 

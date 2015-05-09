@@ -126,7 +126,7 @@ wxppEncryptInternal2 app_id ak salt msg = do
     case makeIV iv_bs of
         Nothing -> do
                 -- $(logErrorS) wxppLogSource $ "cannot make IV"
-                fail $ "cannot make IV"
+                Left $ "cannot make IV"
         Just iv -> do
                 return $ wxppEncryptInternal app_id ak iv salt msg
     where
@@ -181,7 +181,7 @@ wxppDecrypt ::
     -> ByteString       -- ^ encrypted message
     -> Either String ByteString
 wxppDecrypt app_id ak encrypted = do
-    iv <- maybe (fail "cannot make IV") return $ makeIV iv_bs
+    iv <- maybe (Left "cannot make IV") return $ makeIV iv_bs
     wxppDecryptInternal app_id ak iv encrypted
     where
         -- 文档没有明确写，但示范代码就是使用 aes key的前16字节

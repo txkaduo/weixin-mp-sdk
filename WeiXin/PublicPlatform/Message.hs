@@ -19,7 +19,7 @@ import WeiXin.PublicPlatform.Utils
 wxppInMsgEntityFromLbs :: LB.ByteString -> Either String WxppInMsgEntity
 wxppInMsgEntityFromLbs bs =
     case parseLBS def bs of
-        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Left ex     -> Left $ "Failed to parse XML: " <> show ex
         Right doc   -> wxppInMsgEntityFromDocument doc
 
 
@@ -30,7 +30,7 @@ wxppInMsgEntityFromLbsA ::
     -> Either String WxppInMsgEntity
 wxppInMsgEntityFromLbsA app_id ak bs =
     case parseLBS def bs of
-        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Left ex     -> Left $ "Failed to parse XML: " <> show ex
         Right doc   -> wxppInMsgEntityFromDocumentA app_id ak doc
 
 
@@ -76,7 +76,7 @@ wxppInMsgEntityFromDocumentE ::
 wxppInMsgEntityFromDocumentE app_id ak doc = do
     decrypted_xml <- get_ele_s "Encrypt" >>= decrypt
     case parseLBS def $ LB.fromStrict decrypted_xml of
-        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Left ex     -> Left $ "Failed to parse XML: " <> show ex
         Right ndoc  -> wxppInMsgEntityFromDocument ndoc
     where
         get_ele_s = getElementContent cursor
@@ -114,7 +114,7 @@ wxppInMsgEntityFromLbsET ::
         -- 则为 Right Nothing
 wxppInMsgEntityFromLbsET app_id ak_list lbs =
     case parseLBS def lbs of
-        Left ex     -> fail $ "Failed to parse XML: " <> show ex
+        Left ex     -> Left $ "Failed to parse XML: " <> show ex
         Right doc   -> wxppInMsgEntityFromDocumentET app_id ak_list doc
 
 
@@ -130,7 +130,7 @@ wxppInMsgEntityFromDocumentA app_id ak doc = do
         Just encrypted_xml  -> do
             decrypted_xml <- decrypt encrypted_xml
             case parseLBS def $ LB.fromStrict decrypted_xml of
-                Left ex     -> fail $ "Failed to parse XML: " <> show ex
+                Left ex     -> Left $ "Failed to parse XML: " <> show ex
                 Right ndoc  -> wxppInMsgEntityFromDocument ndoc
     where
         cursor = fromDocument doc
@@ -143,11 +143,11 @@ wxppInMsgEntityFromDocument doc = do
     from_user <- fmap WxppOpenID $ get_ele_s "FromUserName"
     tt <- get_ele_s "CreateTime"
                 >>= maybe
-                        (fail $ "Failed to parse CreateTime")
+                        (Left $ "Failed to parse CreateTime")
                         (return . epochIntToUtcTime)
                     . simpleParseDecT
     msg_id <- fmap (fmap WxppInMsgID) $
-                mapM (maybe (fail $ "Failed to parse MsgId") return . simpleParseDecT)
+                mapM (maybe (Left $ "Failed to parse MsgId") return . simpleParseDecT)
                     $ getElementContentMaybe cursor "MsgId"
     msg <- wxppInMsgFromDocument doc
     return $ WxppInMsgEntity to_user from_user tt msg_id msg
@@ -183,13 +183,13 @@ wxppInMsgFromDocument doc = do
 
         "location" -> do
                     x <- get_ele_s "Location_X"
-                            >>= maybe (fail $ "Failed to parse Location_X") return
+                            >>= maybe (Left $ "Failed to parse Location_X") return
                                 . simpleParseFloatT
                     y <- get_ele_s "Location_Y"
-                            >>= maybe (fail $ "Failed to parse Location_Y") return
+                            >>= maybe (Left $ "Failed to parse Location_Y") return
                                 . simpleParseFloatT
                     scale <- get_ele_s "Scale"
-                            >>= maybe (fail $ "Failed to parse Scale") return
+                            >>= maybe (Left $ "Failed to parse Scale") return
                                 . simpleParseFloatT
                     label <- get_ele_s "Label"
                     return $ WxppInMsgLocation (x, y) scale label
@@ -202,7 +202,7 @@ wxppInMsgFromDocument doc = do
 
         "event"     -> fmap WxppInMsgEvent $ wxppEventFromDocument doc
 
-        _       -> fail $ T.unpack $
+        _       -> Left $ T.unpack $
                     "unknown/unsupported MsgType: " <> msg_type_s
 
     where
@@ -227,12 +227,12 @@ wxppEventFromDocument doc = do
                         if T.isPrefixOf prefix ek_s
                             then
                                 maybe
-                                    (fail $ "Failed to parse scene id")
+                                    (Left $ "Failed to parse scene id")
                                     return
                                     $ simpleParseDecT $
                                         T.drop (length prefix) ek_s
 
-                            else fail $ T.unpack $
+                            else Left $ T.unpack $
                                         "EventKey does not start with "
                                             <> prefix
                     return $ WxppEvtSubscribeAtScene scene_id ticket
@@ -243,7 +243,7 @@ wxppEventFromDocument doc = do
                     scan_id <- fmap WxppSceneID $
                             get_ele_s "EventKey"
                                 >>= maybe
-                                        (fail $ "Failed to parse EventKey")
+                                        (Left $ "Failed to parse EventKey")
                                         return
                                     . simpleParseDecT
                     ticket <- fmap QRTicket $ get_ele_s "Ticket"
@@ -251,13 +251,13 @@ wxppEventFromDocument doc = do
 
         "LOCATION"  -> do
                     latitude <- get_ele_s "Latitude"
-                            >>= maybe (fail $ "Failed to parse Latitude") return
+                            >>= maybe (Left $ "Failed to parse Latitude") return
                                 . simpleParseFloatT
                     longitude <- get_ele_s "Longitude"
-                            >>= maybe (fail $ "Failed to parse Longitude") return
+                            >>= maybe (Left $ "Failed to parse Longitude") return
                                 . simpleParseFloatT
                     prec <- get_ele_s "Precision"
-                            >>= maybe (fail $ "Failed to parse Precision") return
+                            >>= maybe (Left $ "Failed to parse Precision") return
                                 . simpleParseFloatT
                     return $ WxppEvtReportLocation (latitude, longitude) prec
 
@@ -268,7 +268,7 @@ wxppEventFromDocument doc = do
                     url <- get_ele_s "EventKey"
                     return $ WxppEvtFollowUrl $ UrlText url
 
-        _       -> fail $ T.unpack $
+        _       -> Left $ T.unpack $
                     "unknown/unsupported Event type: " <> evt_type
 
     where
