@@ -560,6 +560,34 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgAnyText where
             _                       -> return False
 
 
+-- | Predictor: 通过条件： scancode_waitmsg 事件，且 key 满足任意一个正则表达式
+data WxppInMsgScanCodeWaitMsgKeyRE = WxppInMsgScanCodeWaitMsgKeyRE [Regex]
+                                    deriving (Typeable)
+
+instance JsonConfigable WxppInMsgScanCodeWaitMsgKeyRE where
+    type JsonConfigableUnconfigData WxppInMsgScanCodeWaitMsgKeyRE = ()
+
+    isNameOfInMsgHandler _ x = x == "scancode-wait-msg-key-re"
+
+    parseWithExtraData _ _ obj = do
+        re_list <- obj .: "key-re"
+        fmap WxppInMsgScanCodeWaitMsgKeyRE $ forM re_list $ \r -> do
+            case compile blankCompOpt blankExecOpt r of
+                Left err -> fail $ "Failed to compile RE: " <> err
+                Right rx -> return rx
+
+type instance WxppInMsgProcessResult WxppInMsgScanCodeWaitMsgKeyRE = Bool
+
+instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgScanCodeWaitMsgKeyRE where
+    processInMsg (WxppInMsgScanCodeWaitMsgKeyRE lst) _acid _get_atk _bs m_ime = runExceptT $ do
+        case wxppInMessage <$> m_ime of
+            Just (WxppInMsgEvent (WxppEvtScanCodeWaitMsg ek _scan_type _scan_result))  -> do
+                let t = T.unpack ek
+                return $ not $ null $ catMaybes $ rights $ map (flip execute t) lst
+
+            _   -> return False
+
+
 -- | Handler: 固定地返回一个某个信息
 data ConstResponse = ConstResponse FilePath Bool WxppOutMsgLoader
                     deriving (Typeable)
@@ -612,5 +640,6 @@ allBasicWxppInMsgPredictorPrototypes ::
 allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOfRe) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgScanCodeWaitMsgKeyRE) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgAnyText) ()
     ]
