@@ -193,7 +193,10 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtScan WxppSceneID QRTicket
                 | WxppEvtScanCodePush Text Text Text
                     -- ^ event key, scan type, scan result
-                    -- XXX: 文档有提到这个事件类型，但没有细节
+                    -- XXX: 文档有提到这个事件类型，但没有消息的具体细节
+                | WxppEvtScanCodeWaitMsg Text Text Text
+                    -- ^ event key, scan type, scan result
+                    -- XXX: 文档有提到这个事件类型，但没有消息的具体细节
                 | WxppEvtReportLocation (Double, Double) Double
                     -- ^ (纬度，经度） 精度
                 | WxppEvtClickItem Text
@@ -209,6 +212,7 @@ wxppEventTypeString (WxppEvtReportLocation {})    = "report_location"
 wxppEventTypeString (WxppEvtClickItem {})         = "click_item"
 wxppEventTypeString (WxppEvtFollowUrl {})         = "follow_url"
 wxppEventTypeString (WxppEvtScanCodePush {})      = "scancode_push"
+wxppEventTypeString (WxppEvtScanCodeWaitMsg {})   = "scancode_waitmsg"
 
 instance ToJSON WxppEvent where
     toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
@@ -227,6 +231,12 @@ instance ToJSON WxppEvent where
                                           ]
 
         get_others(WxppEvtScanCodePush key scan_type scan_result) =
+                                          [ "key"         .= key
+                                          , "scan_type"   .= scan_type
+                                          , "scan_result" .= scan_result
+                                          ]
+
+        get_others(WxppEvtScanCodeWaitMsg key scan_type scan_result) =
                                           [ "key"         .= key
                                           , "scan_type"   .= scan_type
                                           , "scan_result" .= scan_result
@@ -261,6 +271,10 @@ instance FromJSON WxppEvent where
           "scancode_push" -> WxppEvtScanCodePush <$> obj .: "key"
                                                 <*> obj .: "scan_type"
                                                 <*> obj .: "scan_result"
+
+          "scancode_waitmsg" -> WxppEvtScanCodeWaitMsg <$> obj .: "key"
+                                                        <*> obj .: "scan_type"
+                                                        <*> obj .: "scan_result"
 
           "report_location" -> liftM2 WxppEvtReportLocation
                                   (liftM2 (,) (obj .: "latitude") (obj .: "longitude"))
