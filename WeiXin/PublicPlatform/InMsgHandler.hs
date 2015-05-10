@@ -321,14 +321,14 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
 
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
-data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson UrlText
+data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson WxppAppID UrlText
 
 instance JsonConfigable WxppInMsgForwardAsJson where
-    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = ()
+    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = WxppAppID
 
     isNameOfInMsgHandler _ x = x == "forward-as-json"
 
-    parseWithExtraData _ _ obj = WxppInMsgForwardAsJson . UrlText <$> obj .: "url"
+    parseWithExtraData _ app_id obj = WxppInMsgForwardAsJson app_id . UrlText <$> obj .: "url"
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
@@ -336,7 +336,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardAsJson
     where
 
-    processInMsg (WxppInMsgForwardAsJson url) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardAsJson app_id url) _acid _get_atk _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -345,7 +345,8 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
             Just ime -> do
                 let opts = defaults
-                ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON ime)
+                let fwd_msg = WxppForwardedInMsg ime app_id
+                ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                     >>= liftM (view responseBody) . asJSON)
                     `catchAll` handle_exc
 
@@ -620,14 +621,15 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
 allBasicWxppInMsgHandlerPrototypes ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
-    FilePath
+    WxppAppID
+    -> FilePath
     -> [WxppInMsgHandlerPrototype m]
-allBasicWxppInMsgHandlerPrototypes msg_dir =
+allBasicWxppInMsgHandlerPrototypes app_id msg_dir =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppMatchedKeywordArticles) msg_dir
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) app_id
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
     ]

@@ -408,6 +408,25 @@ instance FromJSON WxppInMsgEntity where
                       (obj .:? "msg_id")
                       (obj .: "msg")
 
+
+-- | 转发收到的消息时的报文
+data WxppForwardedInMsg = WxppForwardedInMsg {
+                                    wxppFwdInMsgEntity  :: WxppInMsgEntity
+                                    , wxppFwdInMsgAppID :: WxppAppID
+                                }
+instance ToJSON WxppForwardedInMsg where
+    toJSON x = object
+                [ "ime"     .= wxppFwdInMsgEntity x
+                , "app_id"  .= unWxppAppID (wxppFwdInMsgAppID x)
+                ]
+
+instance FromJSON WxppForwardedInMsg where
+    parseJSON = withObject "WxppForwardedInMsg" $ \obj -> do
+                    WxppForwardedInMsg
+                        <$> obj .: "ime"
+                        <*> (WxppAppID <$> obj .: "app_id")
+
+
 -- | 图文信息
 data WxppArticle = WxppArticle {
                     wxppArticleTitle    :: Maybe Text    -- ^ title
