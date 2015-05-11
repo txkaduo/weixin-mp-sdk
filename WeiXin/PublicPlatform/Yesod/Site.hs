@@ -171,7 +171,7 @@ postMessageR = do
 getReloadMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) String
 getReloadMenuR = do
     foundation <- getYesod
-    let data_dir = wxppSubDataDir foundation
+    let data_dir = wxppConfigDataDir $ wxppSubAppConfig foundation
     m_atk <- liftIO $ wxppSubAccessTokens foundation
     case m_atk of
         Nothing             -> return $ "Failed to create menu: no access token available."
