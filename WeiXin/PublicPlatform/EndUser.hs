@@ -6,9 +6,12 @@ import Control.Lens
 import Control.Monad.Logger
 import Data.Aeson
 import Data.Conduit                         (Source, yield)
+import Data.Acid
+import Data.Time                            (diffUTCTime, NominalDiffTime)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Acid
 
 
 -- | 调用服务器接口，查询用户基础信息
@@ -63,3 +66,44 @@ wxppGetEndUserSource (AccessToken access_token) = loop Nothing
                 (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
             yield r
             maybe (return ()) (loop . Just) $ m_next_id
+
+
+-- | 取用户的 UnionID
+-- 先从缓存找，找不到或找到的记录太旧，则调用接口
+-- 如果调用接口取得最新的数据，立刻缓存之
+wxppCachedGetEndUserUnionID ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    NominalDiffTime
+    -> WxppAppID
+    -> AcidState WxppAcidState
+    -> AccessToken
+    -> WxppOpenID
+    -> m (Maybe WxppUnionID)
+wxppCachedGetEndUserUnionID ttl app_id acid atk open_id = do
+    m_res <- liftIO $ query acid $ WxppAcidLookupCachedUnionID open_id app_id
+    now <- liftIO getCurrentTime
+    m_uid0 <- case m_res of
+                Just (union_id, ctime) -> do
+                    if diffUTCTime now ctime > ttl
+                        then return Nothing
+                        else return $ Just union_id
+
+                Nothing -> return Nothing
+
+    case m_uid0 of
+        Just uid    -> return $ Just uid
+
+        Nothing     -> do
+            qres <- wxppQueryEndUserInfo atk open_id
+            case qres of
+                EndUserQueryResultNotSubscribed {} -> do
+                    $logWarnS wxppLogSource $
+                        "wxppCachedGetEndUserUnionID failed because user does not subscribe: "
+                            <> unWxppOpenID open_id
+                    return Nothing
+
+                EndUserQueryResult _ _ _ _ _ _ _ _ _ m_uid -> do
+                    forM_ m_uid $ \uid -> liftIO $ do
+                            update acid $ WxppAcidSetCachedUnionID now open_id app_id uid
+
+                    return m_uid

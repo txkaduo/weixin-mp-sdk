@@ -10,6 +10,7 @@ import Data.Acid
 import Data.Default                         (Default(..))
 import Control.Monad.Reader                 (asks)
 import Control.Monad.State                  (modify)
+import qualified Data.Map.Strict            as Map
 
 import WeiXin.PublicPlatform.Types
 
@@ -29,6 +30,8 @@ data WxppAcidState = WxppAcidState {
                         -- 而是定时丢弃过期的 access token
                         -- 注意：这个列表是排了序的
                     , _wxppAcidStateUploadedMedia :: !(Map MD5Hash UploadResult)
+                    , _wxppAcidStateCachedUnionID :: !(Map (WxppOpenID, WxppAppID) (WxppUnionID, UTCTime))
+                        -- ^ 把用户的 UnionID 缓存一下，以加快消息处理
                     }
                     deriving (Typeable)
 
@@ -36,7 +39,7 @@ $(makeLenses ''WxppAcidState)
 $(deriveSafeCopy 0 'base ''WxppAcidState)
 
 instance Default WxppAcidState where
-    def = WxppAcidState def def
+    def = WxppAcidState def def def
 
 wxppAcidGetAcccessTokens :: Query WxppAcidState [(AccessToken, UTCTime)]
 wxppAcidGetAcccessTokens =
@@ -64,12 +67,28 @@ wxppAcidLookupMediaIDByHash :: MD5Hash -> Query WxppAcidState (Maybe UploadResul
 wxppAcidLookupMediaIDByHash h =
     asks $ view $ wxppAcidStateUploadedMedia . at h
 
+
+-- | 为 UnionID 增加缓存
+wxppAcidSetCachedUnionID ::
+    UTCTime -> WxppOpenID -> WxppAppID -> WxppUnionID -> Update WxppAcidState ()
+wxppAcidSetCachedUnionID now open_id app_id union_id = do
+    modify $ over wxppAcidStateCachedUnionID $
+                Map.insert (open_id, app_id) (union_id, now)
+
+-- | 查找 UnionID 缓存
+wxppAcidLookupCachedUnionID ::
+    WxppOpenID -> WxppAppID -> Query WxppAcidState (Maybe (WxppUnionID, UTCTime))
+wxppAcidLookupCachedUnionID open_id app_id =
+    asks $ (Map.lookup (open_id, app_id)) . _wxppAcidStateCachedUnionID
+
 $(makeAcidic ''WxppAcidState
     [ 'wxppAcidGetAcccessTokens
     , 'wxppAcidGetAcccessToken
     , 'wxppAcidAddAcccessToken
     , 'wxppAcidPurgeAcccessToken
     , 'wxppAcidLookupMediaIDByHash
+    , 'wxppAcidSetCachedUnionID
+    , 'wxppAcidLookupCachedUnionID
     ])
 
 
