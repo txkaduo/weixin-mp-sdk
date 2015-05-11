@@ -210,6 +210,7 @@ data WxppAppConfig = WxppAppConfig {
                         -- ^ 多个 aes key 是为了过渡时使用
                         -- 加密时仅使用第一个
                         -- 解密时则则所有都试一次
+                    , wxppConfigDataDir     :: FilePath
                     }
                     deriving (Show, Eq)
 
@@ -218,6 +219,7 @@ instance FromJSON WxppAppConfig where
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     token <- fmap Token $ obj .: "token"
+                    data_dir <- fromText <$> obj .: "data-dir"
                     aes_key_lst <- obj .: "aes-key"
                                     >>= return . filter (not . T.null) . map T.strip
                                     >>= mapM parseAesKeyFromText
@@ -227,6 +229,7 @@ instance FromJSON WxppAppConfig where
                             return $ WxppAppConfig app_id secret token
                                         x
                                         xs
+                                        data_dir
 
 
 -- | 事件推送的各种值
