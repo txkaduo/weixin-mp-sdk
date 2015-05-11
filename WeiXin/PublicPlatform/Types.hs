@@ -23,6 +23,7 @@ import Filesystem.Path.CurrentOS            (encodeString, fromText)
 import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(SqlString))
+import Yesod.Core                           (PathPiece(..))
 
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
@@ -180,6 +181,9 @@ instance PersistField WxppAppID where
 instance PersistFieldSql WxppAppID where
     sqlType _ = SqlString
 
+instance PathPiece WxppAppID where
+    toPathPiece (WxppAppID x)   = toPathPiece x
+    fromPathPiece t             = WxppAppID <$> fromPathPiece t
 
 -- | 为保证 access_token 的值与它生成属的 app 一致
 -- 把它们打包在一个类型里
