@@ -34,9 +34,9 @@ import WeiXin.PublicPlatform.Menu
 import WeiXin.PublicPlatform.WS
 
 
-checkSignature :: Yesod master => HandlerT WxppSub (HandlerT master IO) ()
+checkSignature :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) ()
 checkSignature = do
-    foundation <- getYesod
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
 
     let token = wxppConfigAppToken $ wxppSubAppConfig $ foundation
 
@@ -56,14 +56,16 @@ checkSignature = do
             res = dat >>= paramErrorFromEither "signature" . check_sign
         return $ res *> pure ()
 
-getMessageR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
+getMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getMessageR = do
     checkSignature
     (httpErrorWhenParamError =<<) $ do
         reqGetParamE' "echostr"
 
-postMessageR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
+postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = do
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
+
     checkSignature
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
@@ -77,7 +79,6 @@ postMessageR = do
                             "Retry with valid parameters: encrypt_type(not supported)"
     req <- waiRequest
     lbs <- liftIO $ lazyRequestBody req
-    foundation <- getYesod
     let app_config  = wxppSubAppConfig foundation
         app_id      = wxppConfigAppID app_config
         ak          = wxppConfigAppAesKey app_config
@@ -168,9 +169,9 @@ postMessageR = do
 -- | reload menu from config/menu.yml
 -- see also: 'wxppWatchMenuYaml'
 -- XXX: this function hard-coded a file path
-getReloadMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) String
+getReloadMenuR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) String
 getReloadMenuR = do
-    foundation <- getYesod
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
     let data_dir = wxppConfigDataDir $ wxppSubAppConfig foundation
     m_atk <- liftIO $ wxppSubAccessTokens foundation
     case m_atk of
@@ -180,9 +181,9 @@ getReloadMenuR = do
                 >>= return . either show (const "Menu reloaded successfully.")
 
 
-getQueryMenuR :: Yesod master => HandlerT WxppSub (HandlerT master IO) Text
+getQueryMenuR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getQueryMenuR = do
-    foundation <- getYesod
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
     m_atk <- liftIO $ wxppSubAccessTokens foundation
     case m_atk of
         Nothing             -> return $ "Failed to create menu: no access token available."
@@ -196,6 +197,6 @@ getQueryMenuR = do
                 Right menus -> do
                                 return $ decodeUtf8 $ encode menus
 
-instance Yesod master => YesodSubDispatch WxppSub (HandlerT master IO)
+instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where
-        yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppSub)
+        yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
