@@ -155,6 +155,14 @@ $(deriveSafeCopy 0 'base ''AccessToken)
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                     deriving (Show, Eq)
 
+instance PersistField WxppAppID where
+    toPersistValue      = toPersistValue . unWxppAppID
+    fromPersistValue    = fmap WxppAppID . fromPersistValue
+
+instance PersistFieldSql WxppAppID where
+    sqlType _ = SqlString
+
+
 newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
                     deriving (Show, Eq)
 
