@@ -1,15 +1,16 @@
 {-# LANGUAGE RankNTypes #-}
 module WeiXin.PublicPlatform.Misc where
 
-import ClassyPrelude
+import ClassyPrelude hiding (try)
 import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
 import Filesystem.Path.CurrentOS            (encodeString, fromText)
 import Control.Monad.Logger
+import Control.Monad.Catch
 
 import WeiXin.PublicPlatform.Types
--- import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
@@ -70,3 +71,24 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
                             bs ime
 
         send_msg = writeChan send_msg_ch
+
+
+-- | 如果要计算的操作有异常，记日志并重试
+logWxppWsExcAndRetry :: (MonadLogger m, MonadCatch m) =>
+    String -> m () -> m ()
+logWxppWsExcAndRetry op_name f = go
+    where
+        go = do
+            err_or <- try $ tryWxppWsResult f
+            case err_or of
+                Left err -> do
+                    $logErrorS wxppLogSource $ fromString $
+                        op_name <> " failed: " <> show (err :: IOError)
+                    go
+
+                Right (Left err) -> do
+                    $logErrorS wxppLogSource $ fromString $
+                        op_name <> " failed: " <> show err
+                    go
+
+                Right (Right _) -> return ()
