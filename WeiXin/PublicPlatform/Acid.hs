@@ -41,13 +41,13 @@ $(deriveSafeCopy 0 'base ''WxppAcidState)
 instance Default WxppAcidState where
     def = WxppAcidState def def def
 
-wxppAcidGetAcccessTokens :: Query WxppAcidState [(AccessToken, UTCTime)]
-wxppAcidGetAcccessTokens =
-    asks _wxppAcidStateAccessTokens
+wxppAcidGetAcccessTokens :: WxppAppID -> Query WxppAcidState [(AccessToken, UTCTime)]
+wxppAcidGetAcccessTokens app_id =
+    asks $ (filter $ (== app_id) . accessTokenApp . fst) . _wxppAcidStateAccessTokens
 
-wxppAcidGetAcccessToken :: Query WxppAcidState (Maybe (AccessToken, UTCTime))
-wxppAcidGetAcccessToken =
-    asks $ listToMaybe . _wxppAcidStateAccessTokens
+wxppAcidGetAcccessToken :: WxppAppID -> Query WxppAcidState (Maybe (AccessToken, UTCTime))
+wxppAcidGetAcccessToken app_id =
+    asks $ listToMaybe . (filter $ (== app_id) . accessTokenApp . fst) . _wxppAcidStateAccessTokens
 
 wxppAcidAddAcccessToken ::
     AccessToken
@@ -93,8 +93,8 @@ $(makeAcidic ''WxppAcidState
 
 
 wxppAcidGetUsableAccessToken :: MonadIO m =>
-    AcidState WxppAcidState -> m (Maybe AccessToken)
-wxppAcidGetUsableAccessToken acid = liftIO $ do
+    AcidState WxppAcidState -> WxppAppID -> m (Maybe AccessToken)
+wxppAcidGetUsableAccessToken acid app_id = liftIO $ do
     now <- getCurrentTime
     fmap (join . (fmap $ \x -> if snd x > now then Just (fst x) else Nothing)) $
-        query acid WxppAcidGetAcccessToken
+        query acid $ WxppAcidGetAcccessToken app_id

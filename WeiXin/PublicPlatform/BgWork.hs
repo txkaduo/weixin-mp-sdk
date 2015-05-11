@@ -26,7 +26,7 @@ refreshAccessTokenIfNeeded wac acid dt = do
     now <- liftIO getCurrentTime
     let t = addUTCTime (abs dt) now
     expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
-                        liftIO $ query acid $ WxppAcidGetAcccessToken
+                        liftIO $ query acid $ WxppAcidGetAcccessToken app_id
     when (expired) $ do
         ws_res <- tryWxppWsResult $ refreshAccessToken wac
         case ws_res of
