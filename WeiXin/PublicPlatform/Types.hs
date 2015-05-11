@@ -101,6 +101,21 @@ instance FromJSON WxppOpenID where
     parseJSON = fmap WxppOpenID . parseJSON
 
 
+newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
+                    deriving (Show, Eq, Ord, Typeable)
+
+instance SafeCopy WxppUnionID where
+    getCopy                 = contain $ WxppUnionID <$> safeGet
+    putCopy (WxppUnionID x) = contain $ safePut x
+
+instance PersistField WxppUnionID where
+    toPersistValue      = toPersistValue . unWxppUnionID
+    fromPersistValue    = fmap WxppUnionID . fromPersistValue
+
+instance PersistFieldSql WxppUnionID where
+    sqlType _ = SqlString
+
+
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord)
 
@@ -427,13 +442,15 @@ instance FromJSON WxppInMsgEntity where
 
 -- | 转发收到的消息时的报文
 data WxppForwardedInMsg = WxppForwardedInMsg {
-                                    wxppFwdInMsgEntity  :: WxppInMsgEntity
-                                    , wxppFwdInMsgAppID :: WxppAppID
+                                    wxppFwdInMsgEntity      :: WxppInMsgEntity
+                                    , wxppFwdInMsgAppID     :: WxppAppID
+                                    , wxppFwdInMsgUnionID   :: Maybe WxppUnionID
                                 }
 instance ToJSON WxppForwardedInMsg where
     toJSON x = object
                 [ "ime"     .= wxppFwdInMsgEntity x
                 , "app_id"  .= unWxppAppID (wxppFwdInMsgAppID x)
+                , "union_id" .= fmap unWxppUnionID (wxppFwdInMsgUnionID x)
                 ]
 
 instance FromJSON WxppForwardedInMsg where
@@ -441,6 +458,7 @@ instance FromJSON WxppForwardedInMsg where
                     WxppForwardedInMsg
                         <$> obj .: "ime"
                         <*> (WxppAppID <$> obj .: "app_id")
+                        <*> (fmap WxppUnionID <$> obj .: "union_id")
 
 
 -- | 图文信息
@@ -767,20 +785,6 @@ instance FromJSON MenuItem where
                         _                   -> fmap Left $ menuItemDataFromJsonObj obj
                     return $ MenuItem name dat_or_subs
 
-
-newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
-                    deriving (Show, Eq, Ord, Typeable)
-
-instance SafeCopy WxppUnionID where
-    getCopy                 = contain $ WxppUnionID <$> safeGet
-    putCopy (WxppUnionID x) = contain $ safePut x
-
-instance PersistField WxppUnionID where
-    toPersistValue      = toPersistValue . unWxppUnionID
-    fromPersistValue    = fmap WxppUnionID . fromPersistValue
-
-instance PersistFieldSql WxppUnionID where
-    sqlType _ = SqlString
 
 data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
                     deriving (Show, Eq, Ord)

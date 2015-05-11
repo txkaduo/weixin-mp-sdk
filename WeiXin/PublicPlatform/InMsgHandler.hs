@@ -14,6 +14,7 @@ import qualified Data.Map.Strict            as Map
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
+import Data.Time                            (NominalDiffTime)
 
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
@@ -28,6 +29,7 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.Acid
+import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Utils
 
 
@@ -321,14 +323,17 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
 
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
-data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson WxppAppID UrlText
+data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson WxppAppID UrlText NominalDiffTime
 
 instance JsonConfigable WxppInMsgForwardAsJson where
     type JsonConfigableUnconfigData WxppInMsgForwardAsJson = WxppAppID
 
     isNameOfInMsgHandler _ x = x == "forward-as-json"
 
-    parseWithExtraData _ app_id obj = WxppInMsgForwardAsJson app_id . UrlText <$> obj .: "url"
+    parseWithExtraData _ app_id obj = WxppInMsgForwardAsJson app_id
+                                        <$> (UrlText <$> obj .: "url")
+                                        <*> ((fromIntegral :: Int -> NominalDiffTime)
+                                                <$> obj .:? "union-id-ttl" .!= (3600 * 24 * 365))
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
@@ -336,7 +341,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardAsJson
     where
 
-    processInMsg (WxppInMsgForwardAsJson app_id url) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardAsJson app_id url ttl) acid get_atk _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -344,8 +349,12 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 return []
 
             Just ime -> do
+                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        >>= maybe (throwE $ "no access token available") return
                 let opts = defaults
-                let fwd_msg = WxppForwardedInMsg ime app_id
+                    open_id = wxppInFromUserName ime
+                m_uid <- wxppCachedGetEndUserUnionID ttl acid app_id atk open_id
+                let fwd_msg = WxppForwardedInMsg ime app_id m_uid
                 ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                     >>= liftM (view responseBody) . asJSON)
                     `catchAll` handle_exc
