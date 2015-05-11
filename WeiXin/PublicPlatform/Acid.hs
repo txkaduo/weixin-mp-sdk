@@ -29,7 +29,7 @@ data WxppAcidState = WxppAcidState {
                         -- 这个列表实现时没有明确地限制长度
                         -- 而是定时丢弃过期的 access token
                         -- 注意：这个列表是排了序的
-                    , _wxppAcidStateUploadedMedia :: !(Map MD5Hash UploadResult)
+                    , _wxppAcidStateUploadedMedia :: !(Map WxppAppID (Map MD5Hash UploadResult))
                     , _wxppAcidStateCachedUnionID :: !(Map (WxppOpenID, WxppAppID) (WxppUnionID, UTCTime))
                         -- ^ 把用户的 UnionID 缓存一下，以加快消息处理
                     }
@@ -63,9 +63,9 @@ wxppAcidPurgeAcccessToken expiry = do
     modify $ over wxppAcidStateAccessTokens $
                 filter ((> expiry) . snd)
 
-wxppAcidLookupMediaIDByHash :: MD5Hash -> Query WxppAcidState (Maybe UploadResult)
-wxppAcidLookupMediaIDByHash h =
-    asks $ view $ wxppAcidStateUploadedMedia . at h
+wxppAcidLookupMediaIDByHash :: WxppAppID -> MD5Hash -> Query WxppAcidState (Maybe UploadResult)
+wxppAcidLookupMediaIDByHash app_id h =
+    asks $ preview $ wxppAcidStateUploadedMedia . at app_id . _Just . at h . _Just
 
 
 -- | 为 UnionID 增加缓存

@@ -17,7 +17,7 @@ import WeiXin.PublicPlatform.WS
 wxppQueryOriginAutoReplyRules :: ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
     -> m Object
-wxppQueryOriginAutoReplyRules (AccessToken atk) = do
+wxppQueryOriginAutoReplyRules (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/get_current_autoreply_info"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ getWith opts url)

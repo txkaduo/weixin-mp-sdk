@@ -34,13 +34,15 @@ refreshAccessTokenIfNeeded wac acid dt = do
                 $(logErrorS) wxppLogSource $
                     "Failed to refresh access token: "
                         <> fromString (show err)
-            Right (AccessTokenResp atk ttl) -> do
+            Right (AccessTokenResp atk_p ttl) -> do
                 $(logDebugS) wxppLogSource $ fromString $
                     "New access token acquired, expired in: " <> show ttl
                 now' <- liftIO getCurrentTime
                 let expiry = addUTCTime (fromIntegral ttl) now'
-                liftIO $ update acid $ WxppAcidAddAcccessToken atk expiry
+                liftIO $ update acid $ WxppAcidAddAcccessToken (atk_p app_id) expiry
                 liftIO $ update acid $ WxppAcidPurgeAcccessToken now'
+    where
+        app_id = wxppConfigAppID wac
 
 
 -- | infinite loop to refresh access token

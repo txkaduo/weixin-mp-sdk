@@ -19,7 +19,7 @@ wxppCsSendOutMsg ::
     -> Maybe WxppKfAccount
     -> WxppOutMsgEntity
     -> m ()
-wxppCsSendOutMsg (AccessToken atk) m_kf_account out_msg_entity = do
+wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_entity = do
     let url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ toJSON $ obj_for_out_msg_entity out_msg_entity)

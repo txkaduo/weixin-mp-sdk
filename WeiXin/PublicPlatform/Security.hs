@@ -35,7 +35,7 @@ wxppSignature (Token token) (TimeStampS tt) (Nonce nn) msg =
     SHA1.hash $ encodeUtf8 $ mconcat $ sort [tt, nn, token, msg]
 
 data AccessTokenResp = AccessTokenResp
-                            AccessToken
+                            AccessTokenP
                             Int
 
 instance FromJSON AccessTokenResp where

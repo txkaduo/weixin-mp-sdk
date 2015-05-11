@@ -18,9 +18,9 @@ import WeiXin.PublicPlatform.Acid
 wxppQueryEndUserInfo ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> WxppOpenID -> m EndUserQueryResult
-wxppQueryEndUserInfo (AccessToken access_token) (WxppOpenID open_id) = do
+wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id) = do
     let url = wxppRemoteApiBaseUrl <> "/user/info"
-        opts = defaults & param "access_token" .~ [ access_token ]
+        opts = defaults & param "access_token" .~ [ atk ]
                         & param "openid" .~ [ open_id ]
                         & param "lang" .~ [ "zh_CN" :: Text ]
     (liftIO $ getWith opts url)
@@ -52,11 +52,11 @@ instance FromJSON GetUserResult where
 wxppGetEndUserSource ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> Source m GetUserResult
-wxppGetEndUserSource (AccessToken access_token) = loop Nothing
+wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
     where
         url         = wxppRemoteApiBaseUrl <> "/user/get"
         loop m_start_id = do
-            let opts = defaults & param "access_token" .~ [ access_token ]
+            let opts = defaults & param "access_token" .~ [ atk ]
                                 & (case m_start_id of
                                     Nothing     -> id
                                     Just (WxppOpenID start_open_id) ->

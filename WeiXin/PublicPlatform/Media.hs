@@ -26,7 +26,7 @@ wxppDownloadMedia ::
     AccessToken
     -> WxppMediaID
     -> m (Response LB.ByteString)
-wxppDownloadMedia (AccessToken atk) mid = do
+wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
     let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppMediaID mid ]
@@ -51,7 +51,7 @@ wxppUploadMedia ::
     -> WxppMediaType
     -> FilePath
     -> m UploadResult
-wxppUploadMedia (AccessToken atk) mtype fp = do
+wxppUploadMedia (AccessToken { accessTokenData = atk }) mtype fp = do
     let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ wxppMediaTypeString mtype :: Text]
@@ -68,7 +68,7 @@ wxppUploadMediaCached ::
     -> m UploadResult
 wxppUploadMediaCached acid atk mtype fp = do
     h <- liftIO $ md5HashFile fp
-    m_res <- liftIO $ query acid $ WxppAcidLookupMediaIDByHash h
+    m_res <- liftIO $ query acid $ WxppAcidLookupMediaIDByHash (accessTokenApp atk) h
     now <- liftIO getCurrentTime
     maybe (wxppUploadMedia atk mtype fp) return $
         join $ flip fmap m_res $

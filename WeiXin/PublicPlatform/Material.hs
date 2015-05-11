@@ -39,7 +39,7 @@ wxppUploadMaterialMediaInternal ::
     -> Maybe (Text, Text)
         -- ^ 上传视频素材所需的额外信息：标题，简介
     -> m MaterialUploadResult
-wxppUploadMaterialMediaInternal (AccessToken atk) mtype fp m_title_intro = do
+wxppUploadMaterialMediaInternal (AccessToken { accessTokenData = atk }) mtype fp m_title_intro = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $
@@ -91,7 +91,7 @@ wxppUploadMaterialNews ::
     AccessToken
     -> WxppMaterialNews
     -> m MaterialUploadResult
-wxppUploadMaterialNews (AccessToken atk) news = do
+wxppUploadMaterialNews (AccessToken { accessTokenData = atk }) news = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_news"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ encode $ toJSON news)
@@ -122,7 +122,7 @@ wxppGetMaterial ::
     AccessToken
     -> WxppMaterialID
     -> m WxppGetMaterialResult
-wxppGetMaterial (AccessToken atk) (WxppMaterialID mid) = do
+wxppGetMaterial (AccessToken { accessTokenData = atk }) (WxppMaterialID mid) = do
     let url = wxppRemoteApiBaseUrl <> "/material/get_material"
         opts = defaults & param "access_token" .~ [ atk ]
     r <- liftIO $ postWith opts url $ object [ "media_id" .= mid ]
@@ -163,7 +163,7 @@ wxppCountMaterial ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
     -> m WxppMaterialCount
-wxppCountMaterial (AccessToken atk) = do
+wxppCountMaterial (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/material/get_materialcount"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ getWith opts url)
@@ -214,7 +214,7 @@ wxppBatchGetMaterialMedia ::
     -> Int      -- ^ limit
     -> Int      -- ^ offset
     -> m (WxppBatchGetMaterialResult WxppBatchGetMaterialMediaItem)
-wxppBatchGetMaterialMedia (AccessToken atk) mtype limit' offset' = do
+wxppBatchGetMaterialMedia (AccessToken { accessTokenData = atk }) mtype limit' offset' = do
     let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ object $
@@ -256,7 +256,7 @@ wxppBatchGetMaterialNews ::
     -> Int      -- ^ limit
     -> Int      -- ^ offset
     -> m (WxppBatchGetMaterialResult WxppBatchGetMaterialNewsItem)
-wxppBatchGetMaterialNews (AccessToken atk) limit' offset' = do
+wxppBatchGetMaterialNews (AccessToken { accessTokenData = atk }) limit' offset' = do
     let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ object $

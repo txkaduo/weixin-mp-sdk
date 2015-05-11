@@ -122,8 +122,8 @@ start = do
     let app_id = optAppID opts
         app_secret = optAppSecret opts
         get_atk = do
-            AccessTokenResp atk _ttl <- refreshAccessToken' app_id app_secret
-            return atk
+            AccessTokenResp atk_p _ttl <- refreshAccessToken' app_id app_secret
+            return $ atk_p app_id
 
     case optCommand opts of
 

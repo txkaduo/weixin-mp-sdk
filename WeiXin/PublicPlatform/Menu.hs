@@ -33,9 +33,9 @@ instance FromJSON MenuDef where
 wxppCreateMenu ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> [MenuItem] -> m ()
-wxppCreateMenu (AccessToken access_token) menus = do
+wxppCreateMenu (AccessToken { accessTokenData = atk }) menus = do
     let url = wxppRemoteApiBaseUrl <> "/menu/create"
-        opts = defaults & param "access_token" .~ [ access_token ]
+        opts = defaults & param "access_token" .~ [ atk ]
     err_resp@(WxppAppError err _msg) <-
                 (liftIO $ postWith opts url $ toJSON $ object [ "button" .= menus ])
                     >>= liftM (view responseBody) . asJSON
@@ -49,9 +49,9 @@ wxppCreateMenu (AccessToken access_token) menus = do
 wxppQueryMenu ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> m [MenuItem]
-wxppQueryMenu (AccessToken access_token) = do
+wxppQueryMenu (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/menu/get"
-        opts = defaults & param "access_token" .~ [ access_token ]
+        opts = defaults & param "access_token" .~ [ atk ]
     MenuDef items <- (liftIO $ getWith opts url)
                         >>= asWxppWsResponseNormal'
     return items
@@ -69,7 +69,7 @@ data WxppMenuConfig = WxppMenuConfig {
 wxppQueryMenuConfig ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> m Value
-wxppQueryMenuConfig (AccessToken atk) = do
+wxppQueryMenuConfig (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/get_current_selfmenu_info"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
@@ -79,9 +79,9 @@ wxppQueryMenuConfig (AccessToken atk) = do
 wxppDeleteMenu ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken -> m ()
-wxppDeleteMenu (AccessToken access_token) = do
+wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/menu/delete"
-        opts = defaults & param "access_token" .~ [ access_token ]
+        opts = defaults & param "access_token" .~ [ atk ]
     err_resp@(WxppAppError err _msg) <-
                 (liftIO $ getWith opts url)
                     >>= liftM (view responseBody) . asJSON

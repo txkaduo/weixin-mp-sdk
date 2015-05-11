@@ -166,11 +166,6 @@ newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
 newtype Nonce = Nonce { unNounce :: Text }
                     deriving (Show, Eq)
 
-newtype AccessToken = AccessToken { unAccessToken :: Text }
-                    deriving (Show, Eq, Typeable)
-$(deriveSafeCopy 0 'base ''AccessToken)
-
-
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                     deriving (Show, Eq, Ord, Typeable)
 
@@ -185,6 +180,19 @@ instance PersistField WxppAppID where
 instance PersistFieldSql WxppAppID where
     sqlType _ = SqlString
 
+
+-- | 为保证 access_token 的值与它生成属的 app 一致
+-- 把它们打包在一个类型里
+data AccessToken = AccessToken {
+                        accessTokenData     :: Text
+                        , accessTokenApp    :: WxppAppID
+                    }
+                    deriving (Show, Eq, Typeable)
+$(deriveSafeCopy 0 'base ''AccessToken)
+
+
+-- | 等待额外的值以完整地构造 AccessToken
+type AccessTokenP = WxppAppID -> AccessToken
 
 newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
                     deriving (Show, Eq)
