@@ -42,7 +42,7 @@ refreshAccessTokenIfNeeded wac acid dt = do
                 liftIO $ update acid $ WxppAcidAddAcccessToken (atk_p app_id) expiry
                 liftIO $ update acid $ WxppAcidPurgeAcccessToken now'
     where
-        app_id = wxppConfigAppID wac
+        app_id = wxppAppConfigAppID wac
 
 
 -- | infinite loop to refresh access token

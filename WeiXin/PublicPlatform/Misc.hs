@@ -17,5 +17,5 @@ parseMultWxppAppConfig obj = do
     liftM (Map.fromList . catMaybes) $
         forM (HM.toList obj) $ \(k, v) -> do
             if T.isPrefixOf "wxpp~" k
-                then Just . (wxppConfigAppID &&& id) <$> parseJSON v
+                then Just . (wxppAppConfigAppID &&& id) <$> parseJSON v
                 else return Nothing

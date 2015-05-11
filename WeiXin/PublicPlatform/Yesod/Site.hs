@@ -80,7 +80,7 @@ postMessageR = do
     req <- waiRequest
     lbs <- liftIO $ lazyRequestBody req
     let app_config  = wxppSubAppConfig foundation
-        app_id      = wxppConfigAppID app_config
+        app_id      = wxppAppConfigAppID app_config
         ak          = wxppConfigAppAesKey app_config
         bak_aks     = wxppConfigAppBackupAesKeys app_config
 
@@ -172,7 +172,7 @@ postMessageR = do
 getReloadMenuR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) String
 getReloadMenuR = do
     foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
-    let data_dir = wxppConfigDataDir $ wxppSubAppConfig foundation
+    let data_dir = wxppAppConfigDataDir $ wxppSubAppConfig foundation
     m_atk <- liftIO $ wxppSubAccessTokens foundation
     case m_atk of
         Nothing             -> return $ "Failed to create menu: no access token available."

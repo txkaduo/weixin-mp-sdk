@@ -51,7 +51,7 @@ refreshAccessToken ::
     WxppAppConfig -> m AccessTokenResp
 refreshAccessToken wac = refreshAccessToken' app_id app_secret
     where
-        app_id      = wxppConfigAppID wac
+        app_id      = wxppAppConfigAppID wac
         app_secret  = wxppConfigAppSecret wac
 
 refreshAccessToken' ::

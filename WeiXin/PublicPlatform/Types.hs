@@ -208,7 +208,7 @@ newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
                     deriving (Show, Eq)
 
 data WxppAppConfig = WxppAppConfig {
-                    wxppConfigAppID         :: WxppAppID
+                    wxppAppConfigAppID         :: WxppAppID
                     , wxppConfigAppSecret   :: WxppAppSecret
                     , wxppConfigAppToken    :: Token
                     , wxppConfigAppAesKey   :: AesKey
@@ -216,7 +216,7 @@ data WxppAppConfig = WxppAppConfig {
                         -- ^ 多个 aes key 是为了过渡时使用
                         -- 加密时仅使用第一个
                         -- 解密时则则所有都试一次
-                    , wxppConfigDataDir     :: FilePath
+                    , wxppAppConfigDataDir  :: FilePath
                     }
                     deriving (Show, Eq)
 
