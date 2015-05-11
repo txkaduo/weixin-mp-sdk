@@ -775,6 +775,12 @@ instance SafeCopy WxppUnionID where
     getCopy                 = contain $ WxppUnionID <$> safeGet
     putCopy (WxppUnionID x) = contain $ safePut x
 
+instance PersistField WxppUnionID where
+    toPersistValue      = toPersistValue . unWxppUnionID
+    fromPersistValue    = fmap WxppUnionID . fromPersistValue
+
+instance PersistFieldSql WxppUnionID where
+    sqlType _ = SqlString
 
 data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
                     deriving (Show, Eq, Ord)
