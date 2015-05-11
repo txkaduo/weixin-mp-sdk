@@ -81,7 +81,11 @@ instance FromJSON WxppMaterialID where
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, Typeable)
+
+instance SafeCopy WxppOpenID where
+    getCopy                 = contain $ WxppOpenID <$> safeGet
+    putCopy (WxppOpenID x)  = contain $ safePut x
 
 instance PersistField WxppOpenID where
     toPersistValue      = toPersistValue . unWxppOpenID
@@ -153,7 +157,11 @@ $(deriveSafeCopy 0 'base ''AccessToken)
 
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, Ord, Typeable)
+
+instance SafeCopy WxppAppID where
+    getCopy                 = contain $ WxppAppID <$> safeGet
+    putCopy (WxppAppID x)   = contain $ safePut x
 
 instance PersistField WxppAppID where
     toPersistValue      = toPersistValue . unWxppAppID
@@ -761,7 +769,12 @@ instance FromJSON MenuItem where
 
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, Typeable)
+
+instance SafeCopy WxppUnionID where
+    getCopy                 = contain $ WxppUnionID <$> safeGet
+    putCopy (WxppUnionID x) = contain $ safePut x
+
 
 data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
                     deriving (Show, Eq, Ord)
