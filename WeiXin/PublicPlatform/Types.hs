@@ -24,6 +24,7 @@ import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(SqlString))
 import Yesod.Core                           (PathPiece(..))
+import Text.Read                            (Read(..))
 
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
@@ -184,6 +185,11 @@ instance PersistFieldSql WxppAppID where
 instance PathPiece WxppAppID where
     toPathPiece (WxppAppID x)   = toPathPiece x
     fromPathPiece t             = WxppAppID <$> fromPathPiece t
+
+-- | XXX: Read instance 目前只是 Yesod 生成的 Route 类型时用到
+-- 但不清楚具体使用场景，不知道以下的定义是否合适
+instance Read WxppAppID where
+    readsPrec d s = map (WxppAppID *** id) $ readsPrec d s
 
 -- | 为保证 access_token 的值与它生成属的 app 一致
 -- 把它们打包在一个类型里
