@@ -349,10 +349,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just ime -> do
                 atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                         >>= maybe (throwE $ "no access token available") return
-                let app_id = accessTokenApp atk
                 let opts = defaults
                     open_id = wxppInFromUserName ime
-                m_uid <- wxppCachedGetEndUserUnionID ttl acid app_id atk open_id
+                m_uid <- wxppCachedGetEndUserUnionID ttl acid atk open_id
                 let fwd_env = WxppForwardedEnv m_uid atk
                 let fwd_msg = (ime, fwd_env)
                 ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
@@ -395,10 +394,9 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                     Just (scene, ticket) -> do
                         atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                                 >>= maybe (throwE $ "no access token available") return
-                        let app_id = accessTokenApp atk
                         let opts = defaults
                             open_id = wxppInFromUserName ime
-                        m_uid <- wxppCachedGetEndUserUnionID ttl acid app_id atk open_id
+                        m_uid <- wxppCachedGetEndUserUnionID ttl acid atk open_id
                         let fwd_env = WxppForwardedEnv m_uid atk
                         let fwd_msg = ((scene, ticket), fwd_env)
                         ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)

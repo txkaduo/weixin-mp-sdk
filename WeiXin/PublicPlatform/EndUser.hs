@@ -75,11 +75,10 @@ wxppCachedGetEndUserUnionID ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     NominalDiffTime
     -> AcidState WxppAcidState
-    -> WxppAppID
     -> AccessToken
     -> WxppOpenID
     -> m (Maybe WxppUnionID)
-wxppCachedGetEndUserUnionID ttl acid app_id atk open_id = do
+wxppCachedGetEndUserUnionID ttl acid atk open_id = do
     m_res <- liftIO $ query acid $ WxppAcidLookupCachedUnionID open_id app_id
     now <- liftIO getCurrentTime
     m_uid0 <- case m_res of
@@ -107,3 +106,5 @@ wxppCachedGetEndUserUnionID ttl acid app_id atk open_id = do
                             update acid $ WxppAcidSetCachedUnionID now open_id app_id uid
 
                     return m_uid
+    where
+        app_id = accessTokenApp atk
