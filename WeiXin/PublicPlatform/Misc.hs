@@ -36,7 +36,7 @@ getMaybeWxppSubOfYesodApp ::
     -> Map WxppAppID WxppAppConfig
     -> (forall a. LoggingT IO a -> IO a)
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> Chan [WxppOutMsgEntity]
+    -> Chan (WxppAppID, [WxppOutMsgEntity])
     -> WxppAppID
     -> MaybeWxppSub
 getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg_ch app_id =
@@ -70,7 +70,7 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
                             in_msg_handlers
                             bs ime
 
-        send_msg = writeChan send_msg_ch
+        send_msg msgs = writeChan send_msg_ch (app_id, msgs)
 
 
 -- | 如果要计算的操作有异常，记日志并重试
