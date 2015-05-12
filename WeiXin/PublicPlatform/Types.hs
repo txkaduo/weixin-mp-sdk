@@ -214,6 +214,14 @@ instance ToJSON QRTicket where
 instance FromJSON QRTicket where
     parseJSON = fmap QRTicket . parseJSON
 
+instance PersistField QRTicket where
+    toPersistValue      = toPersistValue . unQRTicket
+    fromPersistValue    = fmap QRTicket . fromPersistValue
+
+instance PersistFieldSql QRTicket where
+    sqlType _ = SqlString
+
+
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq, Ord)
 
