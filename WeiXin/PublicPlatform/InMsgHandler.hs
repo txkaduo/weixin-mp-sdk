@@ -353,7 +353,8 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 let opts = defaults
                     open_id = wxppInFromUserName ime
                 m_uid <- wxppCachedGetEndUserUnionID ttl acid app_id atk open_id
-                let fwd_msg = WxppForwardedInMsg ime app_id m_uid
+                let fwd_env = WxppForwardedEnv m_uid atk
+                let fwd_msg = (ime, fwd_env)
                 ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                     >>= liftM (view responseBody) . asJSON)
                     `catchAll` handle_exc
@@ -398,7 +399,8 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         let opts = defaults
                             open_id = wxppInFromUserName ime
                         m_uid <- wxppCachedGetEndUserUnionID ttl acid app_id atk open_id
-                        let fwd_msg = ((scene, ticket), m_uid)
+                        let fwd_env = WxppForwardedEnv m_uid atk
+                        let fwd_msg = ((scene, ticket), fwd_env)
                         ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                             >>= liftM (view responseBody) . asJSON)
                             `catchAll` handle_exc

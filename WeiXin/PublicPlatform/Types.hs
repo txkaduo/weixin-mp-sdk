@@ -557,25 +557,22 @@ instance FromJSON WxppInMsgEntity where
                       (obj .: "msg")
 
 
--- | 转发收到的消息时的报文
-data WxppForwardedInMsg = WxppForwardedInMsg {
-                                    wxppFwdInMsgEntity      :: WxppInMsgEntity
-                                    , wxppFwdInMsgAppID     :: WxppAppID
-                                    , wxppFwdInMsgUnionID   :: Maybe WxppUnionID
-                                }
-instance ToJSON WxppForwardedInMsg where
+-- | 转发各种消息或消息的部分时，所附带的额外信息
+data WxppForwardedEnv = WxppForwardedEnv {
+                            wxppFwdUnionID          :: Maybe WxppUnionID
+                            , wxppFwdAccessToken    :: AccessToken
+                        }
+
+instance ToJSON WxppForwardedEnv where
     toJSON x = object
-                [ "ime"     .= wxppFwdInMsgEntity x
-                , "app_id"  .= unWxppAppID (wxppFwdInMsgAppID x)
-                , "union_id" .= wxppFwdInMsgUnionID x
+                [ "access_token"    .= wxppFwdAccessToken x
+                , "union_id"        .= wxppFwdUnionID x
                 ]
 
-instance FromJSON WxppForwardedInMsg where
-    parseJSON = withObject "WxppForwardedInMsg" $ \obj -> do
-                    WxppForwardedInMsg
-                        <$> obj .: "ime"
-                        <*> (WxppAppID <$> obj .: "app_id")
-                        <*> (obj .: "union_id")
+instance FromJSON WxppForwardedEnv where
+    parseJSON = withObject "WxppForwardedEnv" $ \obj -> do
+                    WxppForwardedEnv    <$> ( obj .: "union_id" )
+                                        <*> ( obj .: "access_token" )
 
 
 -- | 图文信息
