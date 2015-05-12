@@ -286,6 +286,16 @@ data AccessToken = AccessToken {
                     deriving (Show, Eq, Typeable)
 $(deriveSafeCopy 0 'base ''AccessToken)
 
+instance ToJSON AccessToken where
+    toJSON x = object   [ "data"    .= accessTokenData x
+                        , "app_id"  .= accessTokenApp x
+                        ]
+
+instance FromJSON AccessToken where
+    parseJSON = withObject "AccessToken" $ \obj -> do
+                    AccessToken <$> (obj .: "data")
+                                <*> (obj .: "app_id")
+
 
 -- | 等待额外的值以完整地构造 AccessToken
 type AccessTokenP = WxppAppID -> AccessToken
