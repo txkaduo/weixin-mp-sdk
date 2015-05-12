@@ -20,6 +20,14 @@ Flag library-only
     Description:   Build for library only
     Default:       False
 
+Flag prof
+    Description:   Turn on profiling settings
+    Default:       False
+
+Flag parsec3
+    Description:   Use parsec3
+    Default:       False
+
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
                        WeiXin.PublicPlatform.Types
@@ -33,6 +41,7 @@ library
                        WeiXin.PublicPlatform.InMsgHandler
                        WeiXin.PublicPlatform.Menu
                        WeiXin.PublicPlatform.CS
+                       WeiXin.PublicPlatform.QRCode
                        WeiXin.PublicPlatform.EndUser
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Site.Function
@@ -59,7 +68,7 @@ library
                      , yesod
                      , persistent
                      , yesod-core
-                     , yesod-helpers >= 0.7.3
+                     , yesod-helpers >= 0.8.4
                      , text
                      , aeson
                      , bytestring
@@ -100,7 +109,13 @@ library
                      , fsnotify
                      , directory
                      , monad-control
+                     , http-types
+                     , blaze-builder
 
+  if flag(parsec3)
+      build-depends:   parsec3
+  else
+      build-depends:   parsec == 3.*
 
   -- hs-source-dirs:      
   default-language:    Haskell2010

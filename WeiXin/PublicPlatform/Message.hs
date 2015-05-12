@@ -11,6 +11,9 @@ import Text.XML.Cursor
 import Text.Hamlet.XML
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Numeric                              (readDec, readFloat)
+import Text.Parsec
+
+import Yesod.Helpers.Parsec                 (SimpleStringRep(..))
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Utils
@@ -191,8 +194,8 @@ wxppInMsgFromDocument doc = do
                     scale <- get_ele_s "Scale"
                             >>= maybe (Left $ "Failed to parse Scale") return
                                 . simpleParseFloatT
-                    label <- get_ele_s "Label"
-                    return $ WxppInMsgLocation (x, y) scale label
+                    loc_label <- get_ele_s "Label"
+                    return $ WxppInMsgLocation (x, y) scale loc_label
 
         "link"      -> do
                     url <- UrlText <$> get_ele_s "Url"
@@ -221,33 +224,22 @@ wxppEventFromDocument doc = do
                     -- 实测证明，普通的订阅事件通知也会发个 EventKey 过来，只是为空而已
                     return WxppEvtSubscribe
                 else do
-                    let prefix = "qrscene_"
                     ticket <- fmap QRTicket $ get_ele_s "Ticket"
-                    scene_id <- liftM WxppSceneID $
-                        if T.isPrefixOf prefix ek_s
-                            then
-                                maybe
-                                    (Left $ "Failed to parse scene id")
-                                    return
-                                    $ simpleParseDecT $
-                                        T.drop (length prefix) ek_s
+                    scene_id <- case parse simpleParser "" ek_s of
+                        Left err    -> Left $ "Failed to parse scene id: " ++ show err
+                        Right sid   -> return sid
 
-                            else Left $ T.unpack $
-                                        "EventKey does not start with "
-                                            <> prefix
                     return $ WxppEvtSubscribeAtScene scene_id ticket
 
         "unsubscribe" -> return $ WxppEvtUnsubscribe
 
         "SCAN"      -> do
-                    scan_id <- fmap WxppSceneID $
-                            get_ele_s "EventKey"
-                                >>= maybe
-                                        (Left $ "Failed to parse EventKey")
-                                        return
-                                    . simpleParseDecT
+                    ek_s <- get_ele_s "EventKey"
+                    scene_id <- case parse simpleParser "" ek_s of
+                        Left err    -> Left $ "Failed to parse scene id: " ++ show err
+                        Right sid   -> return sid
                     ticket <- fmap QRTicket $ get_ele_s "Ticket"
-                    return $ WxppEvtScan scan_id ticket
+                    return $ WxppEvtScan scene_id ticket
 
         "LOCATION"  -> do
                     latitude <- get_ele_s "Latitude"

@@ -28,6 +28,8 @@ import Text.Read                            (Read(..))
 
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
+import Yesod.Helpers.Parsec                 (SimpleStringRep(..))
+import Text.Parsec hiding ((<|>))
 import qualified Data.HashMap.Strict        as HM
 
 import WeiXin.PublicPlatform.Utils
@@ -134,8 +136,68 @@ instance ToJSON WxppInMsgID where
 instance FromJSON WxppInMsgID where
     parseJSON = fmap WxppInMsgID . parseJSON
 
-newtype WxppSceneID = WxppSceneID { unWxppSceneID :: Word32 }
+
+-- | 二维码场景ID
+-- 从文档“生成带参数的二维码”一文中看
+-- 场景ID可以是个32位整数，也可以是个字串。有若干约束。
+newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
                     deriving (Show, Eq, Ord)
+
+newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
+                    deriving (Show, Eq, Ord)
+
+data WxppScene =    WxppSceneInt WxppIntSceneID
+                    | WxppSceneStr WxppStrSceneID
+                    deriving (Show, Eq, Ord)
+
+instance ToJSON WxppScene where
+    toJSON (WxppSceneInt (WxppIntSceneID x)) = object [ "scene_id" .= x ]
+    toJSON (WxppSceneStr (WxppStrSceneID x)) = object [ "scene_str" .= x ]
+
+instance FromJSON WxppScene where
+    parseJSON v = do
+        r <- (Left <$> parseJSON v) <|> (Right <$> parseJSON v)
+        case r of
+            Left i -> return $ WxppSceneInt $ WxppIntSceneID i
+            Right t -> do
+                when ( T.length t < 1 || T.length t > 64) $ do
+                    fail $ "invalid scene id str length"
+                return $ WxppSceneStr $ WxppStrSceneID t
+
+
+-- | 创建二维码接口的返回报文
+data WxppMakeSceneResult = WxppMakeSceneResult
+                                QRTicket
+                                NominalDiffTime
+                                UrlText
+
+instance FromJSON WxppMakeSceneResult where
+    parseJSON = withObject "WxppMakeSceneResult" $ \obj -> do
+                    WxppMakeSceneResult
+                        <$> ( QRTicket <$> obj .: "ticket" )
+                        <*> ( (fromIntegral :: Int -> NominalDiffTime) <$> obj .: "expire_seconds")
+                        <*> ( UrlText <$> obj .: "url" )
+
+-- | 此实例实现对应于 WxppScene 在 XML 的编码方式
+-- qrscene 前缀见“接收事件推送”一文
+-- 但文档仅在“用户未关注时……”这一情况下说有些前缀
+-- 另一种情况“用户已关注……”时则只说是个 32 位整数
+-- 因此目前不知道如果创建时用的是字串型场景ID，在后一种情况下会是什么样子
+instance SimpleStringRep WxppScene where
+
+    simpleEncode (WxppSceneInt (WxppIntSceneID x)) = "qrcode_" ++ show x
+    simpleEncode (WxppSceneStr (WxppStrSceneID x)) = "qrcode_" ++ T.unpack x
+
+    simpleParser = parse_as_int <|> parse_as_str
+        where
+            parse_as_int = do
+                _ <- optional $ string "qrcode_"
+                WxppSceneInt . WxppIntSceneID <$> simpleParser
+
+            parse_as_str = do
+                _ <- optional $ string "qrcode_"
+                WxppSceneStr . WxppStrSceneID . fromString <$> many1 anyChar
+
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
                     deriving (Show, Eq, Ord)
@@ -224,7 +286,7 @@ instance FromJSON WxppAppConfig where
     parseJSON = withObject "WxppAppConfig" $ \obj -> do
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
-                    token <- fmap Token $ obj .: "token"
+                    app_token <- fmap Token $ obj .: "token"
                     data_dir <- fromText <$> obj .: "data-dir"
                     aes_key_lst <- obj .: "aes-key"
                                     >>= return . filter (not . T.null) . map T.strip
@@ -232,7 +294,7 @@ instance FromJSON WxppAppConfig where
                     case aes_key_lst of
                         []      -> fail $ "At least one AesKey is required"
                         (x:xs)  ->
-                            return $ WxppAppConfig app_id secret token
+                            return $ WxppAppConfig app_id secret app_token
                                         x
                                         xs
                                         data_dir
@@ -241,8 +303,8 @@ instance FromJSON WxppAppConfig where
 -- | 事件推送的各种值
 data WxppEvent = WxppEvtSubscribe
                 | WxppEvtUnsubscribe
-                | WxppEvtSubscribeAtScene WxppSceneID QRTicket
-                | WxppEvtScan WxppSceneID QRTicket
+                | WxppEvtSubscribeAtScene WxppScene QRTicket
+                | WxppEvtScan WxppScene QRTicket
                 | WxppEvtScanCodePush Text Text Text
                     -- ^ event key, scan type, scan result
                     -- XXX: 文档有提到这个事件类型，但没有消息的具体细节
@@ -273,12 +335,12 @@ instance ToJSON WxppEvent where
         get_others WxppEvtUnsubscribe   = []
 
         get_others (WxppEvtSubscribeAtScene scene_id qrt) =
-                                          [ "scene"     .= unWxppSceneID scene_id
+                                          [ "scene"     .= scene_id
                                           , "qr_ticket" .= unQRTicket qrt
                                           ]
 
         get_others (WxppEvtScan scene_id qrt) =
-                                          [ "scene"     .= unWxppSceneID scene_id
+                                          [ "scene"     .= scene_id
                                           , "qr_ticket" .= unQRTicket qrt
                                           ]
 
@@ -313,11 +375,11 @@ instance FromJSON WxppEvent where
           "unsubscribe" -> return WxppEvtUnsubscribe
 
           "subscribe_at_scene" -> liftM2 WxppEvtSubscribeAtScene
-                                      (WxppSceneID <$> obj .: "scene")
+                                      (obj .: "scene")
                                       (QRTicket <$> obj .: "qr_ticket")
 
           "scan"  -> liftM2 WxppEvtScan
-                              (WxppSceneID <$> obj .: "scene")
+                              (obj .: "scene")
                               (QRTicket <$> obj .: "qr_ticket")
 
           "scancode_push" -> WxppEvtScanCodePush <$> obj .: "key"
@@ -384,11 +446,11 @@ instance ToJSON WxppInMsg where
                                                     , "thumb_media_id"  .= thumb_media_id
                                                     ]
 
-        get_others (WxppInMsgLocation (latitude, longitude) scale label) =
+        get_others (WxppInMsgLocation (latitude, longitude) scale loc_label) =
                                                     [ "latitude"  .= latitude
                                                     , "longitude" .= longitude
                                                     , "scale"     .= scale
-                                                    , "label"     .= label
+                                                    , "label"     .= loc_label
                                                     ]
 
         get_others (WxppInMsgLink url title desc) = [ "url"   .= unUrlText url
