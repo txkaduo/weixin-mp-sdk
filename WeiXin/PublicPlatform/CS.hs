@@ -8,6 +8,7 @@ import Data.Aeson
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Error
 import qualified Data.HashMap.Strict        as HM
 
 
@@ -22,8 +23,11 @@ wxppCsSendOutMsg ::
 wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_entity = do
     let url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ toJSON $ obj_for_out_msg_entity out_msg_entity)
-            >>= asWxppWsResponseNormal'
+    err_resp@(WxppAppError err _msg) <-
+                (liftIO $ postWith opts url $ toJSON $ obj_for_out_msg_entity out_msg_entity)
+                    >>= liftM (view responseBody) . asJSON
+    when ( err /= WxppErrorX (Right WxppNoError) ) $ do
+        throwM err_resp
     where
         obj_for_out_msg_entity e = do
             Object hm <- obj_for_out_msg $ wxppOutMessage e
