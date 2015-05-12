@@ -74,9 +74,11 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
 
 
 -- | 如果要计算的操作有异常，记日志并重试
-logWxppWsExcAndRetry :: (MonadLogger m, MonadCatch m) =>
+-- 注意：重试如果失败，还会不断重试
+-- 所以只适合用于 f 本身就是一个大循环的情况
+logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m) =>
     String -> m () -> m ()
-logWxppWsExcAndRetry op_name f = go
+logWxppWsExcAndRetryLoop op_name f = go
     where
         go = do
             err_or <- try $ tryWxppWsResult f
