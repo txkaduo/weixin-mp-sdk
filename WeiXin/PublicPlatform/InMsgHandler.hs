@@ -330,10 +330,8 @@ instance JsonConfigable WxppInMsgForwardAsJson where
 
     isNameOfInMsgHandler _ x = x == "forward-as-json"
 
-    parseWithExtraData _ _ obj = WxppInMsgForwardAsJson
-                                        <$> (UrlText <$> obj .: "url")
-                                        <*> ((fromIntegral :: Int -> NominalDiffTime)
-                                                <$> obj .:? "union-id-ttl" .!= (3600 * 24 * 365))
+    parseWithExtraData _ _ obj = parseForwardData WxppInMsgForwardAsJson obj
+
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
@@ -360,6 +358,50 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                     >>= liftM (view responseBody) . asJSON)
                     `catchAll` handle_exc
 
+        where
+            handle_exc ex =
+                throwE $ "Failed to forward incoming message: " ++ show ex
+
+
+-- | Handler: 把各种带有 WxppScene 事件中的 WxppScene 用 HTTP POST 转发至指定的 URL
+data WxppInMsgForwardScene = WxppInMsgForwardScene UrlText NominalDiffTime
+
+instance JsonConfigable WxppInMsgForwardScene where
+    type JsonConfigableUnconfigData WxppInMsgForwardScene = ()
+
+    isNameOfInMsgHandler _ x = x == "forward-scene"
+
+    parseWithExtraData _ _ obj = parseForwardData WxppInMsgForwardScene obj
+
+
+type instance WxppInMsgProcessResult WxppInMsgForwardScene = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m WxppInMsgForwardScene
+    where
+
+    processInMsg (WxppInMsgForwardScene url ttl) acid get_atk _bs m_ime = runExceptT $ do
+        case m_ime of
+            Nothing -> do
+                $logWarnS wxppLogSource $
+                    "Cannot forward incoming message as JSON because it could not be parsed."
+                return []
+
+            Just ime -> do
+                case getEventInMsg (wxppInMessage ime) >>= getSceneInEvent of
+                    Nothing -> return []
+
+                    Just (scene, ticket) -> do
+                        atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                                >>= maybe (throwE $ "no access token available") return
+                        let app_id = accessTokenApp atk
+                        let opts = defaults
+                            open_id = wxppInFromUserName ime
+                        m_uid <- wxppCachedGetEndUserUnionID ttl acid app_id atk open_id
+                        let fwd_msg = ((scene, unQRTicket ticket), m_uid)
+                        ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
+                            >>= liftM (view responseBody) . asJSON)
+                            `catchAll` handle_exc
         where
             handle_exc ex =
                 throwE $ "Failed to forward incoming message: " ++ show ex
@@ -640,6 +682,7 @@ allBasicWxppInMsgHandlerPrototypes _app_id msg_dir =
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppMatchedKeywordArticles) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardScene) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
     ]
@@ -655,3 +698,25 @@ allBasicWxppInMsgPredictorPrototypes =
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgScanCodeWaitMsgKeyRE) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgAnyText) ()
     ]
+
+--------------------------------------------------------------------------------
+
+parseForwardData ::
+    (UrlText -> NominalDiffTime -> a)   -- ^ the constructor
+    -> Object
+    -> Parser a
+parseForwardData ctor obj =
+    ctor    <$> (UrlText <$> obj .: "url")
+            <*> ((fromIntegral :: Int -> NominalDiffTime)
+                    <$> obj .:? "union-id-ttl" .!= (3600 * 24 * 365))
+
+-- | 取事件推送消息中可能带有的场景信息
+getSceneInEvent :: WxppEvent -> Maybe (WxppScene, QRTicket)
+getSceneInEvent (WxppEvtSubscribeAtScene scene ticket)  = Just (scene, ticket)
+getSceneInEvent (WxppEvtScan scene ticket)              = Just (scene, ticket)
+getSceneInEvent _                                       = Nothing
+
+getEventInMsg :: WxppInMsg -> Maybe WxppEvent
+getEventInMsg (WxppInMsgEvent x)    = Just x
+getEventInMsg _                     = Nothing
+
