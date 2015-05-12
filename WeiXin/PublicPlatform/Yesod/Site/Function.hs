@@ -43,6 +43,7 @@ newtype WxppSubDBActionRunner m = WxppSubDBActionRunner
 
 -- | 保存所有收到的比较原始的消息（解密之后的结果）到数据库
 data StoreInMsgToDB m = StoreInMsgToDB
+                            WxppAppID
                             (WxppSubDBActionRunner m)
                                 -- ^ function to run DB actions
                             (WxppInMsgRecordId -> WxppMediaID -> m ())
@@ -53,13 +54,14 @@ type instance WxppInMsgProcessResult (StoreInMsgToDB m) = WxppInMsgHandlerResult
 
 instance JsonConfigable (StoreInMsgToDB m) where
     type JsonConfigableUnconfigData (StoreInMsgToDB m) =
-            ( WxppSubDBActionRunner m
+            ( WxppAppID
+            , WxppSubDBActionRunner m
             , WxppInMsgRecordId -> WxppMediaID -> m ()
             )
 
     isNameOfInMsgHandler _ = ( == "db-store-all" )
 
-    parseWithExtraData _ (x,y) _obj = return $ StoreInMsgToDB x y
+    parseWithExtraData _ (x,y,z) _obj = return $ StoreInMsgToDB x y z
 
 
 instance (MonadIO m
@@ -70,7 +72,7 @@ instance (MonadIO m
 #endif
     ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
 
-    processInMsg (StoreInMsgToDB db_runner media_downloader) _acid _get_atk bs m_ime = do
+    processInMsg (StoreInMsgToDB app_id db_runner media_downloader) _acid _get_atk bs m_ime = do
         now <- liftIO getCurrentTime
         (msg_record_id, mids) <- runWxppSubDBActionRunner db_runner $ do
             let m_to        = fmap wxppInToUserName m_ime
@@ -78,6 +80,7 @@ instance (MonadIO m
                 m_ctime     = fmap wxppInCreatedTime m_ime
                 m_msg_id    = join $ fmap wxppInMessageID m_ime
             msg_record_id <- insert $ WxppInMsgRecord
+                            app_id
                             m_to m_from m_ctime m_msg_id
                             (LB.toStrict bs)
                             now
@@ -127,6 +130,7 @@ downloadSaveMediaToDB atk msg_id media_id = do
         Right rb -> do
                     now <- liftIO getCurrentTime
                     old_or_id <- insertBy $ WxppStoredMedia
+                                                (accessTokenApp atk)
                                                 media_id
                                                 msg_id
                                                 (LB.toStrict $ rb ^. responseBody)

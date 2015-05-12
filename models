@@ -3,6 +3,7 @@
 
 -- | incoming message
 WxppInMsgRecord
+    app                 WxppAppID
     to                  Text Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
     from                WxppOpenID Maybe
@@ -16,18 +17,19 @@ WxppInMsgRecord
     blob                ByteString          -- ^ unencrypted message bytestring
     notifyTime          UTCTime
 
-    UniqueWxppInMsgRecord extId !force
+    UniqueWxppInMsgRecord extId app !force
 
 
 -- | 永久保存可能会失效的数据
 -- 因为各种媒体文件只有短时间内有效，这个表把这些文件支持保存到本地数据库
 WxppStoredMedia
+    app                 WxppAppID
     extId               WxppMediaID
     msg                 WxppInMsgRecordId
     blob                ByteString
     mime                ByteString
     saveTime            UTCTime
 
-    UniqueWxppStoredMedia extId msg
+    UniqueWxppStoredMedia extId app msg
             -- ^ 按文档，WxppMediaID可能会被重用
             -- 因此加上它所相关联的消息作为
