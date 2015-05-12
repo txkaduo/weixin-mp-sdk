@@ -268,6 +268,10 @@ instance PathPiece WxppAppID where
     toPathPiece (WxppAppID x)   = toPathPiece x
     fromPathPiece t             = WxppAppID <$> fromPathPiece t
 
+instance ToJSON WxppAppID where toJSON = toJSON . unWxppAppID
+
+instance FromJSON WxppAppID where parseJSON = fmap WxppAppID . parseJSON
+
 -- | XXX: Read instance 目前只是 Yesod 生成的 Route 类型时用到
 -- 但不清楚具体使用场景，不知道以下的定义是否合适
 instance Read WxppAppID where
