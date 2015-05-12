@@ -575,10 +575,7 @@ instance JsonConfigable WxppInMsgMatchOneOfRe where
 
     parseWithExtraData _ _ obj = do
         re_list <- obj .: "re"
-        fmap WxppInMsgMatchOneOfRe $ forM re_list $ \r -> do
-            case compile blankCompOpt blankExecOpt r of
-                Left err -> fail $ "Failed to compile RE: " <> err
-                Right rx -> return rx
+        fmap WxppInMsgMatchOneOfRe $ mapM parsePosixRE re_list
 
 type instance WxppInMsgProcessResult WxppInMsgMatchOneOfRe = Bool
 
@@ -587,7 +584,8 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgText t')  -> do
                 let t = T.unpack $ T.strip t'
-                return $ not $ null $ catMaybes $ rights $ map (flip execute t) lst
+                return $ testWithPosixREList lst t
+
             _                       -> return False
 
 
@@ -624,10 +622,7 @@ instance JsonConfigable WxppInMsgScanCodeWaitMsgKeyRE where
 
     parseWithExtraData _ _ obj = do
         re_list <- obj .: "key-re"
-        fmap WxppInMsgScanCodeWaitMsgKeyRE $ forM re_list $ \r -> do
-            case compile blankCompOpt blankExecOpt r of
-                Left err -> fail $ "Failed to compile RE: " <> err
-                Right rx -> return rx
+        fmap WxppInMsgScanCodeWaitMsgKeyRE $ mapM parsePosixRE re_list
 
 type instance WxppInMsgProcessResult WxppInMsgScanCodeWaitMsgKeyRE = Bool
 
@@ -636,9 +631,37 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgScanCodeWaitMsgKeyRE where
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgEvent (WxppEvtScanCodeWaitMsg ek _scan_type _scan_result))  -> do
                 let t = T.unpack ek
-                return $ not $ null $ catMaybes $ rights $ map (flip execute t) lst
+                return $ testWithPosixREList lst t
 
             _   -> return False
+
+
+-- | Predictor: 通过条件：消息为带场景的事件推送，且场景满足正规表达式
+data WxppInMsgSceneRE = WxppInMsgSceneRE [Regex]
+                        deriving (Typeable)
+
+instance JsonConfigable WxppInMsgSceneRE where
+    type JsonConfigableUnconfigData WxppInMsgSceneRE = ()
+
+    isNameOfInMsgHandler _ x = x == "scene-match-re"
+
+    parseWithExtraData _ _ obj = do
+        re_list <- obj .: "re"
+        fmap WxppInMsgSceneRE $ mapM parsePosixRE re_list
+
+type instance WxppInMsgProcessResult WxppInMsgSceneRE = Bool
+
+instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgSceneRE where
+    processInMsg (WxppInMsgSceneRE lst) _acid _get_atk _bs m_ime = runExceptT $ do
+        case fmap wxppInMessage m_ime >>= getEventInMsg >>= getSceneInEvent of
+            Nothing -> return False
+
+            Just (scene, _ticket) -> do
+                case scene of
+                    WxppSceneInt _      -> return False
+                    WxppSceneStr (WxppStrSceneID str) ->
+                        return $ testWithPosixREList lst $ T.unpack str
+
 
 
 -- | Handler: 固定地返回一个某个信息
@@ -696,6 +719,7 @@ allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOfRe) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgScanCodeWaitMsgKeyRE) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSceneRE) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgAnyText) ()
     ]
 
@@ -709,6 +733,16 @@ parseForwardData ctor obj =
     ctor    <$> (UrlText <$> obj .: "url")
             <*> ((fromIntegral :: Int -> NominalDiffTime)
                     <$> obj .:? "union-id-ttl" .!= (3600 * 24 * 365))
+
+
+parsePosixRE :: Monad m => String -> m Regex
+parsePosixRE r = do
+    case compile blankCompOpt blankExecOpt r of
+        Left err -> fail $ "Failed to compile RE: " <> err
+        Right rx -> return rx
+
+testWithPosixREList :: [Regex] -> String -> Bool
+testWithPosixREList lst t = not $ null $ catMaybes $ rights $ map (flip execute t) lst
 
 -- | 取事件推送消息中可能带有的场景信息
 getSceneInEvent :: WxppEvent -> Maybe (WxppScene, QRTicket)
