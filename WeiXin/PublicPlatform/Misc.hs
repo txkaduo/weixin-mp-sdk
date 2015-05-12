@@ -77,20 +77,32 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
 -- 注意：重试如果失败，还会不断重试
 -- 所以只适合用于 f 本身就是一个大循环的情况
 logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m) =>
-    String -> m () -> m ()
+    String      -- ^ 仅用作日志标识
+    -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
+    -> m ()
 logWxppWsExcAndRetryLoop op_name f = go
     where
-        go = do
-            err_or <- try $ tryWxppWsResult f
-            case err_or of
-                Left err -> do
-                    $logErrorS wxppLogSource $ fromString $
-                        op_name <> " failed: " <> show (err :: IOError)
-                    go
+        go = logWxppWsExcThen op_name (const go) (const $ return ()) f
 
-                Right (Left err) -> do
-                    $logErrorS wxppLogSource $ fromString $
-                        op_name <> " failed: " <> show err
-                    go
 
-                Right (Right _) -> return ()
+logWxppWsExcThen :: (MonadLogger m, MonadCatch m) =>
+    String
+    -> (SomeException -> m a)
+                        -- ^ retry when error
+    -> (b -> m a)       -- ^ next to do when ok
+    -> m b              -- ^ original op
+    -> m a
+logWxppWsExcThen op_name on_err on_ok f = do
+    err_or <- try $ tryWxppWsResult f
+    case err_or of
+        Left err -> do
+            $logErrorS wxppLogSource $ fromString $
+                op_name <> " failed: " <> show (err :: IOError)
+            on_err $ toException err
+
+        Right (Left err) -> do
+            $logErrorS wxppLogSource $ fromString $
+                op_name <> " failed: " <> show err
+            on_err $ toException err
+
+        Right (Right x) -> on_ok x
