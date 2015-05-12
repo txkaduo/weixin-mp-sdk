@@ -108,6 +108,12 @@ instance FromJSON WxppOpenID where
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Eq, Ord, Typeable)
 
+instance FromJSON WxppUnionID where
+    parseJSON = fmap WxppUnionID . parseJSON
+
+instance ToJSON WxppUnionID where
+    toJSON = toJSON . unWxppUnionID
+
 instance SafeCopy WxppUnionID where
     getCopy                 = contain $ WxppUnionID <$> safeGet
     putCopy (WxppUnionID x) = contain $ safePut x
@@ -539,7 +545,7 @@ instance ToJSON WxppForwardedInMsg where
     toJSON x = object
                 [ "ime"     .= wxppFwdInMsgEntity x
                 , "app_id"  .= unWxppAppID (wxppFwdInMsgAppID x)
-                , "union_id" .= fmap unWxppUnionID (wxppFwdInMsgUnionID x)
+                , "union_id" .= wxppFwdInMsgUnionID x
                 ]
 
 instance FromJSON WxppForwardedInMsg where
@@ -547,7 +553,7 @@ instance FromJSON WxppForwardedInMsg where
                     WxppForwardedInMsg
                         <$> obj .: "ime"
                         <*> (WxppAppID <$> obj .: "app_id")
-                        <*> (fmap WxppUnionID <$> obj .: "union_id")
+                        <*> (obj .: "union_id")
 
 
 -- | 图文信息
@@ -913,7 +919,7 @@ instance FromJSON EndUserQueryResult where
                         contry <- obj .: "contry"
                         headimgurl <- UrlText <$> obj .: "headimgurl"
                         subs_time <- epochIntToUtcTime <$> obj .: "subscribe_time"
-                        m_union_id <- fmap WxppUnionID <$> obj .:? "unionid"
+                        m_union_id <- obj .:? "unionid"
                         return $ EndUserQueryResult
                                     open_id
                                     nickname
