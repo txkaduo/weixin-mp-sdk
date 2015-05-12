@@ -174,7 +174,7 @@ data WxppMakeSceneResult = WxppMakeSceneResult
 instance FromJSON WxppMakeSceneResult where
     parseJSON = withObject "WxppMakeSceneResult" $ \obj -> do
                     WxppMakeSceneResult
-                        <$> ( QRTicket <$> obj .: "ticket" )
+                        <$> ( obj .: "ticket" )
                         <*> ( (fromIntegral :: Int -> NominalDiffTime) <$> obj .: "expire_seconds")
                         <*> ( UrlText <$> obj .: "url" )
 
@@ -201,6 +201,12 @@ instance SimpleStringRep WxppScene where
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
                     deriving (Show, Eq, Ord)
+
+instance ToJSON QRTicket where
+    toJSON = toJSON . unQRTicket
+
+instance FromJSON QRTicket where
+    parseJSON = fmap QRTicket . parseJSON
 
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq, Ord)
@@ -336,12 +342,12 @@ instance ToJSON WxppEvent where
 
         get_others (WxppEvtSubscribeAtScene scene_id qrt) =
                                           [ "scene"     .= scene_id
-                                          , "qr_ticket" .= unQRTicket qrt
+                                          , "qr_ticket" .= qrt
                                           ]
 
         get_others (WxppEvtScan scene_id qrt) =
                                           [ "scene"     .= scene_id
-                                          , "qr_ticket" .= unQRTicket qrt
+                                          , "qr_ticket" .= qrt
                                           ]
 
         get_others(WxppEvtScanCodePush key scan_type scan_result) =
@@ -376,11 +382,11 @@ instance FromJSON WxppEvent where
 
           "subscribe_at_scene" -> liftM2 WxppEvtSubscribeAtScene
                                       (obj .: "scene")
-                                      (QRTicket <$> obj .: "qr_ticket")
+                                      (obj .: "qr_ticket")
 
           "scan"  -> liftM2 WxppEvtScan
                               (obj .: "scene")
-                              (QRTicket <$> obj .: "qr_ticket")
+                              (obj .: "qr_ticket")
 
           "scancode_push" -> WxppEvtScanCodePush <$> obj .: "key"
                                                 <*> obj .: "scan_type"
