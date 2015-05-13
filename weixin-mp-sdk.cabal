@@ -49,6 +49,7 @@ library
                        WeiXin.PublicPlatform.BgWork
                        WeiXin.PublicPlatform.Utils
                        WeiXin.PublicPlatform.Misc
+                       WeiXin.PublicPlatform.Center
 
   -- other-modules:       
   default-extensions:  NoImplicitPrelude
