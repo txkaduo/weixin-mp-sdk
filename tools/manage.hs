@@ -24,7 +24,7 @@ import WeiXin.PublicPlatform.Material
 import WeiXin.PublicPlatform.Security
 
 data ManageCmd = QueryAutoReplyRules
-                | QueryMenu
+                | QueryOriginMenu
                 | GetMaterial WxppMaterialID
                 | CountMaterial
                 | ListAllMaterialMedia WxppMediaType
@@ -48,9 +48,9 @@ manageCmdParser = subparser $
     command "query-autoreply-rules"
         (info (helper <*> pure QueryAutoReplyRules)
             (progDesc "取当前自动回复规则设置"))
-    <> command "query-menu"
-        (info (helper <*> pure QueryMenu)
-            (progDesc "取菜单配置"))
+    <> command "query-origin-menu"
+        (info (helper <*> pure QueryOriginMenu)
+            (progDesc "取自定义菜单配置（即在官方后台管理界面中的设置）"))
     <> command "get-material"
         (info (helper <*> (fmap GetMaterial $ fmap (WxppMaterialID . fromString) $
                                 argument str (metavar "MEDIA_ID")))
@@ -132,7 +132,7 @@ start = do
             obj <- wxppQueryOriginAutoReplyRules atk
             liftIO $ B.putStr $ Y.encode obj
 
-        QueryMenu -> do
+        QueryOriginMenu -> do
             atk <- get_atk
             result <- wxppQueryMenuConfig atk
             liftIO $ B.putStr $ Y.encode result
