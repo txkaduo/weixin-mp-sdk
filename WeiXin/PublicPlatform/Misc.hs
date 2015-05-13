@@ -13,6 +13,7 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.InMsgHandler
+import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Yesod.Site.Data
 
 import Data.Aeson
@@ -54,12 +55,18 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
         Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
                         in Just $ WxppSub wac
                                     get_access_token
+                                    get_union_id
                                     send_msg
                                     (handle_msg data_dir)
                                     run_logging_t
                                     auth_check
     where
         get_access_token = wxppAcidGetUsableAccessToken acid app_id
+
+        get_union_id atk open_id = run_logging_t $
+                                    wxppCachedGetEndUserUnionID
+                                        (fromIntegral (maxBound :: Int))
+                                        acid atk open_id
 
         handle_msg data_dir bs ime = do
             err_or_in_msg_handlers <- liftIO $

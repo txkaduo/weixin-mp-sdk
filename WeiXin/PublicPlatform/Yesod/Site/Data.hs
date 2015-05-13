@@ -25,6 +25,8 @@ data WxppSub =
                     -- ^ 所有配置信息
                 , wxppSubAccessTokens   :: IO (Maybe AccessToken)
                     -- ^ a computation to get usable access token
+                , wxppSubGetUnionID     :: AccessToken -> WxppOpenID -> IO (Maybe WxppUnionID)
+                    -- ^ a function to get union_id by open_id
                 , wxppSubSendOutMsgs    :: [WxppOutMsgEntity] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
@@ -33,7 +35,7 @@ data WxppSub =
                 }
 
 instance Show WxppSub where
-    show (WxppSub app_config _ _ _ _ _) =
+    show (WxppSub app_config _ _ _ _ _ _) =
         "WxppSub: " ++ show app_config
 
 -- | 为了支持多 app ，AppID 实际上是运行时才知道的
