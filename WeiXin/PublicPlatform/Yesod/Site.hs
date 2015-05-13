@@ -24,14 +24,11 @@ import Text.XML                             (renderText, parseLBS)
 import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
-import Data.Yaml                            (encode)
 
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
-import WeiXin.PublicPlatform.Menu
-import WeiXin.PublicPlatform.WS
 
 
 checkSignature :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) ()
@@ -165,37 +162,6 @@ postMessageR = do
                                 Left ex     -> Left $ "Failed to parse XML: " <> show ex
                                 Right xdoc  -> return xdoc
 
-
--- | reload menu from config/menu.yml
--- see also: 'wxppWatchMenuYaml'
--- XXX: this function hard-coded a file path
-getReloadMenuR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) String
-getReloadMenuR = do
-    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
-    let data_dir = wxppAppConfigDataDir $ wxppSubAppConfig foundation
-    m_atk <- liftIO $ wxppSubAccessTokens foundation
-    case m_atk of
-        Nothing             -> return $ "Failed to create menu: no access token available."
-        Just access_token   ->  do
-            wxppCreateMenuWithYaml access_token (data_dir </> "menu.yml")
-                >>= return . either show (const "Menu reloaded successfully.")
-
-
-getQueryMenuR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
-getQueryMenuR = do
-    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
-    m_atk <- liftIO $ wxppSubAccessTokens foundation
-    case m_atk of
-        Nothing             -> return $ "Failed to create menu: no access token available."
-        Just access_token   ->  do
-            err_or <- tryWxppWsResult $ wxppQueryMenu access_token
-            case err_or of
-                Left err    -> do
-                                $(logErrorS) wxppLogSource $
-                                        "Failed to query menu: " <> fromString (show err)
-                                return $ fromString $ "Failed to query menu: " <> show err
-                Right menus -> do
-                                return $ decodeUtf8 $ encode menus
 
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where

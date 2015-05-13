@@ -36,8 +36,6 @@ newtype MaybeWxppSub = MaybeWxppSub { unMaybeWxppSub :: Maybe WxppSub }
 
 mkYesodSubData "MaybeWxppSub" [parseRoutes|
 /msg            MessageR        GET POST
-/menu/reload    ReloadMenuR     GET
-/menu/query     QueryMenuR      GET
 |]
 
 wxppSubModelsDef ::
