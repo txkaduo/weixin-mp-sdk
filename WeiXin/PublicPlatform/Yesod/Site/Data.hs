@@ -8,10 +8,16 @@ import ClassyPrelude
 import Yesod
 import Database.Persist.Quasi
 import Control.Monad.Logger
+import Network.Wai                          (Request)
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.InMsgHandler
 
+
+-- | 判断 WAI 请求是否来自可信的来源
+-- 有若干 web 接口是打算暴露给同伴使用的
+-- 这个函数负责检查这些请求是否可以执行
+type RequestAuthChecker = WxppSub -> Request -> IO Bool
 
 data WxppSub =
         WxppSub {
@@ -23,10 +29,11 @@ data WxppSub =
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
                 , wxppSubRunLoggingT    :: forall a. LoggingT IO a -> IO a
+                , wxppSubTrustedWaiReq  :: RequestAuthChecker
                 }
 
 instance Show WxppSub where
-    show (WxppSub app_config _ _ _ _) =
+    show (WxppSub app_config _ _ _ _ _) =
         "WxppSub: " ++ show app_config
 
 -- | 为了支持多 app ，AppID 实际上是运行时才知道的
