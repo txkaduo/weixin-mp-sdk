@@ -25,6 +25,7 @@ import WeiXin.PublicPlatform.Security
 
 data ManageCmd = QueryAutoReplyRules
                 | QueryOriginMenu
+                | LoadMenu FilePath
                 | GetMaterial WxppMaterialID
                 | CountMaterial
                 | ListAllMaterialMedia WxppMediaType
@@ -51,6 +52,9 @@ manageCmdParser = subparser $
     <> command "query-origin-menu"
         (info (helper <*> pure QueryOriginMenu)
             (progDesc "取自定义菜单配置（即在官方后台管理界面中的设置）"))
+    <> command "load-menu"
+        (info (helper <*> (fmap LoadMenu $ fmap fromString $ argument str (metavar "YAML_FILE")))
+            (progDesc "加载菜单设置"))
     <> command "get-material"
         (info (helper <*> (fmap GetMaterial $ fmap (WxppMaterialID . fromString) $
                                 argument str (metavar "MEDIA_ID")))
@@ -136,6 +140,15 @@ start = do
             atk <- get_atk
             result <- wxppQueryMenuConfig atk
             liftIO $ B.putStr $ Y.encode result
+
+        LoadMenu fp -> do
+            atk <- get_atk
+            result <- wxppCreateMenuWithYaml atk fp
+            case result of
+                Left err -> do
+                    $logError $ fromString $
+                        "wxppCreateMenuWithYaml failed: " ++ show err
+                Right _ -> return ()
 
         GetMaterial mid -> do
             atk <- get_atk

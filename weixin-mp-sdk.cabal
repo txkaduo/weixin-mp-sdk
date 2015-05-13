@@ -147,6 +147,7 @@ executable wxpp-manage
   default-extensions:  NoImplicitPrelude
                        CPP
                        OverloadedStrings
+                       TemplateHaskell
 
   ghc-options:         -Wall
 
