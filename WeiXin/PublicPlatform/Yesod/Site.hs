@@ -177,7 +177,7 @@ getReloadMenuR = do
     case m_atk of
         Nothing             -> return $ "Failed to create menu: no access token available."
         Just access_token   ->  do
-            wxppCreateWithYaml access_token (data_dir </> "menu.yml")
+            wxppCreateMenuWithYaml access_token (data_dir </> "menu.yml")
                 >>= return . either show (const "Menu reloaded successfully.")
 
 

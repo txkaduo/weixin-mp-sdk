@@ -90,9 +90,9 @@ wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
 
 
 -- | 根据指定 YAML 文件配置调用远程接口，修改菜单
-wxppCreateWithYaml :: (MonadIO m, MonadLogger m, MonadCatch m) =>
+wxppCreateMenuWithYaml :: (MonadIO m, MonadLogger m, MonadCatch m) =>
     AccessToken -> FilePath -> m (Either String ())
-wxppCreateWithYaml access_token fp = runExceptT $ do
+wxppCreateMenuWithYaml access_token fp = runExceptT $ do
     err_or_menu <- liftIO $ decodeFileEither $ encodeString fp
     case err_or_menu of
         Left err    -> do
@@ -165,7 +165,7 @@ wxppWatchMenuYaml get_atk block_until_exit fp = do
                         Nothing             -> do
                             $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
                         Just access_token   ->  do
-                            err_or <- wxppCreateWithYaml access_token (FN.eventPath evt)
+                            err_or <- wxppCreateMenuWithYaml access_token (FN.eventPath evt)
                             case err_or of
                                 Left err    -> $logErrorS  wxppLogSource $ fromString $
                                                         "Failed to create menu: " <> err
