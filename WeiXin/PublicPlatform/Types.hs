@@ -85,7 +85,7 @@ instance FromJSON WxppMaterialID where
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
-                    deriving (Show, Eq, Ord, Typeable)
+                    deriving (Show, Read, Eq, Ord, Typeable)
 
 instance SafeCopy WxppOpenID where
     getCopy                 = contain $ WxppOpenID <$> safeGet
@@ -104,6 +104,9 @@ instance ToJSON WxppOpenID where
 instance FromJSON WxppOpenID where
     parseJSON = fmap WxppOpenID . parseJSON
 
+instance PathPiece WxppOpenID where
+    toPathPiece (WxppOpenID x)  = toPathPiece x
+    fromPathPiece t             = WxppOpenID <$> fromPathPiece t
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Eq, Ord, Typeable)
