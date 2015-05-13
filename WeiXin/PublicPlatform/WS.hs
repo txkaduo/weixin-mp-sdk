@@ -2,7 +2,7 @@ module WeiXin.PublicPlatform.WS where
 
 import ClassyPrelude hiding (catch)
 import Network.Wreq
-import Control.Lens
+import Control.Lens hiding ((.=))
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  ( Handler(..), catches )
 --import Control.Monad.Trans.Control          (MonadBaseControl)
@@ -10,7 +10,9 @@ import Control.Monad.Catch                  ( Handler(..), catches )
 import Network.HTTP.Client                  (HttpException(..))
 import Data.Aeson                           ( withObject, (.:)
                                             , FromJSON(..)
-                                            , (.:), (.:?), (.!=)
+                                            , ToJSON(..)
+                                            , (.:), (.:?), (.!=), (.=)
+                                            , object
                                             )
 
 import WeiXin.PublicPlatform.Error
@@ -32,6 +34,10 @@ instance FromJSON WxppAppError where
                                 (wxppFromErrorCode ec)
                                 msg
 
+instance ToJSON WxppAppError where
+    toJSON (WxppAppError ex t) = object [ "errcode" .= wxppToErrorCodeX ex
+                                        , "errmsg"  .= t
+                                        ]
 
 -- | 从文档上看，接口的返回值内容，正常与错误两种情况都用一种方式返回
 -- 所以，实现时，要用试的方式去解释服务器返回的内容
@@ -42,6 +48,10 @@ newtype WxppWsResp a = WxppWsResp {
 instance FromJSON a => FromJSON (WxppWsResp a) where
     parseJSON v = fmap WxppWsResp $
                     fmap Left (parseJSON v) <|> fmap Right (parseJSON v)
+
+instance ToJSON a => ToJSON (WxppWsResp a) where
+    toJSON (WxppWsResp (Left x))    = toJSON x
+    toJSON (WxppWsResp (Right x))   = toJSON x
 
 
 -- | “预期”之内的错误类型
