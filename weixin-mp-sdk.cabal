@@ -111,6 +111,7 @@ library
                      , monad-control
                      , http-types
                      , blaze-builder
+                     , network
 
   if flag(parsec3)
       build-depends:   parsec3
