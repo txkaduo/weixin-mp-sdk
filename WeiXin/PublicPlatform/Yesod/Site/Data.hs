@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 module WeiXin.PublicPlatform.Yesod.Site.Data where
 
 import ClassyPrelude
@@ -44,7 +45,9 @@ instance Show WxppSub where
 newtype MaybeWxppSub = MaybeWxppSub { unMaybeWxppSub :: Maybe WxppSub }
 
 mkYesodSubData "MaybeWxppSub" [parseRoutes|
-/msg            MessageR        GET POST
+/msg                        MessageR            GET POST
+/x/atk                      GetAccessTokenR     GET
+/x/union_id/#WxppOpenID     GetUnionIDR         GET
 |]
 
 wxppSubModelsDef ::

@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 module WeiXin.PublicPlatform.Yesod.Site
     ( module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
@@ -161,6 +162,35 @@ postMessageR = do
         parse_xml_lbs x  = case parseLBS def x of
                                 Left ex     -> Left $ "Failed to parse XML: " <> show ex
                                 Right xdoc  -> return xdoc
+
+
+checkWaiReqThen :: Yesod master =>
+    HandlerT MaybeWxppSub (HandlerT master IO) a
+    -> HandlerT MaybeWxppSub (HandlerT master IO) a
+checkWaiReqThen f = do
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
+    b <- waiRequest >>= liftIO . wxppSubTrustedWaiReq foundation foundation
+    if b
+        then f
+        else permissionDenied "denied by security check"
+
+
+-- | 提供 access-token
+getGetAccessTokenR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
+getGetAccessTokenR = checkWaiReqThen $ do
+    alreadyExpired
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
+    liftM toJSON $ liftIO $ wxppSubAccessTokens foundation
+
+
+-- | 找 OpenID 对应的 UnionID
+getGetUnionIDR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+getGetUnionIDR open_id = checkWaiReqThen $ do
+    alreadyExpired
+    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
+    atk <- (liftIO $ wxppSubAccessTokens foundation)
+                >>= maybe (sendResponse Null) return
+    liftM toJSON $ liftIO $ wxppSubGetUnionID foundation atk open_id
 
 
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
