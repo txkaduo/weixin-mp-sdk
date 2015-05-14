@@ -930,6 +930,10 @@ endUserQueryResultUnionID :: EndUserQueryResult -> Maybe WxppUnionID
 endUserQueryResultUnionID (EndUserQueryResultNotSubscribed {})          = Nothing
 endUserQueryResultUnionID (EndUserQueryResult _ _ _ _ _ _ _ _ _ m_uid)  = m_uid
 
+endUserQueryResultSubsTime :: EndUserQueryResult -> Maybe UTCTime
+endUserQueryResultSubsTime (EndUserQueryResultNotSubscribed {})             = Nothing
+endUserQueryResultSubsTime (EndUserQueryResult _ _ _ _ _ _ _ _ subs_time _) = Just subs_time
+
 instance FromJSON EndUserQueryResult where
     parseJSON = withObject "EndUserQueryResult" $ \obj -> do
                 open_id <- obj .: "openid"
