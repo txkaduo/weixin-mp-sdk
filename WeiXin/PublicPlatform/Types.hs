@@ -560,24 +560,6 @@ instance FromJSON WxppInMsgEntity where
                       (obj .: "msg")
 
 
--- | 转发各种消息或消息的部分时，所附带的额外信息
-data WxppForwardedEnv = WxppForwardedEnv {
-                            wxppFwdUnionID          :: Maybe WxppUnionID
-                            , wxppFwdAccessToken    :: AccessToken
-                        }
-
-instance ToJSON WxppForwardedEnv where
-    toJSON x = object
-                [ "access_token"    .= wxppFwdAccessToken x
-                , "union_id"        .= wxppFwdUnionID x
-                ]
-
-instance FromJSON WxppForwardedEnv where
-    parseJSON = withObject "WxppForwardedEnv" $ \obj -> do
-                    WxppForwardedEnv    <$> ( obj .: "union_id" )
-                                        <*> ( obj .: "access_token" )
-
-
 -- | 图文信息
 data WxppArticle = WxppArticle {
                     wxppArticleTitle    :: Maybe Text    -- ^ title
@@ -1041,6 +1023,25 @@ instance FromJSON UploadResult where
         media_id <- WxppMediaID <$> obj .: "media_id"
         t <- epochIntToUtcTime <$> obj .: "created_at"
         return $ UploadResult typ media_id t
+
+
+-- | 转发各种消息或消息的部分时，所附带的额外信息
+data WxppForwardedEnv = WxppForwardedEnv {
+                            wxppFwdUserInfo         :: EndUserQueryResult
+                            , wxppFwdAccessToken    :: AccessToken
+                        }
+
+instance ToJSON WxppForwardedEnv where
+    toJSON x = object
+                [ "access_token"    .= wxppFwdAccessToken x
+                , "use_info"        .= wxppFwdUserInfo x
+                ]
+
+instance FromJSON WxppForwardedEnv where
+    parseJSON = withObject "WxppForwardedEnv" $ \obj -> do
+                    WxppForwardedEnv    <$> ( obj .: "user_info" )
+                                        <*> ( obj .: "access_token" )
+
 
 
 --------------------------------------------------------------------------------
