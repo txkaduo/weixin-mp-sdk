@@ -12,6 +12,7 @@ import Control.Monad.Reader                 (asks)
 import Control.Monad.State                  (modify)
 import qualified Data.Map.Strict            as Map
 
+import Yesod.Helpers.SafeCopy
 import WeiXin.PublicPlatform.Types
 
 
@@ -30,8 +31,9 @@ data WxppAcidState = WxppAcidState {
                         -- 而是定时丢弃过期的 access token
                         -- 注意：这个列表是排了序的
                     , _wxppAcidStateUploadedMedia :: !(Map WxppAppID (Map MD5Hash UploadResult))
-                    , _wxppAcidStateCachedUnionID :: !(Map (WxppOpenID, WxppAppID) (WxppUnionID, UTCTime))
-                        -- ^ 把用户的 UnionID 缓存一下，以加快消息处理
+                    , _wxppAcidStateCachedUserInfo :: !(Map (WxppOpenID, WxppAppID)
+                                                            (TimeTagged EndUserQueryResult))
+                        -- ^ 把用户的 EndUserQueryResult 缓存一下，以加快消息处理
                     }
                     deriving (Typeable)
 
@@ -68,18 +70,26 @@ wxppAcidLookupMediaIDByHash app_id h =
     asks $ preview $ wxppAcidStateUploadedMedia . at app_id . _Just . at h . _Just
 
 
--- | 为 UnionID 增加缓存
-wxppAcidSetCachedUnionID ::
-    UTCTime -> WxppOpenID -> WxppAppID -> WxppUnionID -> Update WxppAcidState ()
-wxppAcidSetCachedUnionID now open_id app_id union_id = do
-    modify $ over wxppAcidStateCachedUnionID $
-                Map.insert (open_id, app_id) (union_id, now)
+-- | 为 EndUserQueryResult 增加缓存
+wxppAcidSetCachedUserInfo ::
+    UTCTime -> WxppOpenID -> WxppAppID -> EndUserQueryResult -> Update WxppAcidState ()
+wxppAcidSetCachedUserInfo now open_id app_id qres = do
+    modify $ over wxppAcidStateCachedUserInfo $
+                Map.insert (open_id, app_id) (TimeTagged now qres)
+
+wxppAcidGetCachedUserInfo ::
+    WxppOpenID -> WxppAppID -> Query WxppAcidState (Maybe (TimeTagged EndUserQueryResult))
+wxppAcidGetCachedUserInfo open_id app_id =
+    asks $ Map.lookup (open_id, app_id) .
+            _wxppAcidStateCachedUserInfo
 
 -- | 查找 UnionID 缓存
 wxppAcidLookupCachedUnionID ::
-    WxppOpenID -> WxppAppID -> Query WxppAcidState (Maybe (WxppUnionID, UTCTime))
+    WxppOpenID -> WxppAppID -> Query WxppAcidState (Maybe (Maybe WxppUnionID, UTCTime))
 wxppAcidLookupCachedUnionID open_id app_id =
-    asks $ (Map.lookup (open_id, app_id)) . _wxppAcidStateCachedUnionID
+    asks $ fmap ((endUserQueryResultUnionID . _unTimeTag) &&& _ttTime).
+            Map.lookup (open_id, app_id) .
+            _wxppAcidStateCachedUserInfo
 
 $(makeAcidic ''WxppAcidState
     [ 'wxppAcidGetAcccessTokens
@@ -87,7 +97,8 @@ $(makeAcidic ''WxppAcidState
     , 'wxppAcidAddAcccessToken
     , 'wxppAcidPurgeAcccessToken
     , 'wxppAcidLookupMediaIDByHash
-    , 'wxppAcidSetCachedUnionID
+    , 'wxppAcidSetCachedUserInfo
+    , 'wxppAcidGetCachedUserInfo
     , 'wxppAcidLookupCachedUnionID
     ])
 

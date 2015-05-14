@@ -9,6 +9,8 @@ import Data.Conduit                         (Source, yield)
 import Data.Acid
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 
+import Yesod.Helpers.SafeCopy
+
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Acid
@@ -79,32 +81,38 @@ wxppCachedGetEndUserUnionID ::
     -> WxppOpenID
     -> m (Maybe WxppUnionID)
 wxppCachedGetEndUserUnionID ttl acid atk open_id = do
-    m_res <- liftIO $ query acid $ WxppAcidLookupCachedUnionID open_id app_id
+    liftM endUserQueryResultUnionID $ wxppCachedQueryEndUserInfo ttl acid atk open_id
+
+wxppCachedQueryEndUserInfo ::
+    (MonadIO m, MonadLogger m, MonadThrow m) =>
+    NominalDiffTime
+    -> AcidState WxppAcidState
+    -> AccessToken
+    -> WxppOpenID
+    -> m EndUserQueryResult
+wxppCachedQueryEndUserInfo ttl acid atk open_id = do
+    m_res <- liftIO $ query acid $ WxppAcidGetCachedUserInfo open_id app_id
     now <- liftIO getCurrentTime
-    m_uid0 <- case m_res of
-                Just (union_id, ctime) -> do
-                    if diffUTCTime now ctime > ttl
-                        then return Nothing
-                        else return $ Just union_id
+    let m_qres0 = case m_res of
+                    Just (TimeTagged _ (EndUserQueryResultNotSubscribed {})) ->
+                        -- never do negative cache
+                        Nothing
 
-                Nothing -> return Nothing
+                    Just res ->
+                        let ctime = _ttTime res
+                        in if diffUTCTime now ctime > ttl
+                            then Nothing
+                            else Just $ _unTimeTag res
 
-    case m_uid0 of
-        Just uid    -> return $ Just uid
+                    Nothing -> Nothing
+
+
+    case m_qres0 of
+        Just qres    -> return qres
 
         Nothing     -> do
             qres <- wxppQueryEndUserInfo atk open_id
-            case qres of
-                EndUserQueryResultNotSubscribed {} -> do
-                    $logWarnS wxppLogSource $
-                        "wxppCachedGetEndUserUnionID failed because user does not subscribe: "
-                            <> unWxppOpenID open_id
-                    return Nothing
-
-                EndUserQueryResult _ _ _ _ _ _ _ _ _ m_uid -> do
-                    forM_ m_uid $ \uid -> liftIO $ do
-                            update acid $ WxppAcidSetCachedUnionID now open_id app_id uid
-
-                    return m_uid
+            liftIO $ update acid $ WxppAcidSetCachedUserInfo now open_id app_id qres
+            return qres
     where
         app_id = accessTokenApp atk
