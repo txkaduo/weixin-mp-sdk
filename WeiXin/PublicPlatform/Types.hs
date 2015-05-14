@@ -926,6 +926,10 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                             (Maybe WxppUnionID)
                         deriving (Show, Eq, Ord)
 
+endUserQueryResultUnionID :: EndUserQueryResult -> Maybe WxppUnionID
+endUserQueryResultUnionID (EndUserQueryResultNotSubscribed {})          = Nothing
+endUserQueryResultUnionID (EndUserQueryResult _ _ _ _ _ _ _ _ _ m_uid)  = m_uid
+
 instance FromJSON EndUserQueryResult where
     parseJSON = withObject "EndUserQueryResult" $ \obj -> do
                 open_id <- obj .: "openid"
