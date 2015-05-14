@@ -732,7 +732,7 @@ parseForwardData ::
 parseForwardData ctor obj =
     ctor    <$> (UrlText <$> obj .: "url")
             <*> ((fromIntegral :: Int -> NominalDiffTime)
-                    <$> obj .:? "union-id-ttl" .!= (3600 * 24 * 365))
+                    <$> obj .:? "user-info-cache-ttl" .!= (3600 * 2))
 
 
 parsePosixRE :: Monad m => String -> m Regex
