@@ -25,6 +25,10 @@ import Text.XML                             (renderText, parseLBS)
 import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
+import Data.Yaml                            (decodeEither')
+import Network.HTTP.Types.Status            (mkStatus)
+import Data.Conduit
+import Data.Conduit.Binary                  (sinkLbs)
 
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
@@ -33,6 +37,7 @@ import WeiXin.PublicPlatform.Message
 import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.EndUser
+import WeiXin.PublicPlatform.QRCode
 
 
 checkSignature :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) ()
@@ -211,10 +216,7 @@ forwardWsResult op_name res = do
 getGetAccessTokenR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
 getGetAccessTokenR = checkWaiReqThen $ do
     alreadyExpired
-    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
-    liftM toJSON $ do
-        (liftIO $ wxppSubAccessTokens foundation)
-            >>= maybe (mimicServerBusy "no access token available") return
+    liftM toJSON $ getAccessTokenSubHandler
 
 
 -- | 找 OpenID 对应的 UnionID
@@ -224,8 +226,7 @@ getGetUnionIDR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT 
 getGetUnionIDR open_id = checkWaiReqThen $ do
     alreadyExpired
     foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
-    atk <- (liftIO $ wxppSubAccessTokens foundation)
-                >>= maybe (mimicServerBusy "no access token available") return
+    atk <- getAccessTokenSubHandler
     (tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id)
         >>= forwardWsResult "wxppSubGetUnionID"
 
@@ -235,13 +236,44 @@ getGetUnionIDR open_id = checkWaiReqThen $ do
 getQueryUserInfoR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
 getQueryUserInfoR open_id = do
     alreadyExpired
-    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
-    atk <- (liftIO $ wxppSubAccessTokens foundation)
-                >>= maybe (mimicServerBusy "no access token available") return
+    atk <- getAccessTokenSubHandler
     (tryWxppWsResult $ wxppQueryEndUserInfo atk open_id)
         >>= forwardWsResult "wxppQueryEndUserInfo"
 
 
+-- | 模仿创建永久场景的二维码
+-- 行为接近微信平台的接口，区别是
+-- 输入仅仅是一个 WxppScene
+postCreateQrCodePersistR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
+postCreateQrCodePersistR = do
+    alreadyExpired
+    scene <- decodePostBodyAsYaml
+    atk <- getAccessTokenSubHandler
+    liftM toJSON $ wxppQrCodeCreatePersist atk scene
+
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where
         yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
+
+--------------------------------------------------------------------------------
+
+decodePostBodyAsYaml :: (Yesod master, FromJSON a) =>
+    HandlerT MaybeWxppSub (HandlerT master IO) a
+decodePostBodyAsYaml = do
+    body <- rawRequestBody $$ sinkLbs
+    case decodeEither' (LB.toStrict body) of
+        Left err -> do
+            $logError $ fromString $
+                "cannot decode request body as YAML: " ++ show err
+            sendResponseStatus (mkStatus 449 "Retry With") $
+                ("retry wtih valid request JSON body" :: Text)
+
+        Right x -> return x
+
+
+getAccessTokenSubHandler :: Yesod master =>
+    HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
+getAccessTokenSubHandler = do
+    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
+    (liftIO $ wxppSubAccessTokens foundation)
+        >>= maybe (mimicServerBusy "no access token available") return

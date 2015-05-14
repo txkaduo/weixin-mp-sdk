@@ -50,6 +50,7 @@ mkYesodSubData "MaybeWxppSub" [parseRoutes|
 /x/atk                      GetAccessTokenR     GET
 /x/union_id/#WxppOpenID     GetUnionIDR         GET
 /x/user/info/#WxppOpenID    QueryUserInfoR      GET
+/x/qrcode/persist           CreateQrCodePersistR POST
 |]
 
 wxppSubModelsDef ::

@@ -98,6 +98,7 @@ library
                      , xml-hamlet
                      , wai
                      , conduit
+                     , conduit-extra
                      , conduit-combinators
                      , scientific
                      , yaml
