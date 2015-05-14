@@ -10,6 +10,10 @@ import Yesod
 import Database.Persist.Quasi
 import Control.Monad.Logger
 import Network.Wai                          (Request)
+import Data.Bits                            (shift)
+import Network.Socket                       (SockAddr(..))
+import Network.Wai                          (remoteHost)
+import Data.Aeson
 import Data.Default
 
 import WeiXin.PublicPlatform.Security
@@ -21,17 +25,49 @@ import WeiXin.PublicPlatform.InMsgHandler
 -- 这个函数负责检查这些请求是否可以执行
 type RequestAuthChecker = WxppSub -> Request -> IO Bool
 
+alwaysDenyRequestAuthChecker :: RequestAuthChecker
+alwaysDenyRequestAuthChecker _ _ = return False
+
+-- | 总是通过检查
+-- 使用这个函数意味着系统有其它手段作安全限制
+alwaysAllowRequestAuthChecker :: RequestAuthChecker
+alwaysAllowRequestAuthChecker _ _ = return True
+
+loopbackOnlyRequestAuthChecker :: RequestAuthChecker
+loopbackOnlyRequestAuthChecker _ req = return $ isLoopbackSockAddr $ remoteHost req
+
+isLoopbackSockAddr :: SockAddr -> Bool
+isLoopbackSockAddr addr =
+    case addr of
+        SockAddrInet _ w        -> w `shift` 24  == 127
+        SockAddrInet6 _ _ w _   -> w == (0, 0, 0, 1)
+        _                       -> False
+
+
 data WxppSubsiteOpts = WxppSubsiteOpts {
                             wxppSubTrustedWaiReq    :: RequestAuthChecker
                             , wxppSubFakeQRTicket   :: Bool
                             , wxppSubMakeupUnionID  :: Bool
                             }
 
-alwaysDenyRequestAuthChecker :: RequestAuthChecker
-alwaysDenyRequestAuthChecker _ _ = return False
-
 instance Default WxppSubsiteOpts where
     def = WxppSubsiteOpts alwaysDenyRequestAuthChecker False False
+
+instance FromJSON WxppSubsiteOpts where
+    parseJSON = withObject "WxppSubsiteOpts" $ \obj -> do
+                    WxppSubsiteOpts
+                        <$> parse_auth_mode obj
+                        <*> ( obj .:? "fake-qrcode" .!= wxppSubFakeQRTicket def)
+                        <*> ( obj .:? "fake-union-id" .!= wxppSubMakeupUnionID def)
+                where
+                    parse_auth_mode obj = do
+                        mode <- obj .:? "api-auth-mode" .!= "always-deny"
+                        case mode of
+                             "always-deny" -> pure alwaysDenyRequestAuthChecker
+                             "always-allow" -> pure alwaysAllowRequestAuthChecker
+                             "loopback-only" -> pure loopbackOnlyRequestAuthChecker
+                             _ -> fail $ "unknown auth-mode: " ++ mode
+
 
 data WxppSub =
         WxppSub {
@@ -79,4 +115,3 @@ wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
 
 share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
                     $(persistFileWith lowerCaseSettings "models")
-

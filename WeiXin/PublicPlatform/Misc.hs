@@ -6,9 +6,6 @@ import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
 import Filesystem.Path.CurrentOS            (encodeString, fromText)
-import Network.Socket                       (SockAddr(..))
-import Network.Wai                          (remoteHost)
-import Data.Bits                            (shift)
 import Control.Monad.Logger
 import Control.Monad.Catch
 
@@ -32,21 +29,6 @@ parseMultWxppAppConfig obj = do
                 then Just . (wxppAppConfigAppID &&& id) <$> parseJSON v
                 else return Nothing
 
-
--- | 总是通过检查
--- 使用这个函数意味着系统有其它手段作安全限制
-alwaysAllowRequestAuthChecker :: RequestAuthChecker
-alwaysAllowRequestAuthChecker _ _ = return True
-
-loopbackOnlyRequestAuthChecker :: RequestAuthChecker
-loopbackOnlyRequestAuthChecker _ req = return $ isLoopbackSockAddr $ remoteHost req
-
-isLoopbackSockAddr :: SockAddr -> Bool
-isLoopbackSockAddr addr =
-    case addr of
-        SockAddrInet _ w        -> w `shift` 24  == 127
-        SockAddrInet6 _ _ w _   -> w == (0, 0, 0, 1)
-        _                       -> False
 
 -- | 用于生成 yesod 的 subsite 类型的辅助工具
 -- 它就是为了辅助制造一个 App -> WxppAppID -> MaybeWxppSub 这样的函数
