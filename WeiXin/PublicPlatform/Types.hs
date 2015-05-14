@@ -929,6 +929,11 @@ endUserQueryResultUnionID :: EndUserQueryResult -> Maybe WxppUnionID
 endUserQueryResultUnionID (EndUserQueryResultNotSubscribed {})          = Nothing
 endUserQueryResultUnionID (EndUserQueryResult _ _ _ _ _ _ _ _ _ m_uid)  = m_uid
 
+endUserQueryResultSetUnionID :: Maybe WxppUnionID -> EndUserQueryResult -> EndUserQueryResult
+endUserQueryResultSetUnionID _      x@(EndUserQueryResultNotSubscribed {})     = x
+endUserQueryResultSetUnionID m_uid (EndUserQueryResult x1 x2 x3 x4 x5 x6 x7 x8 x9 _)  =
+                                    EndUserQueryResult x1 x2 x3 x4 x5 x6 x7 x8 x9 m_uid
+
 endUserQueryResultSubsTime :: EndUserQueryResult -> Maybe UTCTime
 endUserQueryResultSubsTime (EndUserQueryResultNotSubscribed {})             = Nothing
 endUserQueryResultSubsTime (EndUserQueryResult _ _ _ _ _ _ _ _ subs_time _) = Just subs_time
