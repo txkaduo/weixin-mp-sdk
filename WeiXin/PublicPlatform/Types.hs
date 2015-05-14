@@ -914,6 +914,10 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
 
 $(deriveSafeCopy 0 'base ''EndUserQueryResult)
 
+endUserQueryResultOpenID :: EndUserQueryResult -> WxppOpenID
+endUserQueryResultOpenID (EndUserQueryResultNotSubscribed open_id)      = open_id
+endUserQueryResultOpenID (EndUserQueryResult open_id _ _ _ _ _ _ _ _ _) = open_id
+
 endUserQueryResultUnionID :: EndUserQueryResult -> Maybe WxppUnionID
 endUserQueryResultUnionID (EndUserQueryResultNotSubscribed {})          = Nothing
 endUserQueryResultUnionID (EndUserQueryResult _ _ _ _ _ _ _ _ _ m_uid)  = m_uid
