@@ -906,6 +906,10 @@ instance FromJSON MenuItem where
 data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
                     deriving (Show, Eq, Ord)
 
+instance SafeCopy SimpleLocaleName where
+    getCopy                         = contain $ SimpleLocaleName <$> safeGet
+    putCopy (SimpleLocaleName x)    = contain $ safePut x
+
 type NickName = Text
 type CityName = Text
 type ProvinceName = Text
@@ -924,7 +928,9 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                             UrlText     -- ^ head image url
                             UTCTime
                             (Maybe WxppUnionID)
-                        deriving (Show, Eq, Ord)
+                        deriving (Show, Eq, Ord, Typeable)
+
+$(deriveSafeCopy 0 'base ''EndUserQueryResult)
 
 endUserQueryResultUnionID :: EndUserQueryResult -> Maybe WxppUnionID
 endUserQueryResultUnionID (EndUserQueryResultNotSubscribed {})          = Nothing
