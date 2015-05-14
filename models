@@ -3,14 +3,14 @@
 
 -- | incoming message
 WxppInMsgRecord
-    app                 WxppAppID
+    app                 WxppAppID maxlen=200
     to                  Text Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
     from                WxppOpenID Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
     createdTime         UTCTime Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
-    extId               WxppInMsgID Maybe
+    extId               WxppInMsgID Maybe maxlen=200
                             -- ^ Nothing if we cannot parse the message propertly
                             -- or it is an event notification
 
@@ -23,8 +23,8 @@ WxppInMsgRecord
 -- | 永久保存可能会失效的数据
 -- 因为各种媒体文件只有短时间内有效，这个表把这些文件支持保存到本地数据库
 WxppStoredMedia
-    app                 WxppAppID
-    extId               WxppMediaID
+    app                 WxppAppID maxlen=200
+    extId               WxppMediaID maxlen=200
     msg                 WxppInMsgRecordId
     blob                ByteString
     mime                ByteString
