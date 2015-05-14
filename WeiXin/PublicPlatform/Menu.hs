@@ -2,14 +2,14 @@
 {-#LANGUAGE FlexibleContexts #-}
 module WeiXin.PublicPlatform.Menu where
 
-import ClassyPrelude
+import ClassyPrelude hiding (FilePath, (</>), (<.>))
 import Network.Wreq
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Data.Aeson
 import Control.Monad.Trans.Except
 import Data.Yaml                            (decodeFileEither)
-import Filesystem.Path.CurrentOS            (encodeString, toText)
+import Filesystem.Path.CurrentOS            (encodeString, toText, FilePath, directory, filename)
 import qualified System.FSNotify            as FN
 import Control.Monad.Trans.Control
 import System.Directory                     (doesFileExist)

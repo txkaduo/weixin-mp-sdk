@@ -5,7 +5,7 @@ module WeiXin.PublicPlatform.Types
     , UrlText(..)
     ) where
 
-import ClassyPrelude
+import ClassyPrelude hiding (FilePath, (<.>), (</>))
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
@@ -19,7 +19,7 @@ import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
 import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
-import Filesystem.Path.CurrentOS            (encodeString, fromText)
+import Filesystem.Path.CurrentOS            (encodeString, fromText, FilePath)
 import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(SqlString))

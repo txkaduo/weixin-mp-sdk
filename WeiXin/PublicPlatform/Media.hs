@@ -4,11 +4,11 @@ module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Types
     ) where
 
-import ClassyPrelude
+import ClassyPrelude hiding (FilePath, (<.>), (</>))
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
-import Filesystem.Path.CurrentOS            (encodeString)
+import Filesystem.Path.CurrentOS            (encodeString, FilePath)
 import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catches, Handler(..))

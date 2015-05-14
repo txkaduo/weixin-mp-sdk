@@ -1,10 +1,10 @@
 module  WeiXin.PublicPlatform.Utils where
 
-import ClassyPrelude
+import ClassyPrelude hiding (FilePath, (<.>), (</>))
 import Data.Time                            (NominalDiffTime)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
-import Filesystem.Path.CurrentOS            (encodeString, fromText, extension)
+import Filesystem.Path.CurrentOS            (encodeString, fromText, extension, FilePath, (<.>), (</>))
 import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, decodeFileEither)

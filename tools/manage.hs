@@ -1,6 +1,6 @@
 module Main where
 
-import ClassyPrelude hiding ((<>))
+import ClassyPrelude hiding ((<>), FilePath, (</>), (<.>))
 import Control.Monad.Logger
 import Options.Applicative
 import Data.Aeson
@@ -9,6 +9,7 @@ import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Yaml                  as Y
 import qualified Data.Text                  as T
 import qualified Data.Map.Lazy              as LM
+import Filesystem.Path.CurrentOS            (FilePath)
 import Network.Mime                         (defaultMimeMap, MimeType)
 import Data.Conduit
 import qualified Data.Conduit.List          as CL

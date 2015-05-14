@@ -1,7 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
-import ClassyPrelude hiding (catch)
+import ClassyPrelude hiding (catch, FilePath, (<.>), (</>))
 import Network.Wreq hiding (Proxy)
 import Control.Lens hiding ((<.>), op)
 import Data.Proxy
@@ -19,7 +19,7 @@ import Data.Time                            (NominalDiffTime)
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
-import Filesystem.Path.CurrentOS            (fromText)
+import Filesystem.Path.CurrentOS            (fromText, FilePath, (</>))
 import qualified Filesystem.Path.CurrentOS  as FP
 import Control.Monad.Catch                  (catch)
 

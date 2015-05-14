@@ -1,11 +1,11 @@
 {-# LANGUAGE RankNTypes #-}
 module WeiXin.PublicPlatform.Misc where
 
-import ClassyPrelude hiding (try)
+import ClassyPrelude hiding (try, FilePath, (<.>), (</>))
 import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
-import Filesystem.Path.CurrentOS            (encodeString, fromText)
+import Filesystem.Path.CurrentOS            (encodeString, fromText, (</>))
 import Control.Monad.Logger
 import Control.Monad.Catch
 
