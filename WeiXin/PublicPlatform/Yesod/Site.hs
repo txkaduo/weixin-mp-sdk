@@ -32,6 +32,7 @@ import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
 import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.EndUser
 
 
 checkSignature :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) ()
@@ -189,6 +190,20 @@ mimicServerBusy s = sendResponse $ toJSON $
                             (WxppErrorX $ Right WxppServerBusy)
                             s
 
+forwardWsResult :: (Yesod master, ToJSON a) =>
+    String -> Either WxppWsCallError a -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+forwardWsResult op_name res = do
+    case res of
+        Left (WxppWsErrorApp err) -> do
+            sendResponse $ toJSON err
+
+        Left err -> do
+            $logError $ fromString $
+                op_name ++ " failed: " ++ show err
+            mimicServerBusy $ fromString $ op_name ++ " failed"
+
+        Right x -> do
+            return $ toJSON x
 
 -- | 提供 access-token
 -- 为重用代码，错误报文格式与微信平台接口一样
@@ -211,18 +226,20 @@ getGetUnionIDR open_id = checkWaiReqThen $ do
     foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
     atk <- (liftIO $ wxppSubAccessTokens foundation)
                 >>= maybe (mimicServerBusy "no access token available") return
-    res <- tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id
-    case res of
-        Left (WxppWsErrorApp err) -> do
-            sendResponse $ toJSON err
+    (tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id)
+        >>= forwardWsResult "wxppSubGetUnionID"
 
-        Left err -> do
-            $logError $ fromString $
-                "wxppSubGetUnionID failed: " ++ show err
-            mimicServerBusy "cannot get union id"
 
-        Right m_uid -> do
-            return $ toJSON m_uid
+-- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
+-- 逻辑返回值是 EndUserQueryResult
+getQueryUserInfoR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+getQueryUserInfoR open_id = do
+    alreadyExpired
+    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
+    atk <- (liftIO $ wxppSubAccessTokens foundation)
+                >>= maybe (mimicServerBusy "no access token available") return
+    (tryWxppWsResult $ wxppQueryEndUserInfo atk open_id)
+        >>= forwardWsResult "wxppQueryEndUserInfo"
 
 
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)

@@ -49,6 +49,7 @@ mkYesodSubData "MaybeWxppSub" [parseRoutes|
 -- 修改以下的路径，记得修改 WeiXin.PublicPlatform.Center 里的相应路径
 /x/atk                      GetAccessTokenR     GET
 /x/union_id/#WxppOpenID     GetUnionIDR         GET
+/x/user/info/#WxppOpenID    QueryUserInfoR      GET
 |]
 
 wxppSubModelsDef ::
