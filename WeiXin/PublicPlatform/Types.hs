@@ -928,7 +928,7 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
 
 instance FromJSON EndUserQueryResult where
     parseJSON = withObject "EndUserQueryResult" $ \obj -> do
-                open_id <- WxppOpenID <$> obj .: "openid"
+                open_id <- obj .: "openid"
                 if_sub <- (\x -> x > (0 :: Int)) <$> obj .: "subscribe"
                 if not if_sub
                     then return $ EndUserQueryResultNotSubscribed open_id
@@ -954,6 +954,24 @@ instance FromJSON EndUserQueryResult where
                                     subs_time
                                     m_union_id
 
+instance ToJSON EndUserQueryResult where
+    toJSON (EndUserQueryResultNotSubscribed open_id) = object $
+        [ "openid"      .= open_id
+        ]
+
+    toJSON (EndUserQueryResult open_id nickname m_gender lang city province contry headimgurl subs_time m_union_id) = object
+        [ "openid"      .= open_id
+        , "nickname"    .= nickname
+        , "sex"         .= genderToInt m_gender
+        , "language"    .= unSimpleLocaleName lang
+        , "city"        .= city
+        , "province"    .= province
+        , "contry"      .= contry
+        , "headimgurl"  .= unUrlText headimgurl
+        , "subscribe_time".= utcTimeToEpochInt subs_time
+        , "unionid"     .= m_union_id
+        ]
+
 -- | sex 字段出现在文档两处，有时候是个整数，有时候是个字串
 -- 这个函数处理两种情况
 parseSexJson :: Value -> Parser (Maybe Gender)
@@ -975,6 +993,10 @@ parseSexInt 1 = return $ Just Male
 parseSexInt 2 = return $ Just Female
 parseSexInt x = fail $ "unknown sex: " <> show x
 
+genderToInt :: Maybe Gender -> Int
+genderToInt Nothing         = 0
+genderToInt (Just Male)     = 1
+genderToInt (Just Female)   = 2
 
 newtype MD5Hash = MD5Hash { unMD5Hash :: ByteString }
                 deriving (Show, Eq, Ord)
