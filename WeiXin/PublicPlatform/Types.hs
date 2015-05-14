@@ -187,6 +187,13 @@ instance FromJSON WxppMakeSceneResult where
                         <*> ( (fromIntegral :: Int -> NominalDiffTime) <$> obj .: "expire_seconds")
                         <*> ( UrlText <$> obj .: "url" )
 
+instance ToJSON WxppMakeSceneResult where
+    toJSON (WxppMakeSceneResult ticket ttl url) =
+        object  [ "ticket" .= ticket
+                , "expire_seconds" .= (round ttl :: Int)
+                , "url" .= unUrlText url
+                ]
+
 -- | 此实例实现对应于 WxppScene 在 XML 的编码方式
 -- qrscene 前缀见“接收事件推送”一文
 -- 但文档仅在“用户未关注时……”这一情况下说有些前缀
