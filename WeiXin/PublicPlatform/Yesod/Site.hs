@@ -1,6 +1,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Yesod.Site
     ( module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
@@ -10,6 +11,8 @@ import ClassyPrelude
 import Yesod
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
+import qualified Data.ByteString.Base64.URL as B64L
+import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
 import Control.Concurrent.Async             (async)
@@ -29,7 +32,13 @@ import Data.Yaml                            (decodeEither')
 import Network.HTTP.Types.Status            (mkStatus)
 import Data.Conduit
 import Data.Conduit.Binary                  (sinkLbs)
+import qualified Data.Aeson                 as A
 
+import Text.Blaze.Svg.Renderer.Utf8 (renderSvg)   -- blaze-svg
+import qualified Data.QRCode as QR                -- haskell-qrencode
+import qualified Diagrams.Backend.SVG as D        -- diagrams-svg
+import qualified Diagrams.Prelude as D            -- diagrams-lib
+import qualified Diagrams.QRCode as QR            -- diagrams-qrcode
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Security
@@ -177,7 +186,7 @@ checkWaiReqThen :: Yesod master =>
     -> HandlerT MaybeWxppSub (HandlerT master IO) a
 checkWaiReqThen f = do
     foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
-    b <- waiRequest >>= liftIO . wxppSubTrustedWaiReq foundation foundation
+    b <- waiRequest >>= liftIO . (wxppSubTrustedWaiReq $ wxppSubOptions foundation) foundation
     if b
         then f
         else permissionDenied "denied by security check"
@@ -226,9 +235,14 @@ getGetUnionIDR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT 
 getGetUnionIDR open_id = checkWaiReqThen $ do
     alreadyExpired
     foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
-    atk <- getAccessTokenSubHandler
-    (tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id)
-        >>= forwardWsResult "wxppSubGetUnionID"
+    let sm_mode = wxppSubMakeupUnionID $ wxppSubOptions foundation
+    if sm_mode
+        then do
+            return $ toJSON $ Just $ fakeUnionID open_id
+        else do
+            atk <- getAccessTokenSubHandler' foundation
+            (tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id)
+                >>= forwardWsResult "wxppSubGetUnionID"
 
 
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
@@ -236,10 +250,16 @@ getGetUnionIDR open_id = checkWaiReqThen $ do
 getQueryUserInfoR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
 getQueryUserInfoR open_id = do
     alreadyExpired
-    atk <- getAccessTokenSubHandler
+    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
+    atk <- getAccessTokenSubHandler' foundation
+    let sm_mode = wxppSubMakeupUnionID $ wxppSubOptions foundation
+        fix_uid qres =
+            if sm_mode
+                then endUserQueryResultSetUnionID (Just $ fakeUnionID open_id) <$> qres
+                else qres
     (tryWxppWsResult $ wxppQueryEndUserInfo atk open_id)
+        >>= return . fix_uid
         >>= forwardWsResult "wxppQueryEndUserInfo"
-
 
 -- | 模仿创建永久场景的二维码
 -- 行为接近微信平台的接口，区别是
@@ -247,9 +267,47 @@ getQueryUserInfoR open_id = do
 postCreateQrCodePersistR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
 postCreateQrCodePersistR = do
     alreadyExpired
+    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
     scene <- decodePostBodyAsYaml
-    atk <- getAccessTokenSubHandler
-    liftM toJSON $ wxppQrCodeCreatePersist atk scene
+    let sm_mode = wxppSubFakeQRTicket $ wxppSubOptions foundation
+    if sm_mode
+        then do
+            qrcode_base_url <- withUrlRenderer $ \render ->
+                                    render ShowSimulatedQRCodeR []
+
+            let fake_ticket = (scene, qrcode_base_url)
+            return $ toJSON $ C8.unpack $ B64L.encode $ LB.toStrict $ A.encode fake_ticket
+
+        else do
+            atk <- getAccessTokenSubHandler' foundation
+            liftM toJSON $ wxppQrCodeCreatePersist atk scene
+
+
+-- | 返回一个二维码图像
+-- 其内容是 WxppScene 用 JSON 格式表示之后的字节流
+getShowSimulatedQRCodeR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) TypedContent
+getShowSimulatedQRCodeR = do
+    ticket_s <- lookupGetParam "ticket"
+                >>= maybe (httpErrorRetryWithValidParams ("missing ticket" :: Text)) return
+
+    (ticket :: FakeQRTicket) <- case B64L.decode (C8.pack $ T.unpack ticket_s) of
+        Left _ -> httpErrorRetryWithValidParams ("invalid ticket" :: Text)
+        Right bs -> case decodeEither' bs of
+                        Left err -> do
+                            $logError $ fromString $
+                                "cannot decode request body as YAML: " ++ show err
+                            sendResponseStatus (mkStatus 449 "Retry With") $
+                                ("retry wtih valid request JSON body" :: Text)
+
+                        Right (x, y) -> return (x, UrlText y)
+
+    let scene = fst ticket
+    let input = C8.unpack $ LB.toStrict $ A.encode scene
+    qrcode <- liftIO $ QR.encodeString input Nothing QR.QR_ECLEVEL_M QR.QR_MODE_EIGHT True
+    let dia = D.scale 6 $ QR.stroke $ QR.pathMatrix $ QR.toMatrix qrcode
+        bs = renderSvg $ D.renderDia D.SVG (D.SVGOptions D.Absolute Nothing) dia
+    return $ toTypedContent (typeSvg, toContent bs)
+
 
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where
@@ -274,6 +332,16 @@ decodePostBodyAsYaml = do
 getAccessTokenSubHandler :: Yesod master =>
     HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
 getAccessTokenSubHandler = do
-    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
+    getYesod
+        >>= maybe mimicInvalidAppID return . unMaybeWxppSub
+        >>= getAccessTokenSubHandler'
+
+getAccessTokenSubHandler' :: Yesod master =>
+    WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
+getAccessTokenSubHandler' foundation = do
     (liftIO $ wxppSubAccessTokens foundation)
         >>= maybe (mimicServerBusy "no access token available") return
+
+
+fakeUnionID :: WxppOpenID -> WxppUnionID
+fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x

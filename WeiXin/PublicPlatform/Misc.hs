@@ -33,9 +33,6 @@ parseMultWxppAppConfig obj = do
                 else return Nothing
 
 
-alwaysDenyRequestAuthChecker :: RequestAuthChecker
-alwaysDenyRequestAuthChecker _ _ = return False
-
 -- | 总是通过检查
 -- 使用这个函数意味着系统有其它手段作安全限制
 alwaysAllowRequestAuthChecker :: RequestAuthChecker
@@ -59,10 +56,10 @@ getMaybeWxppSubOfYesodApp ::
     -> (forall a. LoggingT IO a -> IO a)
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> Chan (WxppAppID, [WxppOutMsgEntity])
-    -> RequestAuthChecker
+    -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg_ch auth_check app_id =
+getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg_ch opts app_id =
     MaybeWxppSub $ case Map.lookup app_id wxpp_config_map of
         Nothing     -> Nothing
         Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
@@ -72,7 +69,7 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
                                     send_msg
                                     (handle_msg data_dir)
                                     run_logging_t
-                                    auth_check
+                                    opts
     where
         get_access_token = wxppAcidGetUsableAccessToken acid app_id
 

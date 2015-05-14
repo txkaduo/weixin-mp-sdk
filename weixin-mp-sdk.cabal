@@ -114,6 +114,11 @@ library
                      , http-types
                      , blaze-builder
                      , network
+                     , diagrams-qrcode
+                     , diagrams-svg
+                     , diagrams-lib
+                     , blaze-svg
+                     , haskell-qrencode
 
   if flag(parsec3)
       build-depends:   parsec3
