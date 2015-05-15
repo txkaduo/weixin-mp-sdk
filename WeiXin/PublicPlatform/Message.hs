@@ -310,7 +310,7 @@ wxppOutMsgEntityToDocumentE app_id app_token ak me = runExceptT $ do
         root_nodes = [xml|
 <Encrypt>#{encrypted_xml}
 <MsgSignature>#{fromString $ C8.unpack $ B16.encode $ sign}
-<Timestamp>#{unTimeStampS ts}
+<TimeStamp>#{unTimeStampS ts}
 <Nonce>#{unNounce nonce}
 |]
     return $ Document (Prologue [] Nothing []) root []
