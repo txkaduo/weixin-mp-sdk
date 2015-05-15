@@ -3,6 +3,8 @@ module WeiXin.PublicPlatform.Message where
 import ClassyPrelude hiding (Element)
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base64     as B64
+import qualified Data.ByteString.Base16     as B16
+import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Text.Lazy             as LT
 
@@ -295,15 +297,21 @@ wxppOutMsgEntityToDocument me = Document (Prologue [] Nothing []) root []
 -- | 外发信息对应的加密xml
 wxppOutMsgEntityToDocumentE :: MonadIO m =>
     WxppAppID
+    -> Token
     -> AesKey
     -> WxppOutMsgEntity -> m (Either String Document)
-wxppOutMsgEntityToDocumentE app_id ak me = runExceptT $ do
-    encrypted_xml <- ExceptT $ wxppEncryptText app_id ak $
+wxppOutMsgEntityToDocumentE app_id app_token ak me = runExceptT $ do
+    (encrypted_xml, nonce) <- ExceptT $ wxppEncryptText app_id ak $
                         LT.toStrict $ renderText def plain_xml
+    now <- liftIO getCurrentTime
+    let ts = TimeStampS $ fromString $ show $ utcTimeToEpochInt now
+    let sign = wxppSignature app_token ts nonce encrypted_xml
     let root = Element "xml" mempty root_nodes
         root_nodes = [xml|
-<ToUserName>#{unWxppOpenID $ wxppOutToUserName me}
 <Encrypt>#{encrypted_xml}
+<MsgSignature>#{fromString $ C8.unpack $ B16.encode $ sign}
+<Timestamp>#{unTimeStampS ts}
+<Nonce>#{unNounce nonce}
 |]
     return $ Document (Prologue [] Nothing []) root []
     where

@@ -14,6 +14,7 @@ import qualified Data.ByteString.Builder    as BB
 import qualified Crypto.Hash.SHA1           as SHA1
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Base64     as B64
+import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
 import Data.Aeson                           ( FromJSON(..)
                                             , withObject, (.:))
@@ -137,10 +138,15 @@ wxppEncrypt :: MonadIO m =>
     WxppAppID
     -> AesKey
     -> ByteString       -- ^ message
-    -> m (Either String ByteString)
+    -> m (Either String (ByteString, ByteString))
+                        -- ^ encrypted and salt
 wxppEncrypt app_id ak msg = do
-    salt <- liftIO $ liftM B.pack $ replicateM 16 randomIO
-    return $ wxppEncryptInternal2 app_id ak salt msg
+    -- 虽然文档没有写，看样子随机字串应该只能用安全的字符
+    -- 使用 base64-url 编码一个完全字节流可以达到这个效果
+    let gen_len = salt_len  -- long enough
+        salt_len = 16
+    salt <- liftIO $ liftM (take salt_len . B64L.encode . B.pack) $ replicateM gen_len randomIO
+    return $ (, salt) <$> wxppEncryptInternal2 app_id ak salt msg
 
 
 -- | 加密明文的入口: base64-encoded
@@ -148,18 +154,20 @@ wxppEncryptB64 :: MonadIO m =>
     WxppAppID
     -> AesKey
     -> ByteString       -- ^ message
-    -> m (Either String ByteString)
+    -> m (Either String (ByteString, ByteString))
 wxppEncryptB64 app_id ak msg = runExceptT $ do
-    liftM B64.encode $ ExceptT $ wxppEncrypt app_id ak msg
+    liftM (B64.encode *** id) $ ExceptT $ wxppEncrypt app_id ak msg
 
 -- | 加密明文的入口: 文本到文本格式
 wxppEncryptText :: MonadIO m =>
     WxppAppID
     -> AesKey
     -> Text       -- ^ message
-    -> m (Either String Text)
+    -> m (Either String (Text, Nonce))
+                    -- ^ encrypted text and a random string
 wxppEncryptText app_id ak msg = runExceptT $ do
-    liftM (T.pack . C8.unpack) $
+    let to_text = T.pack . C8.unpack
+    liftM (to_text *** (Nonce . to_text)) $
         ExceptT $ wxppEncryptB64 app_id ak $ encodeUtf8 msg
 
 wxppDecryptInternal ::

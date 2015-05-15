@@ -98,6 +98,7 @@ postMessageR = do
         app_id      = wxppAppConfigAppID app_config
         ak          = wxppConfigAppAesKey app_config
         bak_aks     = wxppConfigAppBackupAesKeys app_config
+        app_token   = wxppConfigAppToken app_config
 
 
     err_or_resp <- lift $ runExceptT $ do
@@ -157,7 +158,7 @@ postMessageR = do
                             let out_msg_entity = mk_out_msg_entity out_msg
                             if enc
                                 then ExceptT $ wxppOutMsgEntityToDocumentE
-                                                    app_id ak out_msg_entity
+                                                    app_id app_token ak out_msg_entity
                                 else return $ wxppOutMsgEntityToDocument out_msg_entity
 
     case err_or_resp of
