@@ -5,7 +5,7 @@ module WeiXin.PublicPlatform.Types
     , UrlText(..)
     ) where
 
-import ClassyPrelude hiding (FilePath, (<.>), (</>))
+import ClassyPrelude hiding (FilePath, (<.>), (</>), try)
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
@@ -29,7 +29,7 @@ import Text.Read                            (Read(..))
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Yesod.Helpers.Parsec                 (SimpleStringRep(..))
-import Text.Parsec hiding ((<|>))
+import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
 
 import WeiXin.PublicPlatform.Utils
@@ -165,7 +165,7 @@ instance ToJSON WxppScene where
 
 instance FromJSON WxppScene where
     parseJSON v = do
-        r <- (Left <$> parseJSON v) <|> (Right <$> parseJSON v)
+        r <- (Left <$> parseJSON v) ClassyPrelude.<|> (Right <$> parseJSON v)
         case r of
             Left i -> return $ WxppSceneInt $ WxppIntSceneID i
             Right t -> do
@@ -200,12 +200,13 @@ instance ToJSON WxppMakeSceneResult where
 -- 但文档仅在“用户未关注时……”这一情况下说有些前缀
 -- 另一种情况“用户已关注……”时则只说是个 32 位整数
 -- 因此目前不知道如果创建时用的是字串型场景ID，在后一种情况下会是什么样子
+-- 测试结果：qrscene_ 的确是有时有，有时无
 instance SimpleStringRep WxppScene where
 
     simpleEncode (WxppSceneInt (WxppIntSceneID x)) = "qrscene_" ++ show x
     simpleEncode (WxppSceneStr (WxppStrSceneID x)) = "qrscene_" ++ T.unpack x
 
-    simpleParser = parse_as_int <|> parse_as_str
+    simpleParser = try parse_as_int Text.Parsec.<|> parse_as_str
         where
             parse_as_int = do
                 _ <- optional $ string "qrscene_"
