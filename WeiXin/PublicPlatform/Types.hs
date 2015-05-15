@@ -177,21 +177,22 @@ instance FromJSON WxppScene where
 -- | 创建二维码接口的返回报文
 data WxppMakeSceneResult = WxppMakeSceneResult
                                 QRTicket
-                                NominalDiffTime
+                                (Maybe NominalDiffTime)
                                 UrlText
 
 instance FromJSON WxppMakeSceneResult where
     parseJSON = withObject "WxppMakeSceneResult" $ \obj -> do
                     WxppMakeSceneResult
                         <$> ( obj .: "ticket" )
-                        <*> ( (fromIntegral :: Int -> NominalDiffTime) <$> obj .: "expire_seconds")
+                        <*> ( fmap (fromIntegral :: Int -> NominalDiffTime) <$> obj .:? "expire_seconds")
                         <*> ( UrlText <$> obj .: "url" )
 
 instance ToJSON WxppMakeSceneResult where
-    toJSON (WxppMakeSceneResult ticket ttl url) =
-        object  [ "ticket" .= ticket
-                , "expire_seconds" .= (round ttl :: Int)
-                , "url" .= unUrlText url
+    toJSON (WxppMakeSceneResult ticket m_ttl url) =
+        object  $ catMaybes $
+                [ Just $ "ticket" .= ticket
+                , flip fmap m_ttl $ \ttl -> "expire_seconds" .= (round ttl :: Int)
+                , Just $ "url" .= unUrlText url
                 ]
 
 -- | 此实例实现对应于 WxppScene 在 XML 的编码方式
