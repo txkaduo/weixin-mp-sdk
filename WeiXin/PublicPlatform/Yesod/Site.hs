@@ -96,18 +96,18 @@ postMessageR = do
     lbs <- liftIO $ lazyRequestBody req
     let app_config  = wxppSubAppConfig foundation
         app_id      = wxppAppConfigAppID app_config
-        ak          = wxppConfigAppAesKey app_config
-        bak_aks     = wxppConfigAppBackupAesKeys app_config
+        aks         = wxppConfigAppAesKey app_config : wxppConfigAppBackupAesKeys app_config
         app_token   = wxppConfigAppToken app_config
 
 
     err_or_resp <- lift $ runExceptT $ do
-        decrypted_xml <-
+        (decrypted_xml, m_enc_akey) <-
             if enc
                 then do
-                    (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id (ak:bak_aks))
-                        >>= maybe (throwE $ "Internal Error: Assertion Failed") (return . LB.fromStrict)
-                else return lbs
+                    (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
+                        >>= maybe (throwE $ "Internal Error: Assertion Failed")
+                                (return . (LB.fromStrict *** Just))
+                else return (lbs, Nothing)
 
         let err_or_parsed = parse_xml_lbs decrypted_xml >>= wxppInMsgEntityFromDocument
         m_ime <- case err_or_parsed of
@@ -156,10 +156,12 @@ postMessageR = do
                     fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
                         liftM (LT.toStrict . renderText def) $ do
                             let out_msg_entity = mk_out_msg_entity out_msg
-                            if enc
-                                then ExceptT $ wxppOutMsgEntityToDocumentE
-                                                    app_id app_token ak out_msg_entity
-                                else return $ wxppOutMsgEntityToDocument out_msg_entity
+                            case m_enc_akey of
+                                Just enc_akey ->
+                                    ExceptT $ wxppOutMsgEntityToDocumentE
+                                                    app_id app_token enc_akey out_msg_entity
+                                Nothing ->
+                                    return $ wxppOutMsgEntityToDocument out_msg_entity
 
     case err_or_resp of
         Left err -> do

@@ -58,7 +58,7 @@ wxppTryDecryptByteStringDocumentE ::
     WxppAppID
     -> [AesKey]
     -> Document
-    -> Either String (Maybe ByteString)
+    -> Either String (Maybe (ByteString, AesKey))
         -- ^ 如果全部失败，取第一个错误
         -- 如果有一个成功就直接返回成功
         -- 如果失败、成功都没有（只出现在 AesKey 列表为空的情况）
@@ -70,7 +70,7 @@ wxppTryDecryptByteStringDocumentE app_id ak_list doc =
         ((err:_),   _       )   -> Left err
     where
         (fails, dones) = partitionEithers $ flip map ak_list $
-                            \ak -> wxppDecryptByteStringDocumentE app_id ak doc
+                            \ak -> (, ak) <$> wxppDecryptByteStringDocumentE app_id ak doc
 
 -- | get message from 'Encrypt' element
 wxppInMsgEntityFromDocumentE ::
