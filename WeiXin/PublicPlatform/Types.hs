@@ -969,10 +969,12 @@ instance FromJSON EndUserQueryResult where
 instance ToJSON EndUserQueryResult where
     toJSON (EndUserQueryResultNotSubscribed open_id) = object $
         [ "openid"      .= open_id
+        , "subscribe"   .= (0 :: Int)
         ]
 
     toJSON (EndUserQueryResult open_id nickname m_gender lang city province country headimgurl subs_time m_union_id) = object
         [ "openid"      .= open_id
+        , "subscribe"   .= (1 :: Int)
         , "nickname"    .= nickname
         , "sex"         .= genderToInt m_gender
         , "language"    .= unSimpleLocaleName lang
