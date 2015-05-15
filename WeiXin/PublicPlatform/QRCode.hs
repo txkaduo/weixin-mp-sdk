@@ -19,9 +19,14 @@ wxppQrCodeCreatePersist ::
     AccessToken
     -> WxppScene
     -> m WxppMakeSceneResult
-wxppQrCodeCreatePersist =
+wxppQrCodeCreatePersist atk scene = do
+    let action = case scene of
+                    WxppSceneInt {} -> "QR_LIMIT_SCENE" :: Text
+                    WxppSceneStr {} -> "QR_LIMIT_STR_SCENE"
     wxppQrCodeCreateInternal
-        [ "action_name" .= ("QR_LIMIT_SCENE" :: Text) ]
+        [ "action_name" .= action ]
+        atk
+        scene
 
 
 -- | 创建短期场景二维码
@@ -50,7 +55,7 @@ wxppQrCodeCreateInternal js_pairs (AccessToken { accessTokenData = atk }) scene 
     let url = wxppRemoteApiBaseUrl ++ "/qrcode/create"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ toJSON $ object $
-                ("scene" .= scene) : js_pairs)
+                ( "action_info" .= object [ "scene" .= scene ] ) : js_pairs)
         >>= asWxppWsResponseNormal'
 
 
