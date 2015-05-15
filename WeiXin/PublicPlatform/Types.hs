@@ -202,17 +202,17 @@ instance ToJSON WxppMakeSceneResult where
 -- 因此目前不知道如果创建时用的是字串型场景ID，在后一种情况下会是什么样子
 instance SimpleStringRep WxppScene where
 
-    simpleEncode (WxppSceneInt (WxppIntSceneID x)) = "qrcode_" ++ show x
-    simpleEncode (WxppSceneStr (WxppStrSceneID x)) = "qrcode_" ++ T.unpack x
+    simpleEncode (WxppSceneInt (WxppIntSceneID x)) = "qrscene_" ++ show x
+    simpleEncode (WxppSceneStr (WxppStrSceneID x)) = "qrscene_" ++ T.unpack x
 
     simpleParser = parse_as_int <|> parse_as_str
         where
             parse_as_int = do
-                _ <- optional $ string "qrcode_"
+                _ <- optional $ string "qrscene_"
                 WxppSceneInt . WxppIntSceneID <$> simpleParser
 
             parse_as_str = do
-                _ <- optional $ string "qrcode_"
+                _ <- optional $ string "qrscene_"
                 WxppSceneStr . WxppStrSceneID . fromString <$> many1 anyChar
 
 
