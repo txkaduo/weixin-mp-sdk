@@ -10,7 +10,7 @@ import Yesod
 import Database.Persist.Quasi
 import Control.Monad.Logger
 import Network.Wai                          (Request)
-import Data.Bits                            (shift)
+import Data.Bits                            ((.&.))
 import Network.Socket                       (SockAddr(..))
 import Network.Wai                          (remoteHost)
 import Data.Aeson
@@ -39,7 +39,7 @@ loopbackOnlyRequestAuthChecker _ req = return $ isLoopbackSockAddr $ remoteHost 
 isLoopbackSockAddr :: SockAddr -> Bool
 isLoopbackSockAddr addr =
     case addr of
-        SockAddrInet _ w        -> w `shift` 24  == 127
+        SockAddrInet _ w        -> w .&. 0xFF  == 127
         SockAddrInet6 _ _ w _   -> w == (0, 0, 0, 1)
         _                       -> False
 
