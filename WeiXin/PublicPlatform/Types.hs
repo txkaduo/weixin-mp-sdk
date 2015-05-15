@@ -950,7 +950,7 @@ instance FromJSON EndUserQueryResult where
                         city <- obj .: "city"
                         lang <- SimpleLocaleName <$> obj .: "language"
                         province <- obj .: "province"
-                        contry <- obj .: "contry"
+                        country <- obj .: "country"
                         headimgurl <- UrlText <$> obj .: "headimgurl"
                         subs_time <- epochIntToUtcTime <$> obj .: "subscribe_time"
                         m_union_id <- obj .:? "unionid"
@@ -961,7 +961,7 @@ instance FromJSON EndUserQueryResult where
                                     lang
                                     city
                                     province
-                                    contry
+                                    country
                                     headimgurl
                                     subs_time
                                     m_union_id
@@ -971,14 +971,14 @@ instance ToJSON EndUserQueryResult where
         [ "openid"      .= open_id
         ]
 
-    toJSON (EndUserQueryResult open_id nickname m_gender lang city province contry headimgurl subs_time m_union_id) = object
+    toJSON (EndUserQueryResult open_id nickname m_gender lang city province country headimgurl subs_time m_union_id) = object
         [ "openid"      .= open_id
         , "nickname"    .= nickname
         , "sex"         .= genderToInt m_gender
         , "language"    .= unSimpleLocaleName lang
         , "city"        .= city
         , "province"    .= province
-        , "contry"      .= contry
+        , "country"     .= country
         , "headimgurl"  .= unUrlText headimgurl
         , "subscribe_time".= utcTimeToEpochInt subs_time
         , "unionid"     .= m_union_id
@@ -1050,7 +1050,7 @@ data WxppForwardedEnv = WxppForwardedEnv {
 instance ToJSON WxppForwardedEnv where
     toJSON x = object
                 [ "access_token"    .= wxppFwdAccessToken x
-                , "use_info"        .= wxppFwdUserInfo x
+                , "user_info"       .= wxppFwdUserInfo x
                 ]
 
 instance FromJSON WxppForwardedEnv where
