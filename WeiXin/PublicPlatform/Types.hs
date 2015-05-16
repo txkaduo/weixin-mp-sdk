@@ -164,8 +164,8 @@ instance ToJSON WxppScene where
     toJSON (WxppSceneStr (WxppStrSceneID x)) = object [ "scene_str" .= x ]
 
 instance FromJSON WxppScene where
-    parseJSON v = do
-        r <- (Left <$> parseJSON v) ClassyPrelude.<|> (Right <$> parseJSON v)
+    parseJSON = withObject "WxppScene" $ \obj -> do
+        r <- (Left <$> obj .: "scene_id") ClassyPrelude.<|> (Right <$> obj .: "scene_str")
         case r of
             Left i -> return $ WxppSceneInt $ WxppIntSceneID i
             Right t -> do
