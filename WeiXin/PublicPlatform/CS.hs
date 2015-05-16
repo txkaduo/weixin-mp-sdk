@@ -19,6 +19,7 @@ wxppCsSendOutMsg ::
     AccessToken
     -> Maybe WxppKfAccount
     -> WxppOutMsgEntity
+            -- ^ 其中的 wxppOutFromUserName 字段是没用到的
     -> m ()
 wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_entity = do
     let url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"

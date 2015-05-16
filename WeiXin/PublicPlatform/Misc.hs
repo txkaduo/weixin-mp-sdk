@@ -6,11 +6,13 @@ import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
 import Filesystem.Path.CurrentOS            (encodeString, fromText, (</>))
+import Control.Concurrent                   (threadDelay)
 import Control.Monad.Logger
 import Control.Monad.Catch
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.CS
 import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.EndUser
@@ -118,3 +120,34 @@ logWxppWsExcThen op_name on_err on_ok f = do
             on_err $ toException err
 
         Right (Right x) -> on_ok x
+
+
+-- | 这个函数用于创建一个长期运行的线程
+loopCheckAndPrompt :: (MonadIO m, MonadLogger m, MonadCatch m) =>
+    (WxppAppID -> IO (Maybe AccessToken))
+    -> MVar ForwardUrlMap
+    -> m ()
+loopCheckAndPrompt get_atk mvar = go
+    where
+        go = do
+            now <- liftIO getCurrentTime
+            m2 <- liftIO $ modifyMVar mvar $
+                        return . Map.partition ((> now) . fst . snd)
+
+            forM_ (Map.toList m2) $ \((open_id, app_id), (_, (_, txt))) -> do
+                let outmsg_e = WxppOutMsgEntity open_id
+                                (error "wxppOutFromUserName forced in loopCheckAndPrompt")
+                                now
+                                (WxppOutMsgText txt)
+
+                logWxppWsExcThen "loopCheckAndPrompt" (const $ return ()) (const $ return ()) $ do
+                    m_atk <- liftIO $ get_atk app_id
+                    case m_atk of
+                        Nothing -> do
+                            $logErrorS wxppLogSource  "no access token available"
+
+                        Just atk -> do
+                                (wxppCsSendOutMsg atk Nothing outmsg_e)
+
+            liftIO $ threadDelay $ 1000 * 1000
+            go

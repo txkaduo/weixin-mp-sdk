@@ -360,7 +360,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                                 tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
 
 
-type ForwardUrlMap = Map (WxppOpenID, WxppAppID) (UrlText, UTCTime)
+type ForwardUrlMap = Map (WxppOpenID, WxppAppID) (UrlText, (UTCTime, Text))
 
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
 data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson
@@ -399,11 +399,17 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                         >>= liftM (view responseBody) . asJSON)
                         `catchAll` handle_exc
+
+                -- 对方返回会话的过期时间如果是 Nothing，代表会话结束
                 case m_exp of
-                    Nothing -> return ()
-                    Just exp_t -> liftIO $ do
-                                    modifyMVar_ mvar $
-                                        return . Map.insert (open_id, app_id) (url, exp_t)
+                    Nothing -> do
+                        liftIO $ modifyMVar_ mvar $
+                                        return . Map.delete (open_id, app_id)
+                    Just (exp_t, timeout_txt) -> do
+                        liftIO $ modifyMVar_ mvar $
+                                        return . Map.insert
+                                                    (open_id, app_id)
+                                                    (url, (exp_t, timeout_txt))
 
                 return r
         where
@@ -447,7 +453,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 case mx of
                     Nothing -> return []
 
-                    Just (url, expire_time) -> do
+                    Just (url, (expire_time, _)) -> do
                         now <- liftIO getCurrentTime
                         if now >= expire_time
                             then return []
@@ -495,11 +501,17 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                                         >>= liftM (view responseBody) . asJSON)
                                         `catchAll` handle_exc
+
+                        -- 对方返回会话的过期时间如果是 Nothing，代表会话结束
                         case m_exp of
-                            Nothing -> return ()
-                            Just exp_t -> liftIO $ do
-                                            modifyMVar_ mvar $
-                                                return . Map.insert (open_id, app_id) (url, exp_t)
+                            Nothing -> do
+                                liftIO $ modifyMVar_ mvar $
+                                                return . Map.delete (open_id, app_id)
+                            Just (exp_t, timeout_txt) -> do
+                                liftIO $ modifyMVar_ mvar $
+                                        return . Map.insert
+                                                    (open_id, app_id)
+                                                    (url, (exp_t, timeout_txt))
 
                         return r
         where
