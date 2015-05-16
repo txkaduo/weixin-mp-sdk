@@ -55,6 +55,14 @@ type WxppInMsgHandlerResult = [(Bool, Maybe WxppOutMsg)]
 type WxppInMsgHandler m = WxppInMsgProcessor m WxppInMsgHandlerResult
 
 
+hasPrimaryOutMsg :: WxppInMsgHandlerResult -> Bool
+hasPrimaryOutMsg = isJust . find fst
+
+hasPrimaryOutMsgE :: Either a WxppInMsgHandlerResult -> Bool
+hasPrimaryOutMsgE (Left _)  = False
+hasPrimaryOutMsgE (Right x) = hasPrimaryOutMsg x
+
+
 -- | 可以从配置文件中读取出来的某种处理值
 class JsonConfigable h where
     -- | 从配置文件中读取的数据未必能提供构造完整的值的所有信息
@@ -171,7 +179,6 @@ tryEveryInMsgHandler handlers bs m_ime = do
             <> ": " <> err
 
     return $ Right $ join res_lst
-
 
 tryEveryInMsgHandler' :: MonadLogger m =>
     AcidState WxppAcidState
@@ -353,16 +360,19 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                                 tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
 
 
+type ForwardUrlMap = Map (WxppOpenID, WxppAppID) (UrlText, UTCTime)
+
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
-data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson UrlText NominalDiffTime
+data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson
+                                    (MVar ForwardUrlMap)
+                                    UrlText NominalDiffTime
 
 instance JsonConfigable WxppInMsgForwardAsJson where
-    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = ()
+    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = MVar ForwardUrlMap
 
     isNameOfInMsgHandler _ x = x == "forward-as-json"
 
-    parseWithExtraData _ _ obj = parseForwardData WxppInMsgForwardAsJson obj
-
+    parseWithExtraData _ mvar obj = parseForwardData (WxppInMsgForwardAsJson mvar) obj
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
@@ -370,7 +380,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardAsJson
     where
 
-    processInMsg (WxppInMsgForwardAsJson url ttl) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardAsJson mvar url ttl) acid get_atk _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -382,27 +392,78 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         >>= maybe (throwE $ "no access token available") return
                 let opts = defaults
                     open_id = wxppInFromUserName ime
+                    app_id  = accessTokenApp atk
                 qres <- wxppCachedQueryEndUserInfo ttl acid atk open_id
                 let fwd_env = WxppForwardedEnv qres atk
                 let fwd_msg = (ime, fwd_env)
-                ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
-                    >>= liftM (view responseBody) . asJSON)
-                    `catchAll` handle_exc
+                (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
+                        >>= liftM (view responseBody) . asJSON)
+                        `catchAll` handle_exc
+                case m_exp of
+                    Nothing -> return ()
+                    Just exp_t -> liftIO $ do
+                                    modifyMVar_ mvar $
+                                        return . Map.insert (open_id, app_id) (url, exp_t)
 
+                return r
         where
             handle_exc ex =
                 throwE $ "Failed to forward incoming message: " ++ show ex
 
 
+-- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
+-- 仅当 MVar 当时有值时才执行，否则就不工作
+data WxppInMsgForwardDyn = WxppInMsgForwardDyn (MVar ForwardUrlMap) NominalDiffTime
+
+instance JsonConfigable WxppInMsgForwardDyn where
+    type JsonConfigableUnconfigData WxppInMsgForwardDyn = MVar ForwardUrlMap
+
+    isNameOfInMsgHandler _ x = x == "forward-dynamically"
+
+    parseWithExtraData _ mvar obj = WxppInMsgForwardDyn mvar
+                                    <$> ((fromIntegral :: Int -> NominalDiffTime)
+                                            <$> obj .:? "user-info-cache-ttl" .!= (3600 * 2))
+
+
+type instance WxppInMsgProcessResult WxppInMsgForwardDyn = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m WxppInMsgForwardDyn
+    where
+
+    processInMsg (WxppInMsgForwardDyn mvar ttl) acid get_atk bs m_ime = runExceptT $ do
+        case m_ime of
+            Nothing -> do
+                $logWarnS wxppLogSource $
+                    "Cannot forward incoming message as JSON because it could not be parsed."
+                return []
+
+            Just ime -> do
+                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        >>= maybe (throwE $ "no access token available") return
+                let open_id = wxppInFromUserName ime
+                    app_id  = accessTokenApp atk
+                mx <- liftIO $ withMVar mvar $ return . Map.lookup (open_id, app_id)
+                case mx of
+                    Nothing -> return []
+
+                    Just (url, expire_time) -> do
+                        now <- liftIO getCurrentTime
+                        if now >= expire_time
+                            then return []
+                            else ExceptT $ processInMsg (WxppInMsgForwardAsJson mvar url ttl)
+                                                acid get_atk bs m_ime
+
+
 -- | Handler: 把各种带有 WxppScene 事件中的 WxppScene 用 HTTP POST 转发至指定的 URL
-data WxppInMsgForwardScene = WxppInMsgForwardScene UrlText NominalDiffTime
+data WxppInMsgForwardScene = WxppInMsgForwardScene (MVar ForwardUrlMap) UrlText NominalDiffTime
 
 instance JsonConfigable WxppInMsgForwardScene where
-    type JsonConfigableUnconfigData WxppInMsgForwardScene = ()
+    type JsonConfigableUnconfigData WxppInMsgForwardScene = MVar ForwardUrlMap
 
     isNameOfInMsgHandler _ x = x == "forward-scene"
 
-    parseWithExtraData _ _ obj = parseForwardData WxppInMsgForwardScene obj
+    parseWithExtraData _ mvar obj = parseForwardData (WxppInMsgForwardScene mvar) obj
 
 
 type instance WxppInMsgProcessResult WxppInMsgForwardScene = WxppInMsgHandlerResult
@@ -411,7 +472,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardScene
     where
 
-    processInMsg (WxppInMsgForwardScene url ttl) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardScene mvar url ttl) acid get_atk _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -427,12 +488,20 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                                 >>= maybe (throwE $ "no access token available") return
                         let opts = defaults
                             open_id = wxppInFromUserName ime
+                            app_id = accessTokenApp atk
                         qres <- wxppCachedQueryEndUserInfo ttl acid atk open_id
                         let fwd_env = WxppForwardedEnv qres atk
                         let fwd_msg = ((scene, ticket), fwd_env)
-                        ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
-                            >>= liftM (view responseBody) . asJSON)
-                            `catchAll` handle_exc
+                        (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
+                                        >>= liftM (view responseBody) . asJSON)
+                                        `catchAll` handle_exc
+                        case m_exp of
+                            Nothing -> return ()
+                            Just exp_t -> liftIO $ do
+                                            modifyMVar_ mvar $
+                                                return . Map.insert (open_id, app_id) (url, exp_t)
+
+                        return r
         where
             handle_exc ex =
                 throwE $ "Failed to forward incoming message: " ++ show ex
@@ -752,14 +821,16 @@ allBasicWxppInMsgHandlerPrototypes ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
     WxppAppID
     -> FilePath
+    -> MVar ForwardUrlMap
     -> [WxppInMsgHandlerPrototype m]
-allBasicWxppInMsgHandlerPrototypes _app_id msg_dir =
+allBasicWxppInMsgHandlerPrototypes _app_id msg_dir mvar =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppMatchedKeywordArticles) msg_dir
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) ()
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardScene) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) mvar
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardScene) mvar
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardDyn) mvar
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
     ]
