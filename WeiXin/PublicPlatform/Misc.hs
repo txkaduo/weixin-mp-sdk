@@ -123,11 +123,11 @@ logWxppWsExcThen op_name on_err on_ok f = do
 
 
 -- | 这个函数用于创建一个长期运行的线程
-loopCheckAndPrompt :: (MonadIO m, MonadLogger m, MonadCatch m) =>
+loopCleanupTimedOutForwardUrl :: (MonadIO m, MonadLogger m, MonadCatch m) =>
     (WxppAppID -> IO (Maybe AccessToken))
     -> MVar ForwardUrlMap
     -> m ()
-loopCheckAndPrompt get_atk mvar = go
+loopCleanupTimedOutForwardUrl get_atk mvar = go
     where
         go = do
             now <- liftIO getCurrentTime
