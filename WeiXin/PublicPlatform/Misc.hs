@@ -73,7 +73,10 @@ getMaybeWxppSubOfYesodApp acid wxpp_config_map run_logging_t get_protos send_msg
                     return $ Left "msg-handlers.yml error"
 
                 Right in_msg_handlers -> do
-                    tryEveryInMsgHandler'
+                    -- 这里可以选择使用 tryEveryInMsgHandler'
+                    -- 那样就会所有 handler 保证处理一次
+                    -- tryEveryInMsgHandler'
+                    tryInMsgHandlerUntilFirstPrimary'
                             acid
                             (liftIO get_access_token)
                             in_msg_handlers

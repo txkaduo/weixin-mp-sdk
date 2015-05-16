@@ -181,6 +181,37 @@ tryEveryInMsgHandler' :: MonadLogger m =>
 tryEveryInMsgHandler' acid get_atk known_hs = do
     tryEveryInMsgHandler $ flip map known_hs $ \h -> processInMsg h acid get_atk
 
+
+-- | 逐一试各个函数，直至有一个提供“主”回应
+tryInMsgHandlerUntilFirstPrimary :: MonadLogger m =>
+    [WxppInMsgHandler m] -> WxppInMsgHandler m
+tryInMsgHandlerUntilFirstPrimary handlers bs m_ime = do
+    (errs, res_lst) <- liftM (partitionEithers . reverse) $ go [] handlers
+    forM_ errs $ \err -> do
+        $(logWarnS) wxppLogSource $ T.pack $
+            "Error when handling incoming message, "
+            <> "MsgId=" <> (show $ join $ fmap wxppInMessageID m_ime)
+            <> ": " <> err
+
+    return $ Right $ join res_lst
+    where
+        go rs [] = return rs
+        go rs (x:xs) = do
+            r <- x bs m_ime
+            let rs' = r:rs
+            if isJust $ find fst $ join $ rights rs'
+                then return rs'
+                else go rs' xs
+
+tryInMsgHandlerUntilFirstPrimary' :: MonadLogger m =>
+    AcidState WxppAcidState
+    -> m (Maybe AccessToken)
+    -> [SomeWxppInMsgHandler m]
+    -> WxppInMsgHandler m
+tryInMsgHandlerUntilFirstPrimary' acid get_atk known_hs =
+    tryInMsgHandlerUntilFirstPrimary $ flip map known_hs $ \h -> processInMsg h acid get_atk
+
+
 tryWxppWsResultE :: MonadCatch m =>
     String -> ExceptT String m b -> ExceptT String m b
 tryWxppWsResultE op f =
