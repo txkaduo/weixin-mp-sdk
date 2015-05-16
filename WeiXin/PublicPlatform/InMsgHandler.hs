@@ -663,6 +663,29 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgSceneRE where
                         return $ testWithPosixREList lst $ T.unpack str
 
 
+-- | Predictor: Logical And of some predictors
+data WxppInMsgLogicalAndPred m = WxppInMsgLogicalAndPred [ SomeWxppInMsgPredictor m ]
+
+instance JsonConfigable (WxppInMsgLogicalAndPred m) where
+    type JsonConfigableUnconfigData (WxppInMsgLogicalAndPred m) = [WxppInMsgPredictorPrototype m]
+
+    isNameOfInMsgHandler _ x = x == "logical-and"
+
+    parseWithExtraData _ proto_pred obj = do
+        fmap WxppInMsgLogicalAndPred $
+            obj .: "predictors"
+                >>= parseArray "predictors"
+                        (withObject "predictor" $ parseWxppInMsgProcessor proto_pred)
+
+type instance WxppInMsgProcessResult (WxppInMsgLogicalAndPred m) = Bool
+
+instance (Monad m) =>
+    IsWxppInMsgProcessor m (WxppInMsgLogicalAndPred m)
+    where
+
+    processInMsg (WxppInMsgLogicalAndPred preds) acid get_atk bs m_ime = runExceptT $ do
+        liftM (all id) $ forM preds $ \p -> ExceptT $ processInMsg p acid get_atk bs m_ime
+
 
 -- | Handler: 固定地返回一个某个信息
 data ConstResponse = ConstResponse FilePath Bool WxppOutMsgLoader
