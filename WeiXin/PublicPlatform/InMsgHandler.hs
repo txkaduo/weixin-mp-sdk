@@ -393,7 +393,8 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 let opts = defaults
                     open_id = wxppInFromUserName ime
                     app_id  = accessTokenApp atk
-                qres <- wxppCachedQueryEndUserInfo ttl acid atk open_id
+                qres <- tryWxppWsResultE "wxppCachedQueryEndUserInfo" $
+                            wxppCachedQueryEndUserInfo ttl acid atk open_id
                 let fwd_env = WxppForwardedEnv qres atk
                 let fwd_msg = (ime, fwd_env)
                 (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
@@ -495,7 +496,8 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         let opts = defaults
                             open_id = wxppInFromUserName ime
                             app_id = accessTokenApp atk
-                        qres <- wxppCachedQueryEndUserInfo ttl acid atk open_id
+                        qres <- tryWxppWsResultE "wxppCachedQueryEndUserInfo" $
+                                    wxppCachedQueryEndUserInfo ttl acid atk open_id
                         let fwd_env = WxppForwardedEnv qres atk
                         let fwd_msg = ((scene, ticket), fwd_env)
                         (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
