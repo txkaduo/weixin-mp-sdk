@@ -360,6 +360,45 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                                 tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
 
 
+-- | Handler: 回复用户的 OpenID 及 UnionID
+data WxppInMsgShowWxppID = WxppInMsgShowWxppID
+
+instance JsonConfigable WxppInMsgShowWxppID where
+    type JsonConfigableUnconfigData WxppInMsgShowWxppID = ()
+
+    isNameOfInMsgHandler _ x = x == "show-wxpp-id"
+
+    parseWithExtraData _ _ _obj = return WxppInMsgShowWxppID
+
+
+type instance WxppInMsgProcessResult WxppInMsgShowWxppID = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m WxppInMsgShowWxppID
+    where
+
+    processInMsg WxppInMsgShowWxppID _acid get_atk _bs m_ime = runExceptT $ do
+        case m_ime of
+            Nothing -> return []
+
+            Just ime -> do
+                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        >>= maybe (throwE $ "no access token available") return
+                let open_id = wxppInFromUserName ime
+                qres <- tryWxppWsResultE "wxppQueryEndUserInfo" $
+                            wxppQueryEndUserInfo atk open_id
+
+                let txt = T.unlines [ "OpenID: " <> unWxppOpenID open_id
+                                    , "UnionID: " <>
+                                        (fromMaybe "" $
+                                            fmap unWxppUnionID $ endUserQueryResultUnionID qres)
+                                    ]
+                return $ return $
+                    ( True
+                    , Just $ WxppOutMsgText txt
+                    )
+
+
 type ForwardUrlMap = Map (WxppOpenID, WxppAppID) (UrlText, (UTCTime, Text))
 
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
@@ -847,6 +886,7 @@ allBasicWxppInMsgHandlerPrototypes _app_id msg_dir mvar =
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardDyn) mvar
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
     , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgShowWxppID) ()
     ]
 
 
