@@ -33,3 +33,17 @@ WxppStoredMedia
     UniqueWxppStoredMedia extId app msg
             -- ^ 按文档，WxppMediaID可能会被重用
             -- 因此加上它所相关联的消息作为
+
+
+-- | 目前微信平台没有从 union id 返查用户的 open id 的机制
+-- 这个表用于缓存记录 union id ，以便从 open id 找 union id
+-- 以后可能还会用于缓存其它信息
+WxppUserCachedInfo
+    app                 WxppAppID maxlen=200
+    openId              WxppOpenID maxlen=200
+    unionId             WxppUnionID Maybe maxlen=200
+                            -- ^ should create INDEX manually
+
+    updatedTime         UTCTime
+
+    UniqueWxppUserCachedInfo openId app

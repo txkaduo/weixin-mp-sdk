@@ -11,11 +11,15 @@ import ClassyPrelude
 import Yesod
 import Control.Lens
 import Network.Wreq
+import Control.Monad.Trans.Except
 import qualified Data.ByteString.Lazy       as LB
+
+import Yesod.Helpers.Persist
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 
@@ -41,7 +45,7 @@ newtype WxppSubDBActionRunner m = WxppSubDBActionRunner
 #endif
         }
 
--- | 保存所有收到的比较原始的消息（解密之后的结果）到数据库
+-- | Handler: 保存所有收到的比较原始的消息（解密之后的结果）到数据库
 data StoreInMsgToDB m = StoreInMsgToDB
                             WxppAppID
                             (WxppSubDBActionRunner m)
@@ -98,6 +102,67 @@ instance (MonadIO m
             media_downloader msg_record_id mid
 
         return $ Right $ return (False, Nothing)
+
+
+-- | Handler: 更新 WxppOpenIdUnionId 的记录
+data CacheAppOpenIdToUnionId m = CacheAppOpenIdToUnionId
+                                    (WxppSubDBActionRunner m)
+                                        -- ^ function to run DB actions
+
+type instance WxppInMsgProcessResult (CacheAppOpenIdToUnionId m) = WxppInMsgHandlerResult
+
+instance JsonConfigable (CacheAppOpenIdToUnionId m) where
+    type JsonConfigableUnconfigData (CacheAppOpenIdToUnionId m) = WxppSubDBActionRunner m
+
+    isNameOfInMsgHandler _ = ( == "update-openid-to-unionid" )
+
+    parseWithExtraData _ x _obj = return $ CacheAppOpenIdToUnionId x
+
+
+instance (MonadIO m
+    , MonadCatch m
+    , MonadLogger m
+    , Functor m
+#if !MIN_VERSION_persistent(2, 0, 0)
+    , MonadBaseControl IO m
+#endif
+    ) => IsWxppInMsgProcessor m (CacheAppOpenIdToUnionId m) where
+
+    processInMsg (CacheAppOpenIdToUnionId db_runner) _acid get_atk _bs m_ime = runExceptT $ do
+        forM_ m_ime $ \ime -> do
+            let m_subs_or_unsubs = case wxppInMessage ime of
+                            (WxppInMsgEvent WxppEvtSubscribe)               -> Just True
+                            (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))   -> Just True
+                            (WxppInMsgEvent WxppEvtUnsubscribe)             -> Just False
+                            _                                               -> Nothing
+
+            case m_subs_or_unsubs of
+                Just True -> do
+                    atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                            >>= maybe (throwE $ "no access token available") return
+                    let open_id = wxppInFromUserName ime
+                        app_id = accessTokenApp atk
+                    qres <- tryWxppWsResultE "wxppQueryEndUserInfo" $
+                                wxppQueryEndUserInfo atk open_id
+
+                    let m_uid = endUserQueryResultUnionID qres
+                    now <- liftIO getCurrentTime
+
+                    lift $ runWxppSubDBActionRunner db_runner $ do
+                        void $ insertOrUpdate
+                            (WxppUserCachedInfo app_id open_id m_uid now)
+                            [ WxppUserCachedInfoUnionId =. m_uid
+                            , WxppUserCachedInfoUpdatedTime =. now
+                            ]
+
+                Just False -> do
+                    -- 取消关注时，目前先不删除记录
+                    -- 估计 openid unionid 对于固定的用户是固定的
+                    return ()
+
+                _ -> return ()
+
+        return []
 
 
 -- | 下载多媒体文件，保存至数据库
