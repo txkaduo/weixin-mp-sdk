@@ -406,6 +406,7 @@ initWxppUserDbCacheOfApp atk = do
                         (endUserQueryResultOpenID qres)
                         (endUserQueryResultUnionID qres)
                         now
+            lift transactionSave
 
             yield ()
 
