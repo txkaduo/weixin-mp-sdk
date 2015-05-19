@@ -16,8 +16,22 @@ import Network.Wai                          (remoteHost)
 import Data.Aeson
 import Data.Default
 
+import Database.Persist.Sql
+
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.InMsgHandler
+
+
+wxppSubModelsDef ::
+#if MIN_VERSION_persistent(2, 0, 0)
+    [EntityDef]
+#else
+    [EntityDef SqlType]
+#endif
+wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
+
+share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
+                    $(persistFileWith lowerCaseSettings "models")
 
 
 -- | 判断 WAI 请求是否来自可信的来源
@@ -78,10 +92,17 @@ data WxppSub =
                     -- ^ a computation to get usable access token
                 , wxppSubGetUnionID     :: AccessToken -> WxppOpenID -> IO (Maybe WxppUnionID)
                     -- ^ a function to get union_id by open_id
+                , wxppSubRunDBAction    ::
+                                        -- XXX: 这里写死两个事实
+                                        -- * persistent 版本要 2.0
+                                        -- * 只能是 SQL 类型数据库
+                                        forall a m. (MonadIO m, MonadBaseControl IO m) =>
+                                                        SqlPersistT m a -> m a
+                    -- ^ execute any DB actions
                 , wxppSubSendOutMsgs    :: [WxppOutMsgEntity] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
-                , wxppSubRunLoggingT    :: forall a. LoggingT IO a -> IO a
+                , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 }
 
@@ -101,30 +122,21 @@ mkYesodSubData "MaybeWxppSub" [parseRoutes|
 /x/user/info/#WxppOpenID    QueryUserInfoR      GET
 /x/qrcode/persist           CreateQrCodePersistR POST
 /x/qrcode/sm                ShowSimulatedQRCodeR GET
+/init/cached-user-info      InitCachedUsersR    GET
 |]
 
 
 -- | 为 App 无关的接口打包成一个 subsite
 data WxppSubNoApp = WxppSubNoApp {
-                        wxppSubNoAppUnionIdByOpenId :: WxppUnionID -> IO [(WxppOpenID, WxppAppID)]
-                        , wxppSubNoAppRunLoggingT   :: forall a. LoggingT IO a -> IO a
-                        , wxppSubNoAppCheckWaiReq   :: RequestAuthChecker
+                        wxppSubNoAppUnionIdByOpenId     :: WxppUnionID -> IO [(WxppOpenID, WxppAppID)]
+                        , wxppSubNoAppRunLoggingT       :: forall a. LoggingT IO a -> IO a
+                        , wxppSubNoAppCheckWaiReq       :: RequestAuthChecker
                     }
 
 mkYesodSubData "WxppSubNoApp" [parseRoutes|
-/union-to-open/#WxppUnionID   LookupOpenIDByUnionIDR      GET
+/union-to-open/#WxppUnionID     LookupOpenIDByUnionIDR      GET
 |]
 
 -- | 把一些数据打包成字串后，作为模拟的 ticket
 type FakeQRTicket = (WxppScene, UrlText)
 
-wxppSubModelsDef ::
-#if MIN_VERSION_persistent(2, 0, 0)
-    [EntityDef]
-#else
-    [EntityDef SqlType]
-#endif
-wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
-
-share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
-                    $(persistFileWith lowerCaseSettings "models")

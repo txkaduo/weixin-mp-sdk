@@ -49,6 +49,8 @@ instance FromJSON GetUserResult where
                     return $ GetUserResult
                                 total count lst next_openid
 
+wxppOpenIdListInGetUserResult :: GetUserResult -> [WxppOpenID]
+wxppOpenIdListInGetUserResult (GetUserResult _ _ x _) = x
 
 -- | 调用服务器接口，查询所有订阅用户
 wxppGetEndUserSource ::

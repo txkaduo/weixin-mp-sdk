@@ -40,7 +40,7 @@ newtype WxppSubDBActionRunner m = WxppSubDBActionRunner
                     -- 暂时只能写死是 SqlPersistT
                     -- 这种写法不支持 MongoDB
                     (forall a .
-                        SqlPersistT (ResourceT m) a -> m a
+                        SqlPersistT m a -> m a
                     )
 #endif
         }

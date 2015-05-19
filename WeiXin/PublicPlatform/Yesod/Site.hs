@@ -32,7 +32,11 @@ import Data.Yaml                            (decodeEither')
 import Network.HTTP.Types.Status            (mkStatus)
 import Data.Conduit
 import Data.Conduit.Binary                  (sinkLbs)
+import qualified Data.Conduit.List          as CL
+import qualified Data.Conduit.Combinators   as CC
 import qualified Data.Aeson                 as A
+
+import Database.Persist.Sql
 
 import Text.Blaze.Svg.Renderer.Utf8 (renderSvg)   -- blaze-svg
 import qualified Data.QRCode as QR                -- haskell-qrencode
@@ -185,13 +189,13 @@ postMessageR = do
 
 
 checkWaiReqThen :: Yesod master =>
-    HandlerT MaybeWxppSub (HandlerT master IO) a
+    (WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) a)
     -> HandlerT MaybeWxppSub (HandlerT master IO) a
 checkWaiReqThen f = do
     foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
     b <- waiRequest >>= liftIO . (wxppSubTrustedWaiReq $ wxppSubOptions foundation)
     if b
-        then f
+        then f foundation
         else permissionDenied "denied by security check"
 
 
@@ -226,7 +230,7 @@ forwardWsResult op_name res = do
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 AccessToken
 getGetAccessTokenR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
-getGetAccessTokenR = checkWaiReqThen $ do
+getGetAccessTokenR = checkWaiReqThen $ \_ -> do
     alreadyExpired
     liftM toJSON $ getAccessTokenSubHandler
 
@@ -235,9 +239,8 @@ getGetAccessTokenR = checkWaiReqThen $ do
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 Maybe WxppUnionID
 getGetUnionIDR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
-getGetUnionIDR open_id = checkWaiReqThen $ do
+getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
-    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
     let sm_mode = wxppSubMakeupUnionID $ wxppSubOptions foundation
     if sm_mode
         then do
@@ -246,6 +249,16 @@ getGetUnionIDR open_id = checkWaiReqThen $ do
             atk <- getAccessTokenSubHandler' foundation
             (tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id)
                 >>= forwardWsResult "wxppSubGetUnionID"
+
+
+-- | 初始化 WxppUserCachedInfo 表的数据
+getInitCachedUsersR :: Yesod master =>
+    HandlerT MaybeWxppSub (HandlerT master IO) Value
+getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
+    alreadyExpired
+    atk <- getAccessTokenSubHandler' foundation
+    liftM toJSON $ liftIO $ wxppSubRunLoggingT foundation $
+                wxppSubRunDBAction foundation $ initWxppUserDbCacheOfApp atk
 
 
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
@@ -373,3 +386,26 @@ getAccessTokenSubHandler' foundation = do
 
 fakeUnionID :: WxppOpenID -> WxppUnionID
 fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
+
+
+-- | initialize db table: WxppUserCachedInfo
+initWxppUserDbCacheOfApp ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> SqlPersistT m Int
+initWxppUserDbCacheOfApp atk = do
+    wxppGetEndUserSource atk
+        =$= CL.concatMap wxppOpenIdListInGetUserResult
+        =$= CL.mapM (wxppQueryEndUserInfo atk)
+        =$= save_to_db
+        $$ CC.length
+    where
+        app_id = accessTokenApp atk
+        save_to_db = awaitForever $ \qres -> do
+            now <- liftIO getCurrentTime
+            _ <- lift $ insertBy $ WxppUserCachedInfo app_id
+                        (endUserQueryResultOpenID qres)
+                        (endUserQueryResultUnionID qres)
+                        now
+
+            yield ()
+
