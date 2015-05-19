@@ -16,7 +16,7 @@ import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
 import Control.Concurrent.Async             (async)
-import Control.Concurrent                   (threadDelay)
+import Control.Concurrent                   (threadDelay, forkIO)
 
 import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , reqGetParamE'
@@ -257,8 +257,12 @@ getInitCachedUsersR :: Yesod master =>
 getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     atk <- getAccessTokenSubHandler' foundation
-    liftM toJSON $ liftIO $ wxppSubRunLoggingT foundation $
-                wxppSubRunDBAction foundation $ initWxppUserDbCacheOfApp atk
+
+    _ <- liftIO $ forkIO $ wxppSubRunLoggingT foundation $ do
+                _ <- wxppSubRunDBAction foundation $ initWxppUserDbCacheOfApp atk
+                return ()
+
+    return $ toJSON ("run in background" :: Text)
 
 
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
@@ -395,18 +399,31 @@ initWxppUserDbCacheOfApp ::
 initWxppUserDbCacheOfApp atk = do
     wxppGetEndUserSource atk
         =$= CL.concatMap wxppOpenIdListInGetUserResult
-        =$= CL.mapM (wxppQueryEndUserInfo atk)
         =$= save_to_db
         $$ CC.length
     where
         app_id = accessTokenApp atk
-        save_to_db = awaitForever $ \qres -> do
+
+        save_to_db = awaitForever $ \open_id -> do
             now <- liftIO getCurrentTime
-            _ <- lift $ insertBy $ WxppUserCachedInfo app_id
-                        (endUserQueryResultOpenID qres)
-                        (endUserQueryResultUnionID qres)
-                        now
-            lift transactionSave
+            _ <- lift $ do
+                m_old <- getBy $ UniqueWxppUserCachedInfo open_id app_id
+                case m_old of
+                    Just _ -> do
+                        -- 假定 open id 及 union id 对于固定的 app 是固定的
+                        -- 已有的记录暂时不更新了
+                        -- 因为调用平台接口有点慢
+                        return ()
+
+                    Nothing -> do
+                        qres <- wxppQueryEndUserInfo atk open_id
+                        _ <- insertBy $ WxppUserCachedInfo app_id
+                                (endUserQueryResultOpenID qres)
+                                (endUserQueryResultUnionID qres)
+                                now
+                        return ()
+
+                transactionSave
 
             yield ()
 
