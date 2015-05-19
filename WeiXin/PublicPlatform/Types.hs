@@ -109,7 +109,7 @@ instance PathPiece WxppOpenID where
     fromPathPiece t             = WxppOpenID <$> fromPathPiece t
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
-                    deriving (Show, Eq, Ord, Typeable)
+                    deriving (Show, Read, Eq, Ord, Typeable)
 
 instance FromJSON WxppUnionID where
     parseJSON = fmap WxppUnionID . parseJSON
@@ -128,6 +128,9 @@ instance PersistField WxppUnionID where
 instance PersistFieldSql WxppUnionID where
     sqlType _ = SqlString
 
+instance PathPiece WxppUnionID where
+    toPathPiece (WxppUnionID x) = toPathPiece x
+    fromPathPiece t             = WxppUnionID <$> fromPathPiece t
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord)

@@ -189,7 +189,7 @@ checkWaiReqThen :: Yesod master =>
     -> HandlerT MaybeWxppSub (HandlerT master IO) a
 checkWaiReqThen f = do
     foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
-    b <- waiRequest >>= liftIO . (wxppSubTrustedWaiReq $ wxppSubOptions foundation) foundation
+    b <- waiRequest >>= liftIO . (wxppSubTrustedWaiReq $ wxppSubOptions foundation)
     if b
         then f
         else permissionDenied "denied by security check"
@@ -312,11 +312,36 @@ getShowSimulatedQRCodeR = do
     return $ toTypedContent (typeSvg, toContent bs)
 
 
+-- | 返回与输入的 union id 匹配的所有 open id 及 相应的 app_id
+getLookupOpenIDByUnionIDR :: Yesod master =>
+    WxppUnionID
+    -> HandlerT WxppSubNoApp (HandlerT master IO) Value
+getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ do
+    alreadyExpired
+    foundation <- getYesod
+    liftM toJSON $ liftIO $ wxppSubNoAppUnionIdByOpenId foundation union_id
+
+
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where
         yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
 
+
+instance Yesod master => YesodSubDispatch WxppSubNoApp (HandlerT master IO)
+    where
+        yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppSubNoApp)
+
 --------------------------------------------------------------------------------
+
+checkWaiReqThenNA :: Yesod master =>
+    HandlerT WxppSubNoApp (HandlerT master IO) a
+    -> HandlerT WxppSubNoApp (HandlerT master IO) a
+checkWaiReqThenNA f = do
+    foundation <- getYesod
+    b <- waiRequest >>= liftIO . wxppSubNoAppCheckWaiReq foundation
+    if b
+        then f
+        else permissionDenied "denied by security check"
 
 decodePostBodyAsYaml :: (Yesod master, FromJSON a) =>
     HandlerT MaybeWxppSub (HandlerT master IO) a

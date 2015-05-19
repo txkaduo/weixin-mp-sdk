@@ -23,18 +23,18 @@ import WeiXin.PublicPlatform.InMsgHandler
 -- | 判断 WAI 请求是否来自可信的来源
 -- 有若干 web 接口是打算暴露给同伴使用的
 -- 这个函数负责检查这些请求是否可以执行
-type RequestAuthChecker = WxppSub -> Request -> IO Bool
+type RequestAuthChecker = Request -> IO Bool
 
 alwaysDenyRequestAuthChecker :: RequestAuthChecker
-alwaysDenyRequestAuthChecker _ _ = return False
+alwaysDenyRequestAuthChecker _ = return False
 
 -- | 总是通过检查
 -- 使用这个函数意味着系统有其它手段作安全限制
 alwaysAllowRequestAuthChecker :: RequestAuthChecker
-alwaysAllowRequestAuthChecker _ _ = return True
+alwaysAllowRequestAuthChecker _ = return True
 
 loopbackOnlyRequestAuthChecker :: RequestAuthChecker
-loopbackOnlyRequestAuthChecker _ req = return $ isLoopbackSockAddr $ remoteHost req
+loopbackOnlyRequestAuthChecker req = return $ isLoopbackSockAddr $ remoteHost req
 
 isLoopbackSockAddr :: SockAddr -> Bool
 isLoopbackSockAddr addr =
@@ -69,6 +69,7 @@ instance FromJSON WxppSubsiteOpts where
                              _ -> fail $ "unknown auth-mode: " ++ mode
 
 
+-- | 为每个运行的 App 对应一个 subsite
 data WxppSub =
         WxppSub {
                 wxppSubAppConfig        :: WxppAppConfig
@@ -100,6 +101,18 @@ mkYesodSubData "MaybeWxppSub" [parseRoutes|
 /x/user/info/#WxppOpenID    QueryUserInfoR      GET
 /x/qrcode/persist           CreateQrCodePersistR POST
 /x/qrcode/sm                ShowSimulatedQRCodeR GET
+|]
+
+
+-- | 为 App 无关的接口打包成一个 subsite
+data WxppSubNoApp = WxppSubNoApp {
+                        wxppSubNoAppUnionIdByOpenId :: WxppUnionID -> IO [(WxppOpenID, WxppAppID)]
+                        , wxppSubNoAppRunLoggingT   :: forall a. LoggingT IO a -> IO a
+                        , wxppSubNoAppCheckWaiReq   :: RequestAuthChecker
+                    }
+
+mkYesodSubData "WxppSubNoApp" [parseRoutes|
+/union-to-open/#WxppUnionID   LookupOpenIDByUnionIDR      GET
 |]
 
 -- | 把一些数据打包成字串后，作为模拟的 ticket
