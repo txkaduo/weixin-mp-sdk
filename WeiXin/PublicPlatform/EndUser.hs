@@ -8,6 +8,7 @@ import Data.Aeson
 import Data.Conduit                         (Source, yield)
 import Data.Acid
 import Data.Time                            (diffUTCTime, NominalDiffTime)
+import qualified Data.Text                  as T
 
 import Yesod.Helpers.SafeCopy
 
@@ -41,10 +42,13 @@ instance FromJSON GetUserResult where
     parseJSON = withObject "GetUserResult" $ \obj -> do
                     total <- obj .: "total"
                     count <- obj .: "count"
-                    lst <- obj .: "data" >>=
-                            ( withObject "data" $ \o -> do
-                                map WxppOpenID <$> o .: "openid"
-                            )
+
+                    -- 当没数据时，似乎平台会不发出 data 字段
+                    m_data_obj <- obj .:? "data"
+                    lst <- case m_data_obj of
+                            Nothing -> return []
+                            Just o  -> map WxppOpenID <$> o .: "openid"
+
                     next_openid <- fmap WxppOpenID <$> obj .:? "next_openid"
                     return $ GetUserResult
                                 total count lst next_openid
@@ -67,7 +71,15 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
             r@(GetUserResult _ _ _ m_next_id) <-
                 (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
             yield r
-            maybe (return ()) (loop . Just) $ m_next_id
+
+            -- 平台是用空字串表示结束的
+            let m_next_id' = do
+                    oid <- m_next_id
+                    if T.null $ T.strip $ unWxppOpenID oid
+                        then mzero
+                        else m_next_id
+
+            maybe (return ()) (loop . Just) $ m_next_id'
 
 
 -- | 取用户的 UnionID
