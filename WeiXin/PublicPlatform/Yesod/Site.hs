@@ -268,9 +268,8 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
 -- 逻辑返回值是 EndUserQueryResult
 getQueryUserInfoR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
-getQueryUserInfoR open_id = do
+getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
-    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
     atk <- getAccessTokenSubHandler' foundation
     let sm_mode = wxppSubMakeupUnionID $ wxppSubOptions foundation
         fix_uid qres =
@@ -285,9 +284,8 @@ getQueryUserInfoR open_id = do
 -- 行为接近微信平台的接口，区别是
 -- 输入仅仅是一个 WxppScene
 postCreateQrCodePersistR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
-postCreateQrCodePersistR = do
+postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
-    foundation <- getYesod >>= maybe mimicInvalidAppID return . unMaybeWxppSub
     scene <- decodePostBodyAsYaml
     let sm_mode = wxppSubFakeQRTicket $ wxppSubOptions foundation
     if sm_mode
