@@ -51,6 +51,7 @@ import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.QRCode
+import WeiXin.PublicPlatform.InMsgHandler
 
 
 checkSignature :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) ()
@@ -105,7 +106,7 @@ postMessageR = do
 
 
     err_or_resp <- lift $ runExceptT $ do
-        (decrypted_xml, m_enc_akey) <-
+        (decrypted_xml0, m_enc_akey) <-
             if enc
                 then do
                     (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
@@ -113,59 +114,69 @@ postMessageR = do
                                 (return . (LB.fromStrict *** Just))
                 else return (lbs, Nothing)
 
-        let err_or_parsed = parse_xml_lbs decrypted_xml >>= wxppInMsgEntityFromDocument
-        m_ime <- case err_or_parsed of
+        let err_or_parsed = parse_xml_lbs decrypted_xml0 >>= wxppInMsgEntityFromDocument
+        m_ime0 <- case err_or_parsed of
                     Left err -> do
                         $logErrorS wxppLogSource $ fromString $ "Error when parsing incoming XML: " ++ err
                         return Nothing
                     Right x -> return $ Just x
 
-        let handle_msg      = wxppSubMsgHandler foundation
-        out_res <- ExceptT $
-                (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg decrypted_xml m_ime)
-                    >>= return
-                            . either
-                                (Left . (show :: SomeException -> String))
-                                id
-
-        case m_ime of
+        pre_result <- liftIO $ wxppSubRunLoggingT foundation $
+                        preProcessInMsgByMiddlewares
+                            (wxppSubMsgMiddlewares foundation)
+                            decrypted_xml0 m_ime0
+        case pre_result of
             Nothing -> do
-                -- incoming message cannot be parsed
-                -- we don't know who send the message
+                $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
                 return ("", [])
 
-            Just me -> do
-                let user_open_id    = wxppInFromUserName me
-                    my_name         = wxppInToUserName me
+            Just (decrypted_xml, m_ime) -> do
+                let handle_msg      = wxppSubMsgHandler foundation
+                out_res <- ExceptT $
+                        (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg decrypted_xml m_ime)
+                            >>= return
+                                    . either
+                                        (Left . (show :: SomeException -> String))
+                                        id
 
-                let (primary_out_msgs, secondary_out_msgs) = (map snd *** map snd) $ partition fst out_res
+                case m_ime of
+                    Nothing -> do
+                        -- incoming message cannot be parsed
+                        -- we don't know who send the message
+                        return ("", [])
 
-                -- 只要有 primary 的回应，就忽略非primary的回应
-                -- 如果没 primary 回应，而 secondary 回应有多个，则只选择第一个
-                let split_head ls = case ls of
-                                    [] -> (Nothing, [])
-                                    (x:xs) -> (Just x, xs)
-                let (m_resp_out_msg, other_out_msgs) =
-                        if null primary_out_msgs
-                            then (, []) $ listToMaybe $ catMaybes secondary_out_msgs
-                            else split_head $ catMaybes primary_out_msgs
+                    Just me -> do
+                        let user_open_id    = wxppInFromUserName me
+                            my_name         = wxppInToUserName me
 
-                now <- liftIO getCurrentTime
-                let mk_out_msg_entity x = WxppOutMsgEntity
-                                            user_open_id
-                                            my_name
-                                            now
-                                            x
-                liftM (, map mk_out_msg_entity other_out_msgs) $
-                    fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
-                        liftM (LT.toStrict . renderText def) $ do
-                            let out_msg_entity = mk_out_msg_entity out_msg
-                            case m_enc_akey of
-                                Just enc_akey ->
-                                    ExceptT $ wxppOutMsgEntityToDocumentE
-                                                    app_id app_token enc_akey out_msg_entity
-                                Nothing ->
-                                    return $ wxppOutMsgEntityToDocument out_msg_entity
+                        let (primary_out_msgs, secondary_out_msgs) = (map snd *** map snd) $ partition fst out_res
+
+                        -- 只要有 primary 的回应，就忽略非primary的回应
+                        -- 如果没 primary 回应，而 secondary 回应有多个，则只选择第一个
+                        let split_head ls = case ls of
+                                            [] -> (Nothing, [])
+                                            (x:xs) -> (Just x, xs)
+                        let (m_resp_out_msg, other_out_msgs) =
+                                if null primary_out_msgs
+                                    then (, []) $ listToMaybe $ catMaybes secondary_out_msgs
+                                    else split_head $ catMaybes primary_out_msgs
+
+                        now <- liftIO getCurrentTime
+                        let mk_out_msg_entity x = WxppOutMsgEntity
+                                                    user_open_id
+                                                    my_name
+                                                    now
+                                                    x
+                        liftM (, map mk_out_msg_entity other_out_msgs) $
+                            fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
+                                liftM (LT.toStrict . renderText def) $ do
+                                    let out_msg_entity = mk_out_msg_entity out_msg
+                                    case m_enc_akey of
+                                        Just enc_akey ->
+                                            ExceptT $ wxppOutMsgEntityToDocumentE
+                                                            app_id app_token enc_akey out_msg_entity
+                                        Nothing ->
+                                            return $ wxppOutMsgEntityToDocument out_msg_entity
 
     case err_or_resp of
         Left err -> do

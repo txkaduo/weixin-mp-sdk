@@ -102,6 +102,7 @@ data WxppSub =
                 , wxppSubSendOutMsgs    :: [WxppOutMsgEntity] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
+                , wxppSubMsgMiddlewares :: [SomeWxppInMsgProcMiddleware (LoggingT IO)]
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 }

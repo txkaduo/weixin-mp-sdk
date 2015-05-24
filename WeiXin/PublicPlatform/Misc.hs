@@ -23,6 +23,7 @@ import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Yesod.Site.Data
+import WeiXin.PublicPlatform.Yesod.Site.Function
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
@@ -50,10 +51,11 @@ mkMaybeWxppSub ::
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> Chan (WxppAppID, [WxppOutMsgEntity])
+    -> Chan (WxppAppID, (WxppInMsgRecordId, WxppMediaID))
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub foundation acid wxpp_config_map get_protos send_msg_ch opts app_id =
+mkMaybeWxppSub foundation acid wxpp_config_map get_protos send_msg_ch down_media_ch opts app_id =
     MaybeWxppSub $ case Map.lookup app_id wxpp_config_map of
         Nothing     -> Nothing
         Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
@@ -63,9 +65,29 @@ mkMaybeWxppSub foundation acid wxpp_config_map get_protos send_msg_ch opts app_i
                                     (runDBWith foundation)
                                     send_msg
                                     (handle_msg data_dir)
+                                    middlewares
                                     (runLoggingTWith foundation)
                                     opts
     where
+        db_runner = WxppSubDBActionRunner $ runDBWith foundation
+
+        -- middlewares :: [SomeWxppInMsgProcMiddleware (LoggingT IO)]
+        middlewares =
+                [
+                SomeWxppInMsgProcMiddleware $
+                    (StoreInMsgToDB app_id
+                        db_runner
+                        (\x y -> liftIO $ writeChan down_media_ch (app_id, (x, y)))
+                    :: StoreInMsgToDB (LoggingT IO)
+                    )
+
+                , SomeWxppInMsgProcMiddleware $
+                    (CacheAppOpenIdToUnionId
+                        db_runner
+                        (liftIO get_access_token)
+                    )
+                ]
+
         get_access_token = wxppAcidGetUsableAccessToken acid app_id
 
         get_union_id atk open_id = runLoggingTWith foundation $
