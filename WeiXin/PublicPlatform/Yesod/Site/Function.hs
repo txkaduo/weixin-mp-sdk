@@ -12,6 +12,7 @@ import Yesod
 import Control.Lens
 import Network.Wreq
 import Control.Monad.Trans.Except
+import Control.Monad.Trans.Maybe
 import qualified Data.ByteString.Lazy       as LB
 
 import Yesod.Helpers.Persist
@@ -68,7 +69,7 @@ instance JsonConfigable (StoreInMsgToDB m) where
     parseWithExtraData _ (x,y,z) _obj = return $ StoreInMsgToDB x y z
 
 
-instance (MonadIO m
+instance (MonadIO m, MonadLogger m
 #if !MIN_VERSION_persistent(2, 0, 0)
     , MonadBaseControl IO m
     , MonadLogger m
@@ -76,18 +77,39 @@ instance (MonadIO m
 #endif
     ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
 
-    processInMsg (StoreInMsgToDB app_id db_runner media_downloader) _acid _get_atk bs m_ime = do
+    processInMsg (StoreInMsgToDB {}) _acid _get_atk _bs _m_ime = do
+        $logWarnS wxppLogSource $
+            "StoreInMsgToDB now do nothing when used as incoming message handler"
+        return $ Right []
+
+
+instance (MonadIO m, MonadLogger m
+#if !MIN_VERSION_persistent(2, 0, 0)
+    , MonadBaseControl IO m
+    , MonadLogger m
+    , MonadThrow m
+#endif
+    ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
+    preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) bs m_ime = runMaybeT $ do
         now <- liftIO getCurrentTime
-        (msg_record_id, mids) <- runWxppSubDBActionRunner db_runner $ do
+        (msg_record_id, mids) <- mapMaybeT (runWxppSubDBActionRunner db_runner) $ do
             let m_to        = fmap wxppInToUserName m_ime
                 m_from      = fmap wxppInFromUserName m_ime
                 m_ctime     = fmap wxppInCreatedTime m_ime
                 m_msg_id    = join $ fmap wxppInMessageID m_ime
-            msg_record_id <- insert $ WxppInMsgRecord
+            old_or_msg_record_id <- lift $ insertBy $ WxppInMsgRecord
                             app_id
                             m_to m_from m_ctime m_msg_id
                             (LB.toStrict bs)
                             now
+
+            msg_record_id <- case old_or_msg_record_id of
+                Left (Entity old_id _) -> do
+                    $logWarnS wxppLogSource $
+                        "got a duplicate message from WeiXin platform: " <> toPathPiece old_id
+                    mzero
+
+                Right x -> return x
 
             -- save any temporary media data
             mids <- liftM (fromMaybe []) $ forM m_ime $ \ime -> do
@@ -98,25 +120,29 @@ instance (MonadIO m
                             _                       -> return []
             return (msg_record_id, mids)
 
-        forM_ mids $ \mid -> do
+        lift $ forM_ mids $ \mid -> do
             media_downloader msg_record_id mid
-
-        return $ Right $ return (False, Nothing)
+        return (bs, m_ime)
 
 
 -- | Handler: 更新 WxppOpenIdUnionId 的记录
 data CacheAppOpenIdToUnionId m = CacheAppOpenIdToUnionId
                                     (WxppSubDBActionRunner m)
                                         -- ^ function to run DB actions
+                                    (m (Maybe AccessToken))
+                                        -- ^ function to get access token
 
 type instance WxppInMsgProcessResult (CacheAppOpenIdToUnionId m) = WxppInMsgHandlerResult
 
 instance JsonConfigable (CacheAppOpenIdToUnionId m) where
-    type JsonConfigableUnconfigData (CacheAppOpenIdToUnionId m) = WxppSubDBActionRunner m
+    type JsonConfigableUnconfigData (CacheAppOpenIdToUnionId m) =
+            ( WxppSubDBActionRunner m
+            , m (Maybe AccessToken)
+            )
 
     isNameOfInMsgHandler _ = ( == "update-openid-to-unionid" )
 
-    parseWithExtraData _ x _obj = return $ CacheAppOpenIdToUnionId x
+    parseWithExtraData _ (x, y) _obj = return $ CacheAppOpenIdToUnionId x y
 
 
 instance (MonadIO m
@@ -128,7 +154,22 @@ instance (MonadIO m
 #endif
     ) => IsWxppInMsgProcessor m (CacheAppOpenIdToUnionId m) where
 
-    processInMsg (CacheAppOpenIdToUnionId db_runner) _acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (CacheAppOpenIdToUnionId {}) _acid _get_atk _bs _m_ime = runExceptT $ do
+        $logWarnS wxppLogSource $
+            "CacheAppOpenIdToUnionId now do nothing when used as incoming message handler"
+        return []
+
+
+instance (MonadIO m
+    , MonadCatch m
+    , MonadLogger m
+    , Functor m
+#if !MIN_VERSION_persistent(2, 0, 0)
+    , MonadBaseControl IO m
+#endif
+    ) => IsWxppInMsgProcMiddleware m (CacheAppOpenIdToUnionId m) where
+
+    preProcInMsg (CacheAppOpenIdToUnionId db_runner get_atk) bs m_ime = do
         forM_ m_ime $ \ime -> do
             let m_subs_or_unsubs = case wxppInMessage ime of
                             (WxppInMsgEvent WxppEvtSubscribe)               -> Just True
@@ -137,7 +178,7 @@ instance (MonadIO m
                             _                                               -> Nothing
 
             case m_subs_or_unsubs of
-                Just True -> do
+                Just True -> void $ runExceptT $ do
                     atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
                             >>= maybe (throwE $ "no access token available") return
                     let open_id = wxppInFromUserName ime
@@ -162,8 +203,7 @@ instance (MonadIO m
 
                 _ -> return ()
 
-        return []
-
+        return $ Just (bs, m_ime)
 
 -- | 下载多媒体文件，保存至数据库
 downloadSaveMediaToDB ::

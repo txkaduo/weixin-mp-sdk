@@ -8,6 +8,7 @@ import Data.Proxy
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import Control.Monad.Catch                  ( catchAll )
+import Control.Monad.Trans.Maybe
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Map.Strict            as Map
@@ -97,6 +98,7 @@ class IsWxppInMsgProcessor m h where
 data SomeWxppInMsgProcessor r m =
         forall h. (IsWxppInMsgProcessor m h, WxppInMsgProcessResult h ~ r) => SomeWxppInMsgProcessor h
 
+
 type instance WxppInMsgProcessResult (SomeWxppInMsgProcessor r m) = r
 
 -- | 所有 Handler 可放在这个类型内
@@ -134,6 +136,34 @@ data SomeWxppInMsgHandlerRouter m =
             SomeWxppInMsgHandlerRouter p
 
 
+class IsWxppInMsgProcMiddleware m a where
+    preProcInMsg :: a
+        -> LB.ByteString
+            -- ^ raw data of message (unparsed)
+        -> Maybe WxppInMsgEntity
+            -- ^ this is nothing only if caller cannot parse the message
+        -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+
+    {-
+    postProcInMsg :: a
+        -> WxppInMsgHandlerResult
+        -> m (Maybe WxppInMsgHandlerResult)
+    default postProcInMsg :: Monad m =>
+        a
+        -> WxppInMsgHandlerResult
+        -> m (Maybe WxppInMsgHandlerResult)
+    postProcInMsg _ x = return $ Just x
+    --}
+
+
+data SomeWxppInMsgProcMiddleware m =
+        forall a. IsWxppInMsgProcMiddleware m a => SomeWxppInMsgProcMiddleware a
+
+data WxppInMsgProcMiddlewarePrototype m =
+        forall a. (IsWxppInMsgProcMiddleware m a, JsonConfigable a) =>
+                WxppInMsgProcMiddlewarePrototype (Proxy a) (JsonConfigableUnconfigData a)
+
+
 -- | 用于在配置文件中，读取出一系列响应算法
 parseWxppInMsgProcessors ::
     [WxppInMsgProcessorPrototype r m]
@@ -164,6 +194,37 @@ readWxppInMsgHandlers tmps fp = runExceptT $ do
     (ExceptT $ decodeFileEither fp)
         >>= either (throwE . AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
+
+
+-- | 用于在配置文件中，读取出一系列响应算法
+parseWxppInMsgProcMiddlewares ::
+    [WxppInMsgProcMiddlewarePrototype m]
+    -> Value
+    -> Parser [SomeWxppInMsgProcMiddleware m]
+parseWxppInMsgProcMiddlewares known_hs = withArray "[SomeWxppInMsgProcMiddleware]" $
+    mapM (withObject "SomeWxppInMsgProcMiddleware" $ parseWxppInMsgProcMiddleware known_hs) . toList
+
+parseWxppInMsgProcMiddleware ::
+    [WxppInMsgProcMiddlewarePrototype m]
+    -> Object
+    -> Parser (SomeWxppInMsgProcMiddleware m)
+parseWxppInMsgProcMiddleware known_hs obj = do
+        name <- obj .: "name"
+        WxppInMsgProcMiddlewarePrototype ph ext <- maybe
+                (fail $ "unknown middleware name: " <> T.unpack name)
+                return
+                $ flip find known_hs
+                $ \(WxppInMsgProcMiddlewarePrototype ph _) -> isNameOfInMsgHandler ph name
+        fmap SomeWxppInMsgProcMiddleware $ parseWithExtraData ph ext obj
+
+readWxppInMsgProcMiddlewares ::
+    [WxppInMsgProcMiddlewarePrototype m]
+    -> String
+    -> IO (Either ParseException [SomeWxppInMsgProcMiddleware m])
+readWxppInMsgProcMiddlewares tmps fp = runExceptT $ do
+    (ExceptT $ decodeFileEither fp)
+        >>= either (throwE . AesonException) return
+                . parseEither (parseWxppInMsgProcMiddlewares tmps)
 
 
 -- | 使用列表里的所有算法，逐一调用一次以处理收到的信息
@@ -217,6 +278,20 @@ tryInMsgHandlerUntilFirstPrimary' :: MonadLogger m =>
     -> WxppInMsgHandler m
 tryInMsgHandlerUntilFirstPrimary' acid get_atk known_hs =
     tryInMsgHandlerUntilFirstPrimary $ flip map known_hs $ \h -> processInMsg h acid get_atk
+
+
+preProcessInMsgByMiddlewares :: forall m. Monad m =>
+    [SomeWxppInMsgProcMiddleware m]
+    -> LB.ByteString
+        -- ^ raw data of message (unparsed)
+    -> Maybe WxppInMsgEntity
+        -- ^ this is nothing only if caller cannot parse the message
+    -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+preProcessInMsgByMiddlewares [] bs m_ime = return $ Just (bs, m_ime)
+preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) bs m_ime =
+    runMaybeT $ do
+            (bs', m_ime') <- MaybeT $ preProcInMsg x bs m_ime
+            MaybeT $ preProcessInMsgByMiddlewares xs bs' m_ime'
 
 
 tryWxppWsResultE :: MonadCatch m =>

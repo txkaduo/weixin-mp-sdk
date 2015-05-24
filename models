@@ -17,7 +17,7 @@ WxppInMsgRecord
     blob                ByteString          -- ^ unencrypted message bytestring
     notifyTime          UTCTime
 
-    UniqueWxppInMsgRecord extId app !force
+    UniqueWxppInMsgRecord extId createdTime app !force
 
 
 -- | 永久保存可能会失效的数据
