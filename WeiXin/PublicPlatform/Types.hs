@@ -141,7 +141,7 @@ instance PersistField WxppInMsgID where
     fromPersistValue    = fmap WxppInMsgID . fromPersistValue
 
 instance PersistFieldSql WxppInMsgID where
-    sqlType _ = SqlString
+    sqlType _ = SqlInt64
 
 instance ToJSON WxppInMsgID where
     toJSON = toJSON . unWxppInMsgID
