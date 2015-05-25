@@ -22,13 +22,14 @@ import Text.Read                            (reads)
 import Filesystem.Path.CurrentOS            (encodeString, fromText, FilePath)
 import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
-                                            , SqlType(SqlString))
+                                            , SqlType(..))
 import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
 
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
-import Yesod.Helpers.Parsec                 (SimpleStringRep(..))
+import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
+                                            , derivePersistFieldS, makeSimpleParserByTable)
 import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
 
@@ -781,6 +782,23 @@ data WxppMediaType = WxppMediaTypeImage
 
 deriveSafeCopy 0 'base ''WxppMediaType
 
+$(derivePersistFieldS "WxppMediaType")
+
+instance SimpleStringRep WxppMediaType where
+    simpleEncode mtype =
+        case mtype of
+            WxppMediaTypeImage -> "image"
+            WxppMediaTypeVoice -> "voice"
+            WxppMediaTypeVideo -> "video"
+            WxppMediaTypeThumb -> "thumb"
+
+    simpleParser = makeSimpleParserByTable
+                    [ ("image", WxppMediaTypeImage)
+                    , ("voice", WxppMediaTypeVoice)
+                    , ("video", WxppMediaTypeVideo)
+                    , ("thumb", WxppMediaTypeThumb)
+                    ]
+
 data WxppOutMsgEntity = WxppOutMsgEntity
                         {
                             wxppOutToUserName       :: WxppOpenID
@@ -791,12 +809,7 @@ data WxppOutMsgEntity = WxppOutMsgEntity
                         deriving (Show, Eq)
 
 wxppMediaTypeString :: IsString a => WxppMediaType -> a
-wxppMediaTypeString mtype =
-    case mtype of
-        WxppMediaTypeImage -> "image"
-        WxppMediaTypeVoice -> "voice"
-        WxppMediaTypeVideo -> "video"
-        WxppMediaTypeThumb -> "thumb"
+wxppMediaTypeString mtype = fromString $ simpleEncode mtype
 
 
 -- | 可以点击的菜单所携带的数据及菜单的类型
@@ -903,6 +916,13 @@ data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
 instance SafeCopy SimpleLocaleName where
     getCopy                         = contain $ SimpleLocaleName <$> safeGet
     putCopy (SimpleLocaleName x)    = contain $ safePut x
+
+instance PersistField SimpleLocaleName where
+    toPersistValue      = toPersistValue . unSimpleLocaleName
+    fromPersistValue    = fmap SimpleLocaleName . fromPersistValue
+
+instance PersistFieldSql SimpleLocaleName where
+    sqlType _ = SqlString
 
 type NickName = Text
 type CityName = Text
@@ -1023,6 +1043,13 @@ newtype MD5Hash = MD5Hash { unMD5Hash :: ByteString }
 instance SafeCopy MD5Hash where
     getCopy             = contain $ safeGet
     putCopy (MD5Hash x) = contain $ safePut x
+
+instance PersistField MD5Hash where
+    toPersistValue      = toPersistValue . unMD5Hash
+    fromPersistValue    = fmap MD5Hash . fromPersistValue
+
+instance PersistFieldSql MD5Hash where
+    sqlType _ = SqlBlob
 
 -- | 上传媒体文件的结果
 data UploadResult = UploadResult {
