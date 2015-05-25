@@ -77,7 +77,7 @@ instance (MonadIO m, MonadLogger m
 #endif
     ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
 
-    processInMsg (StoreInMsgToDB {}) _acid _get_atk _bs _m_ime = do
+    processInMsg (StoreInMsgToDB {}) _cache _bs _m_ime = do
         $logWarnS wxppLogSource $
             "StoreInMsgToDB now do nothing when used as incoming message handler"
         return $ Right []
@@ -90,7 +90,7 @@ instance (MonadIO m, MonadLogger m
     , MonadThrow m
 #endif
     ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
-    preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) bs m_ime = runMaybeT $ do
+    preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) _cache bs m_ime = runMaybeT $ do
         now <- liftIO getCurrentTime
         (msg_record_id, mids) <- mapMaybeT (runWxppSubDBActionRunner db_runner) $ do
             let m_to        = fmap wxppInToUserName m_ime
@@ -127,17 +127,16 @@ instance (MonadIO m, MonadLogger m
 
 -- | Handler: 更新 WxppOpenIdUnionId 的记录
 data CacheAppOpenIdToUnionId m = CacheAppOpenIdToUnionId
+                                    WxppAppID
                                     (WxppSubDBActionRunner m)
                                         -- ^ function to run DB actions
-                                    (m (Maybe AccessToken))
-                                        -- ^ function to get access token
 
 type instance WxppInMsgProcessResult (CacheAppOpenIdToUnionId m) = WxppInMsgHandlerResult
 
 instance JsonConfigable (CacheAppOpenIdToUnionId m) where
     type JsonConfigableUnconfigData (CacheAppOpenIdToUnionId m) =
-            ( WxppSubDBActionRunner m
-            , m (Maybe AccessToken)
+            ( WxppAppID
+            , WxppSubDBActionRunner m
             )
 
     isNameOfInMsgHandler _ = ( == "update-openid-to-unionid" )
@@ -154,7 +153,7 @@ instance (MonadIO m
 #endif
     ) => IsWxppInMsgProcessor m (CacheAppOpenIdToUnionId m) where
 
-    processInMsg (CacheAppOpenIdToUnionId {}) _acid _get_atk _bs _m_ime = runExceptT $ do
+    processInMsg (CacheAppOpenIdToUnionId {}) _cache _bs _m_ime = runExceptT $ do
         $logWarnS wxppLogSource $
             "CacheAppOpenIdToUnionId now do nothing when used as incoming message handler"
         return []
@@ -169,7 +168,7 @@ instance (MonadIO m
 #endif
     ) => IsWxppInMsgProcMiddleware m (CacheAppOpenIdToUnionId m) where
 
-    preProcInMsg (CacheAppOpenIdToUnionId db_runner get_atk) bs m_ime = do
+    preProcInMsg (CacheAppOpenIdToUnionId app_id db_runner) cache bs m_ime = do
         forM_ m_ime $ \ime -> do
             let m_subs_or_unsubs = case wxppInMessage ime of
                             (WxppInMsgEvent WxppEvtSubscribe)               -> Just True
@@ -179,10 +178,10 @@ instance (MonadIO m
 
             case m_subs_or_unsubs of
                 Just True -> void $ runExceptT $ do
-                    atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                    atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                                wxppCacheGetAccessToken cache app_id)
                             >>= maybe (throwE $ "no access token available") return
                     let open_id = wxppInFromUserName ime
-                        app_id = accessTokenApp atk
                     qres <- tryWxppWsResultE "wxppQueryEndUserInfo" $
                                 wxppQueryEndUserInfo atk open_id
 

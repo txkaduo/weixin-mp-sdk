@@ -114,8 +114,7 @@ partialWxppAppConfig app_id = WxppAppConfig app_id
 
 partialWxppSub :: WxppAppID -> WxppSub
 partialWxppSub app_id = WxppSub (partialWxppAppConfig app_id)
-                            (error "wxppSubAccessTokens forced")
-                            (error "wxppSubGetUnionID forced")
+                            (error "wxppSubCacheBackend forced")
                             (error "wxppSubRunDBActionRunner forced")
                             (error "wxppSubSendOutMsgs forced")
                             (error "wxppSubMsgHandler forced")

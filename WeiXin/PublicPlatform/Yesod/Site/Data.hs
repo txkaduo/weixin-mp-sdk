@@ -88,10 +88,7 @@ data WxppSub =
         WxppSub {
                 wxppSubAppConfig        :: WxppAppConfig
                     -- ^ 所有配置信息
-                , wxppSubAccessTokens   :: IO (Maybe AccessToken)
-                    -- ^ a computation to get usable access token
-                , wxppSubGetUnionID     :: AccessToken -> WxppOpenID -> IO (Maybe WxppUnionID)
-                    -- ^ a function to get union_id by open_id
+                , wxppSubCacheBackend   :: SomeWxppCacheBackend
                 , wxppSubRunDBAction    ::
                                         -- XXX: 这里写死两个事实
                                         -- * persistent 版本要 2.0

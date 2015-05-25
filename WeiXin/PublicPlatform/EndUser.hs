@@ -6,16 +6,11 @@ import Control.Lens
 import Control.Monad.Logger
 import Data.Aeson
 import Data.Conduit                         (Source, yield)
-import Data.Acid
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import qualified Data.Text                  as T
 
-import Yesod.Helpers.SafeCopy
-
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
-import WeiXin.PublicPlatform.Acid
-
 
 -- | 调用服务器接口，查询用户基础信息
 wxppQueryEndUserInfo ::
@@ -88,35 +83,34 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
 -- 先从缓存找，找不到或找到的记录太旧，则调用接口
 -- 如果调用接口取得最新的数据，立刻缓存之
 wxppCachedGetEndUserUnionID ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    NominalDiffTime
-    -> AcidState WxppAcidState
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    c
+    -> NominalDiffTime
     -> AccessToken
     -> WxppOpenID
     -> m (Maybe WxppUnionID)
-wxppCachedGetEndUserUnionID ttl acid atk open_id = do
-    liftM endUserQueryResultUnionID $ wxppCachedQueryEndUserInfo ttl acid atk open_id
+wxppCachedGetEndUserUnionID cache ttl atk open_id = do
+    liftM endUserQueryResultUnionID $ wxppCachedQueryEndUserInfo cache ttl atk open_id
 
 wxppCachedQueryEndUserInfo ::
-    (MonadIO m, MonadLogger m, MonadThrow m) =>
-    NominalDiffTime
-    -> AcidState WxppAcidState
+    (MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    c
+    -> NominalDiffTime
     -> AccessToken
     -> WxppOpenID
     -> m EndUserQueryResult
-wxppCachedQueryEndUserInfo ttl acid atk open_id = do
-    m_res <- liftIO $ query acid $ WxppAcidGetCachedUserInfo open_id app_id
+wxppCachedQueryEndUserInfo cache ttl atk open_id = do
+    m_res <- liftIO $ wxppCacheLookupUserInfo cache app_id open_id
     now <- liftIO getCurrentTime
     let m_qres0 = case m_res of
-                    Just (TimeTagged _ (EndUserQueryResultNotSubscribed {})) ->
+                    Just ((EndUserQueryResultNotSubscribed {}), _) ->
                         -- never do negative cache
                         Nothing
 
-                    Just res ->
-                        let ctime = _ttTime res
-                        in if diffUTCTime now ctime > ttl
+                    Just (qres, ctime) ->
+                        if diffUTCTime now ctime > ttl
                             then Nothing
-                            else Just $ _unTimeTag res
+                            else Just qres
 
                     Nothing -> Nothing
 
@@ -126,7 +120,7 @@ wxppCachedQueryEndUserInfo ttl acid atk open_id = do
 
         Nothing     -> do
             qres <- wxppQueryEndUserInfo atk open_id
-            liftIO $ update acid $ WxppAcidSetCachedUserInfo now open_id app_id qres
+            liftIO $ wxppCacheSaveUserInfo cache app_id open_id qres
             return qres
     where
         app_id = accessTokenApp atk

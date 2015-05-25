@@ -124,6 +124,7 @@ postMessageR = do
         pre_result <- liftIO $ wxppSubRunLoggingT foundation $
                         preProcessInMsgByMiddlewares
                             (wxppSubMsgMiddlewares foundation)
+                            (wxppSubCacheBackend foundation)
                             decrypted_xml0 m_ime0
         case pre_result of
             Nothing -> do
@@ -257,8 +258,10 @@ getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
         then do
             return $ toJSON $ Just $ fakeUnionID open_id
         else do
-            atk <- getAccessTokenSubHandler' foundation
-            (tryWxppWsResult $ liftIO $ wxppSubGetUnionID foundation atk open_id)
+            let app_id = wxppAppConfigAppID $ wxppSubAppConfig foundation
+            let cache = wxppSubCacheBackend foundation
+
+            (tryWxppWsResult $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id)
                 >>= forwardWsResult "wxppSubGetUnionID"
 
 
@@ -393,8 +396,10 @@ getAccessTokenSubHandler = do
 getAccessTokenSubHandler' :: Yesod master =>
     WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
 getAccessTokenSubHandler' foundation = do
-    (liftIO $ wxppSubAccessTokens foundation)
-        >>= maybe (mimicServerBusy "no access token available") return
+    let cache = wxppSubCacheBackend foundation
+    let app_id = wxppAppConfigAppID $ wxppSubAppConfig foundation
+    (liftIO $ wxppCacheGetAccessToken cache app_id)
+            >>= maybe (mimicServerBusy "no access token available") return
 
 
 fakeUnionID :: WxppOpenID -> WxppUnionID

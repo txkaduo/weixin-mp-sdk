@@ -19,9 +19,7 @@ import Database.Persist.Sql
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.CS
-import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.InMsgHandler
-import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Site.Function
 
@@ -45,9 +43,10 @@ mkMaybeWxppSub ::
     ( LoggingTRunner app
     , DBActionRunner app
     , DBAction app ~ SqlPersistT
+    , WxppCacheBackend c
     ) =>
     app
-    -> AcidState WxppAcidState
+    -> c
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> Chan (WxppAppID, [WxppOutMsgEntity])
@@ -55,13 +54,12 @@ mkMaybeWxppSub ::
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub foundation acid wxpp_config_map get_protos send_msg_ch down_media_ch opts app_id =
+mkMaybeWxppSub foundation cache wxpp_config_map get_protos send_msg_ch down_media_ch opts app_id =
     MaybeWxppSub $ case Map.lookup app_id wxpp_config_map of
         Nothing     -> Nothing
         Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
                         in Just $ WxppSub wac
-                                    get_access_token
-                                    get_union_id
+                                    (SomeWxppCacheBackend cache)
                                     (runDBWith foundation)
                                     send_msg
                                     (handle_msg data_dir)
@@ -83,17 +81,10 @@ mkMaybeWxppSub foundation acid wxpp_config_map get_protos send_msg_ch down_media
 
                 , SomeWxppInMsgProcMiddleware $
                     (CacheAppOpenIdToUnionId
+                        app_id
                         db_runner
-                        (liftIO get_access_token)
                     )
                 ]
-
-        get_access_token = wxppAcidGetUsableAccessToken acid app_id
-
-        get_union_id atk open_id = runLoggingTWith foundation $
-                                    wxppCachedGetEndUserUnionID
-                                        (fromIntegral (maxBound :: Int))
-                                        acid atk open_id
 
         handle_msg data_dir bs ime = do
             err_or_in_msg_handlers <- liftIO $
@@ -112,8 +103,7 @@ mkMaybeWxppSub foundation acid wxpp_config_map get_protos send_msg_ch down_media
                     -- 那样就会所有 handler 保证处理一次
                     -- tryEveryInMsgHandler'
                     tryInMsgHandlerUntilFirstPrimary'
-                            acid
-                            (liftIO get_access_token)
+                            cache
                             in_msg_handlers
                             bs ime
 

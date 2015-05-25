@@ -29,7 +29,6 @@ import Yesod.Helpers.Aeson                  (parseArray)
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
-import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Utils
 
@@ -89,10 +88,9 @@ type family WxppInMsgProcessResult h :: *
 -- Predictor 其处理结果是个 Bool 值
 -- Handler 其处理结果是个 WxppInMsgHandlerResult
 class IsWxppInMsgProcessor m h where
-    processInMsg ::
+    processInMsg :: WxppCacheBackend c =>
         h
-        -> AcidState WxppAcidState
-        -> m (Maybe AccessToken)
+        -> c
         -> WxppInMsgProcessor m (WxppInMsgProcessResult h)
 
 data SomeWxppInMsgProcessor r m =
@@ -137,7 +135,10 @@ data SomeWxppInMsgHandlerRouter m =
 
 
 class IsWxppInMsgProcMiddleware m a where
-    preProcInMsg :: a
+    preProcInMsg ::
+        WxppCacheBackend c =>
+        a
+        -> c
         -> LB.ByteString
             -- ^ raw data of message (unparsed)
         -> Maybe WxppInMsgEntity
@@ -241,13 +242,12 @@ tryEveryInMsgHandler handlers bs m_ime = do
 
     return $ Right $ join res_lst
 
-tryEveryInMsgHandler' :: MonadLogger m =>
-    AcidState WxppAcidState
-    -> m (Maybe AccessToken)
+tryEveryInMsgHandler' :: (MonadLogger m, WxppCacheBackend c) =>
+    c
     -> [SomeWxppInMsgHandler m]
     -> WxppInMsgHandler m
-tryEveryInMsgHandler' acid get_atk known_hs = do
-    tryEveryInMsgHandler $ flip map known_hs $ \h -> processInMsg h acid get_atk
+tryEveryInMsgHandler' cache known_hs = do
+    tryEveryInMsgHandler $ flip map known_hs $ \h -> processInMsg h cache
 
 
 -- | 逐一试各个函数，直至有一个提供“主”回应
@@ -271,27 +271,27 @@ tryInMsgHandlerUntilFirstPrimary handlers bs m_ime = do
                 then return rs'
                 else go rs' xs
 
-tryInMsgHandlerUntilFirstPrimary' :: MonadLogger m =>
-    AcidState WxppAcidState
-    -> m (Maybe AccessToken)
+tryInMsgHandlerUntilFirstPrimary' :: (MonadLogger m, WxppCacheBackend c) =>
+    c
     -> [SomeWxppInMsgHandler m]
     -> WxppInMsgHandler m
-tryInMsgHandlerUntilFirstPrimary' acid get_atk known_hs =
-    tryInMsgHandlerUntilFirstPrimary $ flip map known_hs $ \h -> processInMsg h acid get_atk
+tryInMsgHandlerUntilFirstPrimary' cache known_hs =
+    tryInMsgHandlerUntilFirstPrimary $ flip map known_hs $ \h -> processInMsg h cache
 
 
-preProcessInMsgByMiddlewares :: forall m. Monad m =>
+preProcessInMsgByMiddlewares :: (Monad m, WxppCacheBackend c) =>
     [SomeWxppInMsgProcMiddleware m]
+    -> c
     -> LB.ByteString
         -- ^ raw data of message (unparsed)
     -> Maybe WxppInMsgEntity
         -- ^ this is nothing only if caller cannot parse the message
     -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
-preProcessInMsgByMiddlewares [] bs m_ime = return $ Just (bs, m_ime)
-preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) bs m_ime =
+preProcessInMsgByMiddlewares [] _cache bs m_ime = return $ Just (bs, m_ime)
+preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) cache bs m_ime =
     runMaybeT $ do
-            (bs', m_ime') <- MaybeT $ preProcInMsg x bs m_ime
-            MaybeT $ preProcessInMsgByMiddlewares xs bs' m_ime'
+            (bs', m_ime') <- MaybeT $ preProcInMsg x cache bs m_ime
+            MaybeT $ preProcessInMsgByMiddlewares xs cache bs' m_ime'
 
 
 tryWxppWsResultE :: MonadCatch m =>
@@ -322,17 +322,18 @@ parseWxppOutMsgLoader obj = do
 
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
 data WelcomeSubscribe = WelcomeSubscribe
+                            WxppAppID
                             FilePath            -- ^ 所有消息文件存放的目录
                             WxppOutMsgLoader    -- ^ 打算回复用户的消息
                         deriving (Typeable)
 
 instance JsonConfigable WelcomeSubscribe where
-    type JsonConfigableUnconfigData WelcomeSubscribe = FilePath
+    type JsonConfigableUnconfigData WelcomeSubscribe = (WxppAppID, FilePath)
 
     isNameOfInMsgHandler _ x = x == "welcome-subscribe"
 
-    parseWithExtraData _ msg_dir obj = do
-        WelcomeSubscribe msg_dir <$> parseWxppOutMsgLoader obj
+    parseWithExtraData _ (app_id, msg_dir) obj = do
+        WelcomeSubscribe app_id msg_dir <$> parseWxppOutMsgLoader obj
 
 
 type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
@@ -341,31 +342,35 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
     where
 
-    processInMsg (WelcomeSubscribe msg_dir get_outmsg) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WelcomeSubscribe app_id msg_dir get_outmsg) cache _bs m_ime = runExceptT $ do
         is_subs <- case fmap wxppInMessage m_ime of
                     Just (WxppInMsgEvent WxppEvtSubscribe)              -> return True
                     Just (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))  -> return True
                     _                                                   -> return False
         if is_subs
             then do
-                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") return
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
             else return []
 
 
 -- | Handler: 处理点击菜单项目的事件通知，加载 Key 参数中指定的文件所记录的消息
 -- 要求 Key 参数的格式为： send-msg:<path to yaml>
-data WxppInMsgMenuItemClickSendMsg = WxppInMsgMenuItemClickSendMsg FilePath
+data WxppInMsgMenuItemClickSendMsg = WxppInMsgMenuItemClickSendMsg
+                                        WxppAppID
+                                        FilePath
 
 instance JsonConfigable WxppInMsgMenuItemClickSendMsg where
-    type JsonConfigableUnconfigData WxppInMsgMenuItemClickSendMsg = FilePath
+    type JsonConfigableUnconfigData WxppInMsgMenuItemClickSendMsg = (WxppAppID, FilePath)
 
     isNameOfInMsgHandler _ x = x == "menu-click-send-msg"
 
-    parseWithExtraData _ msg_dir _obj = return $ WxppInMsgMenuItemClickSendMsg msg_dir
+    parseWithExtraData _ (app_id, msg_dir) _obj =
+        return $ WxppInMsgMenuItemClickSendMsg app_id msg_dir
 
 
 type instance WxppInMsgProcessResult WxppInMsgMenuItemClickSendMsg = WxppInMsgHandlerResult
@@ -374,7 +379,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgMenuItemClickSendMsg
     where
 
-    processInMsg (WxppInMsgMenuItemClickSendMsg msg_dir) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgMenuItemClickSendMsg app_id msg_dir) cache _bs m_ime = runExceptT $ do
         let m_fp = do
                 in_msg <- fmap wxppInMessage m_ime
                 case in_msg of
@@ -386,25 +391,27 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
         case m_fp of
             Nothing -> return []
             Just fp' -> do
-                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") return
                 let fp = setExtIfNotExist "yml" $ fromText fp'
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
 
 
 -- | Handler: 回复原文本消息中路径指定的任意消息
 -- 为安全计，要保证文件的真实路径在约定的目录下
 -- 另外，还要求设置一个简单的口令作为前缀，同时也作为识别
-data WxppInMsgSendAsRequested = WxppInMsgSendAsRequested FilePath Text
+data WxppInMsgSendAsRequested = WxppInMsgSendAsRequested WxppAppID FilePath Text
 
 instance JsonConfigable WxppInMsgSendAsRequested where
-    type JsonConfigableUnconfigData WxppInMsgSendAsRequested = FilePath
+    type JsonConfigableUnconfigData WxppInMsgSendAsRequested = (WxppAppID, FilePath)
 
     isNameOfInMsgHandler _ x = x == "as-you-request"
 
-    parseWithExtraData _ msg_dir obj = WxppInMsgSendAsRequested msg_dir <$> obj .: "magic-word"
+    parseWithExtraData _ (app_id, msg_dir) obj =
+        WxppInMsgSendAsRequested app_id msg_dir <$> obj .: "magic-word"
 
 
 type instance WxppInMsgProcessResult WxppInMsgSendAsRequested = WxppInMsgHandlerResult
@@ -413,7 +420,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgSendAsRequested
     where
 
-    processInMsg (WxppInMsgSendAsRequested msg_dir magic_word) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgSendAsRequested app_id msg_dir magic_word) cache _bs m_ime = runExceptT $ do
         let m_fp = do
                 in_msg <- fmap wxppInMessage m_ime
                 case in_msg of
@@ -428,22 +435,23 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
         case m_fp of
             Nothing -> return []
             Just fp -> do
-                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") return
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
 
 
 -- | Handler: 回复用户的 OpenID 及 UnionID
-data WxppInMsgShowWxppID = WxppInMsgShowWxppID
+data WxppInMsgShowWxppID = WxppInMsgShowWxppID WxppAppID
 
 instance JsonConfigable WxppInMsgShowWxppID where
-    type JsonConfigableUnconfigData WxppInMsgShowWxppID = ()
+    type JsonConfigableUnconfigData WxppInMsgShowWxppID = WxppAppID
 
     isNameOfInMsgHandler _ x = x == "show-wxpp-id"
 
-    parseWithExtraData _ _ _obj = return WxppInMsgShowWxppID
+    parseWithExtraData _ app_id _obj = return $ WxppInMsgShowWxppID app_id
 
 
 type instance WxppInMsgProcessResult WxppInMsgShowWxppID = WxppInMsgHandlerResult
@@ -452,12 +460,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgShowWxppID
     where
 
-    processInMsg WxppInMsgShowWxppID _acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgShowWxppID app_id) cache _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> return []
 
             Just ime -> do
-                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") return
                 let open_id = wxppInFromUserName ime
                 qres <- tryWxppWsResultE "wxppQueryEndUserInfo" $
@@ -478,15 +487,17 @@ type ForwardUrlMap = Map (WxppOpenID, WxppAppID) (UrlText, (UTCTime, Text))
 
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
 data WxppInMsgForwardAsJson = WxppInMsgForwardAsJson
+                                    WxppAppID
                                     (MVar ForwardUrlMap)
                                     UrlText NominalDiffTime
 
 instance JsonConfigable WxppInMsgForwardAsJson where
-    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = MVar ForwardUrlMap
+    type JsonConfigableUnconfigData WxppInMsgForwardAsJson = (WxppAppID, MVar ForwardUrlMap)
 
     isNameOfInMsgHandler _ x = x == "forward-as-json"
 
-    parseWithExtraData _ mvar obj = parseForwardData (WxppInMsgForwardAsJson mvar) obj
+    parseWithExtraData _ (app_id, mvar) obj =
+        parseForwardData (WxppInMsgForwardAsJson app_id mvar) obj
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
@@ -494,7 +505,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardAsJson
     where
 
-    processInMsg (WxppInMsgForwardAsJson mvar url ttl) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardAsJson app_id mvar url ttl) cache _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -502,13 +513,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 return []
 
             Just ime -> do
-                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") return
                 let opts = defaults
                     open_id = wxppInFromUserName ime
-                    app_id  = accessTokenApp atk
                 qres <- tryWxppWsResultE "wxppCachedQueryEndUserInfo" $
-                            wxppCachedQueryEndUserInfo ttl acid atk open_id
+                            wxppCachedQueryEndUserInfo cache ttl atk open_id
                 let fwd_env = WxppForwardedEnv qres atk
                 let fwd_msg = (ime, fwd_env)
                 (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
@@ -534,14 +545,17 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
 -- | Handler: 用 JSON 格式转发(POST)收到的消息至另一个URL上
 -- 仅当 MVar 当时有值时才执行，否则就不工作
-data WxppInMsgForwardDyn = WxppInMsgForwardDyn (MVar ForwardUrlMap) NominalDiffTime
+data WxppInMsgForwardDyn = WxppInMsgForwardDyn
+                                WxppAppID
+                                (MVar ForwardUrlMap)
+                                NominalDiffTime
 
 instance JsonConfigable WxppInMsgForwardDyn where
-    type JsonConfigableUnconfigData WxppInMsgForwardDyn = MVar ForwardUrlMap
+    type JsonConfigableUnconfigData WxppInMsgForwardDyn = (WxppAppID, MVar ForwardUrlMap)
 
     isNameOfInMsgHandler _ x = x == "forward-dynamically"
 
-    parseWithExtraData _ mvar obj = WxppInMsgForwardDyn mvar
+    parseWithExtraData _ (app_id, mvar) obj = WxppInMsgForwardDyn app_id mvar
                                     <$> ((fromIntegral :: Int -> NominalDiffTime)
                                             <$> obj .:? "user-info-cache-ttl" .!= (3600 * 2))
 
@@ -552,7 +566,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardDyn
     where
 
-    processInMsg (WxppInMsgForwardDyn mvar ttl) acid get_atk bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardDyn app_id mvar ttl) cache bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -560,10 +574,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 return []
 
             Just ime -> do
-                atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
-                        >>= maybe (throwE $ "no access token available") return
                 let open_id = wxppInFromUserName ime
-                    app_id  = accessTokenApp atk
                 mx <- liftIO $ withMVar mvar $ return . Map.lookup (open_id, app_id)
                 case mx of
                     Nothing -> return []
@@ -572,19 +583,25 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         now <- liftIO getCurrentTime
                         if now >= expire_time
                             then return []
-                            else ExceptT $ processInMsg (WxppInMsgForwardAsJson mvar url ttl)
-                                                acid get_atk bs m_ime
+                            else ExceptT $ processInMsg
+                                                (WxppInMsgForwardAsJson app_id mvar url ttl)
+                                                cache bs m_ime
 
 
 -- | Handler: 把各种带有 WxppScene 事件中的 WxppScene 用 HTTP POST 转发至指定的 URL
-data WxppInMsgForwardScene = WxppInMsgForwardScene (MVar ForwardUrlMap) UrlText NominalDiffTime
+data WxppInMsgForwardScene = WxppInMsgForwardScene
+                                    WxppAppID
+                                    (MVar ForwardUrlMap)
+                                    UrlText
+                                    NominalDiffTime
 
 instance JsonConfigable WxppInMsgForwardScene where
-    type JsonConfigableUnconfigData WxppInMsgForwardScene = MVar ForwardUrlMap
+    type JsonConfigableUnconfigData WxppInMsgForwardScene = (WxppAppID, MVar ForwardUrlMap)
 
     isNameOfInMsgHandler _ x = x == "forward-scene"
 
-    parseWithExtraData _ mvar obj = parseForwardData (WxppInMsgForwardScene mvar) obj
+    parseWithExtraData _ (app_id, mvar) obj =
+        parseForwardData (WxppInMsgForwardScene app_id mvar) obj
 
 
 type instance WxppInMsgProcessResult WxppInMsgForwardScene = WxppInMsgHandlerResult
@@ -593,7 +610,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardScene
     where
 
-    processInMsg (WxppInMsgForwardScene mvar url ttl) acid get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgForwardScene app_id mvar url ttl) cache _bs m_ime = runExceptT $ do
         case m_ime of
             Nothing -> do
                 $logWarnS wxppLogSource $
@@ -605,13 +622,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                     Nothing -> return []
 
                     Just (scene, ticket) -> do
-                        atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+                        atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                                    wxppCacheGetAccessToken cache app_id)
                                 >>= maybe (throwE $ "no access token available") return
                         let opts = defaults
                             open_id = wxppInFromUserName ime
-                            app_id = accessTokenApp atk
                         qres <- tryWxppWsResultE "wxppCachedQueryEndUserInfo" $
-                                    wxppCachedQueryEndUserInfo ttl acid atk open_id
+                                    wxppCachedQueryEndUserInfo cache ttl atk open_id
                         let fwd_env = WxppForwardedEnv qres atk
                         let fwd_msg = ((scene, ticket), fwd_env)
                         (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
@@ -664,12 +681,12 @@ type instance WxppInMsgProcessResult (WxppInMsgDispatchHandler m) = WxppInMsgHan
 
 instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHandler m)
     where
-    processInMsg (WxppInMsgDispatchHandler table) acid get_atk bs m_ime =
+    processInMsg (WxppInMsgDispatchHandler table) cache bs m_ime =
         go table
         where
             go []               = return $ Right []
             go ((p, h):xs)      = do
-                err_or_b <- processInMsg p acid get_atk bs m_ime
+                err_or_b <- processInMsg p cache bs m_ime
                 b <- case err_or_b of
                     Left err -> do
                                 $(logErrorS) wxppLogSource $ fromString $
@@ -677,7 +694,7 @@ instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHa
                                 return False
                     Right b -> return b
                 if b
-                    then processInMsg h acid get_atk bs m_ime
+                    then processInMsg h cache bs m_ime
                     else go xs
 
 
@@ -715,7 +732,7 @@ type instance WxppInMsgProcessResult WxppMatchedKeywordArticles = WxppInMsgHandl
 
 instance (Monad m, MonadLogger m, MonadIO m) => IsWxppInMsgProcessor m WxppMatchedKeywordArticles
     where
-    processInMsg (WxppMatchedKeywordArticles msg_dir is_primary map_file) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppMatchedKeywordArticles msg_dir is_primary map_file) _cache _bs m_ime = runExceptT $ do
         let m_keyword = do
                 in_msg <- fmap wxppInMessage m_ime
                 case in_msg of
@@ -761,7 +778,7 @@ instance JsonConfigable TransferToCS where
 type instance WxppInMsgProcessResult TransferToCS = WxppInMsgHandlerResult
 
 instance (Monad m) => IsWxppInMsgProcessor m TransferToCS where
-    processInMsg (TransferToCS is_primary) _acid _get_atk _bs _m_ime =
+    processInMsg (TransferToCS is_primary) _cache _bs _m_ime =
         return $ Right $ return $ (is_primary,) $ Just WxppOutMsgTransferToCustomerService
 
 
@@ -782,7 +799,7 @@ instance JsonConfigable WxppInMsgMatchOneOf where
 type instance WxppInMsgProcessResult WxppInMsgMatchOneOf = Bool
 
 instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOf where
-    processInMsg (WxppInMsgMatchOneOf lst) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgMatchOneOf lst) _cache _bs m_ime = runExceptT $ do
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgText t)  -> return $ T.strip t `elem` lst
             _                       -> return False
@@ -808,7 +825,7 @@ instance JsonConfigable WxppInMsgMatchOneOfRe where
 type instance WxppInMsgProcessResult WxppInMsgMatchOneOfRe = Bool
 
 instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgMatchOneOfRe where
-    processInMsg (WxppInMsgMatchOneOfRe lst) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgMatchOneOfRe lst) _cache _bs m_ime = runExceptT $ do
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgText t')  -> do
                 let t = T.unpack $ T.strip t'
@@ -833,7 +850,7 @@ instance JsonConfigable WxppInMsgAnyText where
 type instance WxppInMsgProcessResult WxppInMsgAnyText = Bool
 
 instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgAnyText where
-    processInMsg WxppInMsgAnyText _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg WxppInMsgAnyText _cache _bs m_ime = runExceptT $ do
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgText {}) -> return True
             _                       -> return False
@@ -855,7 +872,7 @@ instance JsonConfigable WxppInMsgScanCodeWaitMsgKeyRE where
 type instance WxppInMsgProcessResult WxppInMsgScanCodeWaitMsgKeyRE = Bool
 
 instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgScanCodeWaitMsgKeyRE where
-    processInMsg (WxppInMsgScanCodeWaitMsgKeyRE lst) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgScanCodeWaitMsgKeyRE lst) _cache _bs m_ime = runExceptT $ do
         case wxppInMessage <$> m_ime of
             Just (WxppInMsgEvent (WxppEvtScanCodeWaitMsg ek _scan_type _scan_result))  -> do
                 let t = T.unpack ek
@@ -880,7 +897,7 @@ instance JsonConfigable WxppInMsgSceneRE where
 type instance WxppInMsgProcessResult WxppInMsgSceneRE = Bool
 
 instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgSceneRE where
-    processInMsg (WxppInMsgSceneRE lst) _acid _get_atk _bs m_ime = runExceptT $ do
+    processInMsg (WxppInMsgSceneRE lst) _cache _bs m_ime = runExceptT $ do
         case fmap wxppInMessage m_ime >>= getEventInMsg >>= getSceneInEvent of
             Nothing -> return False
 
@@ -911,21 +928,21 @@ instance (Monad m) =>
     IsWxppInMsgProcessor m (WxppInMsgLogicalAndPred m)
     where
 
-    processInMsg (WxppInMsgLogicalAndPred preds) acid get_atk bs m_ime = runExceptT $ do
-        liftM (all id) $ forM preds $ \p -> ExceptT $ processInMsg p acid get_atk bs m_ime
+    processInMsg (WxppInMsgLogicalAndPred preds) cache bs m_ime = runExceptT $ do
+        liftM (all id) $ forM preds $ \p -> ExceptT $ processInMsg p cache bs m_ime
 
 
 -- | Handler: 固定地返回一个某个信息
-data ConstResponse = ConstResponse FilePath Bool WxppOutMsgLoader
+data ConstResponse = ConstResponse WxppAppID FilePath Bool WxppOutMsgLoader
                     deriving (Typeable)
 
 instance JsonConfigable ConstResponse where
-    type JsonConfigableUnconfigData ConstResponse = FilePath
+    type JsonConfigableUnconfigData ConstResponse = (WxppAppID, FilePath)
 
     isNameOfInMsgHandler _ x = x == "const"
 
-    parseWithExtraData _ msg_dir obj = do
-        liftM2 (ConstResponse msg_dir)
+    parseWithExtraData _ (app_id, msg_dir) obj = do
+        liftM2 (ConstResponse app_id msg_dir)
             (obj .:? "primary" .!= False)
             (parseWxppOutMsgLoader obj)
 
@@ -936,12 +953,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m ConstResponse
     where
 
-    processInMsg (ConstResponse msg_dir is_primary get_outmsg) acid get_atk _bs _m_ime = runExceptT $ do
-        atk <- (tryWxppWsResultE "getting access token" $ lift get_atk)
+    processInMsg (ConstResponse app_id msg_dir is_primary get_outmsg) cache _bs _m_ime = runExceptT $ do
+        atk <- (tryWxppWsResultE "getting access token" $ liftIO $
+                    wxppCacheGetAccessToken cache app_id)
                 >>= maybe (throwE $ "no access token available") return
         outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                        tryYamlExcE $ fromWxppOutMsgL msg_dir acid atk outmsg
+                        tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
 
 
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
@@ -951,17 +969,17 @@ allBasicWxppInMsgHandlerPrototypes ::
     -> FilePath
     -> MVar ForwardUrlMap
     -> [WxppInMsgHandlerPrototype m]
-allBasicWxppInMsgHandlerPrototypes _app_id msg_dir mvar =
-    [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) msg_dir
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) msg_dir
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) msg_dir
+allBasicWxppInMsgHandlerPrototypes app_id msg_dir mvar =
+    [ WxppInMsgProcessorPrototype (Proxy :: Proxy WelcomeSubscribe) (app_id, msg_dir)
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMenuItemClickSendMsg) (app_id, msg_dir)
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgSendAsRequested) (app_id, msg_dir)
     , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppMatchedKeywordArticles) msg_dir
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) mvar
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardScene) mvar
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardDyn) mvar
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardAsJson) (app_id, mvar)
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardScene) (app_id, mvar)
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgForwardDyn) (app_id, mvar)
     , WxppInMsgProcessorPrototype (Proxy :: Proxy TransferToCS) ()
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) msg_dir
-    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgShowWxppID) ()
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy ConstResponse) (app_id, msg_dir)
+    , WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgShowWxppID) app_id
     ]
 
 

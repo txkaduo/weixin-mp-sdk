@@ -9,13 +9,11 @@ import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
 import Filesystem.Path.CurrentOS            (encodeString, FilePath)
-import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catches, Handler(..))
 import Data.Yaml                            (ParseException)
 
 import WeiXin.PublicPlatform.Types
-import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 
@@ -60,23 +58,27 @@ wxppUploadMedia (AccessToken { accessTokenData = atk }) mtype fp = do
 
 
 wxppUploadMediaCached ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AcidState WxppAcidState
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    c
     -> AccessToken
     -> WxppMediaType
     -> FilePath
     -> m UploadResult
-wxppUploadMediaCached acid atk mtype fp = do
+wxppUploadMediaCached cache atk mtype fp = do
     h <- liftIO $ md5HashFile fp
-    m_res <- liftIO $ query acid $ WxppAcidLookupMediaIDByHash (accessTokenApp atk) h
+    m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
-    maybe (wxppUploadMedia atk mtype fp) return $
+    u_res <- maybe (wxppUploadMedia atk mtype fp) return $
         join $ flip fmap m_res $
                 \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
                             then Just x
                             else Nothing
+
+    liftIO $ wxppCacheSaveUploadedMediaID cache app_id h u_res
+    return u_res
     where
         dt = fromIntegral (60 * 60 * 24 :: Int)
+        app_id = accessTokenApp atk
 
 
 -- | 从 WxppOutMsgL 计算出 WxppOutMsg
@@ -86,9 +88,9 @@ wxppUploadMediaCached acid atk mtype fp = do
 -- 这个函数会抛出异常 见 tryWxppWsResult
 -- 下面还有个尽量不抛出异常的版本
 fromWxppOutMsgL ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
     FilePath
-    -> AcidState WxppAcidState
+    -> c
     -> AccessToken
     -> WxppOutMsgL
     -> m WxppOutMsg
@@ -98,36 +100,36 @@ fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
         liftM WxppOutMsgNews $ do
             sequence $ map (runDelayedYamlLoaderExc msg_dir) loaders
 
-fromWxppOutMsgL _ acid    atk (WxppOutMsgImageL fp)   = do
+fromWxppOutMsgL _ cache    atk (WxppOutMsgImageL fp)   = do
         liftM (WxppOutMsgImage . urMediaId) $
-            wxppUploadMediaCached acid atk WxppMediaTypeImage fp
+            wxppUploadMediaCached cache atk WxppMediaTypeImage fp
 
-fromWxppOutMsgL _ acid    atk (WxppOutMsgVoiceL fp)   = do
+fromWxppOutMsgL _ cache    atk (WxppOutMsgVoiceL fp)   = do
         liftM (WxppOutMsgVoice . urMediaId) $
-            wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
+            wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
-fromWxppOutMsgL _ acid    atk (WxppOutMsgVideoL fp fp2 x1 x2)   = do
+fromWxppOutMsgL _ cache    atk (WxppOutMsgVideoL fp fp2 x1 x2)   = do
         liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
-            (liftM urMediaId $ wxppUploadMediaCached acid atk WxppMediaTypeVoice fp)
-            (liftM urMediaId $ wxppUploadMediaCached acid atk WxppMediaTypeVoice fp2)
+            (liftM urMediaId $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp)
+            (liftM urMediaId $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp2)
 
-fromWxppOutMsgL _ acid    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
+fromWxppOutMsgL _ cache    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . urMediaId) $
-            wxppUploadMediaCached acid atk WxppMediaTypeVoice fp
+            wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
 fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
 
 
 fromWxppOutMsgL' ::
-    ( MonadIO m, MonadLogger m, MonadCatch m) =>
+    ( MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
     FilePath
-    -> AcidState WxppAcidState
+    -> c
     -> AccessToken
     -> WxppOutMsgL
     -> m (Either String WxppOutMsg)
-fromWxppOutMsgL' fp acid atk out_msg_l =
-    (liftM Right $ fromWxppOutMsgL fp acid atk out_msg_l) `catches`
+fromWxppOutMsgL' fp cache atk out_msg_l =
+    (liftM Right $ fromWxppOutMsgL fp cache atk out_msg_l) `catches`
         (Handler h_yaml_exc : map unifyExcHandler wxppWsExcHandlers)
     where
         h_yaml_exc e = return $ Left $ show (e :: ParseException)
