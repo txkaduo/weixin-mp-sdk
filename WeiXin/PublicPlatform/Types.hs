@@ -1140,6 +1140,15 @@ class WxppCacheBackend a where
         -> UploadResult
         -> IO ()
 
+
+wxppGetUsableAccessToken :: (MonadIO m, WxppCacheBackend c) =>
+    c -> WxppAppID -> m (Maybe (AccessToken, UTCTime))
+wxppGetUsableAccessToken cache app_id = liftIO $ do
+    now <- getCurrentTime
+    fmap (join . (fmap $ \x -> if snd x > now then Just x else Nothing)) $
+        wxppCacheGetAccessToken cache app_id
+
+
 data SomeWxppCacheBackend = forall a. WxppCacheBackend a => SomeWxppCacheBackend a
 
 instance WxppCacheBackend SomeWxppCacheBackend where

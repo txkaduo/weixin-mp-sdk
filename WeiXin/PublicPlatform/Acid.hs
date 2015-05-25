@@ -113,19 +113,11 @@ $(makeAcidic ''WxppAcidState
     ])
 
 
-wxppAcidGetUsableAccessToken :: MonadIO m =>
-    AcidState WxppAcidState -> WxppAppID -> m (Maybe (AccessToken, UTCTime))
-wxppAcidGetUsableAccessToken acid app_id = liftIO $ do
-    now <- getCurrentTime
-    fmap (join . (fmap $ \x -> if snd x > now then Just x else Nothing)) $
-        query acid $ WxppAcidGetAcccessToken app_id
-
-
 newtype WxppCacheByAcid = WxppCacheByAcid (AcidState WxppAcidState)
 
 instance WxppCacheBackend WxppCacheByAcid where
     wxppCacheGetAccessToken (WxppCacheByAcid acid) app_id =
-        wxppAcidGetUsableAccessToken acid app_id
+        query acid $ WxppAcidGetAcccessToken app_id
 
     wxppCacheAddAccessToken (WxppCacheByAcid acid) atk expiry = do
         update acid $ WxppAcidAddAcccessToken atk expiry
