@@ -27,7 +27,7 @@ wxppDownloadMedia ::
     -> WxppMediaID
     -> m (Response LB.ByteString)
 wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
-    let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
+    let url = wxppRemoteApiBaseUrl <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppMediaID mid ]
     rb <- liftIO $ getWith opts url
@@ -52,7 +52,7 @@ wxppUploadMedia ::
     -> FilePath
     -> m UploadResult
 wxppUploadMedia (AccessToken { accessTokenData = atk }) mtype fp = do
-    let url = wxppRemoteFileApiBaseUrl <> "/media/upload"
+    let url = wxppRemoteApiBaseUrl <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ wxppMediaTypeString mtype :: Text]
     (liftIO $ postWith opts url $ partFileSource "media" $ encodeString fp)
