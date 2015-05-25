@@ -35,7 +35,7 @@ wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
     -- 但 content-type 的内容严格地说不是一个简单的字串比较就了事的
     -- rb ^. responseHeader "Content-Type"
     -- 这里使用的方法是先测试一下当作错误报告的 json 解释，不行就认为是正常返回
-    _ :: () <- (liftM (view responseBody) $ asJSON rb)
+    _ :: () <- (liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb)
                     >>= either throwM return . unWxppWsResp
 
     -- 至此，我们确定返回内容不是文档所述的错误码

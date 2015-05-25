@@ -84,11 +84,14 @@ asWxppWsResponseNormal r = do
     -- workaround:
     -- 平台返回JSON报文时，并不会把 Content-Type 设为 JSON，而是 text/plain
     -- 所以，先把 response 的 content-type 改了，试一次当前错误报文解释一次
-    liftM (view responseBody) $ asJSON r'
-    where
-        r' = if r ^. responseHeader "Content-Type" == "text/plain"
-                then r & responseHeader "Content-Type" .~ "application/json"
-                else r
+    liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
+
+
+alterContentTypeToJson :: Response body -> Response body
+alterContentTypeToJson r =
+    if r ^. responseHeader "Content-Type" == "text/plain"
+            then r & responseHeader "Content-Type" .~ "application/json"
+            else r
 
 -- | 解释远程调用的结果，返回正常的值，异常情况会抛出
 -- 抛出的异常主要类型就是 WxppWsCallError 列出的情况
