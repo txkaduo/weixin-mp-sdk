@@ -927,7 +927,7 @@ instance PersistFieldSql SimpleLocaleName where
 type NickName = Text
 type CityName = Text
 type ProvinceName = Text
-type ContryName = Text
+type CountryName = Text
 
 -- | 用户基础信息查询接口的返回
 data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
@@ -938,7 +938,7 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                             SimpleLocaleName
                             CityName
                             ProvinceName
-                            ContryName
+                            CountryName
                             UrlText     -- ^ head image url
                             UTCTime
                             (Maybe WxppUnionID)
