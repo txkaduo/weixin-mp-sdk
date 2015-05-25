@@ -22,7 +22,7 @@ import Text.Read                            (reads)
 import Filesystem.Path.CurrentOS            (encodeString, fromText, FilePath)
 import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
-                                            , SqlType(SqlString))
+                                            , SqlType(..))
 import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
 
@@ -140,7 +140,7 @@ instance PersistField WxppInMsgID where
     fromPersistValue    = fmap WxppInMsgID . fromPersistValue
 
 instance PersistFieldSql WxppInMsgID where
-    sqlType _ = SqlString
+    sqlType _ = SqlInt64
 
 instance ToJSON WxppInMsgID where
     toJSON = toJSON . unWxppInMsgID
