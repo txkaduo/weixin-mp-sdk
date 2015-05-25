@@ -4,13 +4,13 @@ module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Types
     ) where
 
-import ClassyPrelude hiding (FilePath, (<.>), (</>))
+import ClassyPrelude hiding (FilePath, (<.>), (</>), catch)
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
 import Filesystem.Path.CurrentOS            (encodeString, FilePath)
 import qualified Data.ByteString.Lazy       as LB
-import Control.Monad.Catch                  (catches, Handler(..))
+import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 
 import WeiXin.PublicPlatform.Types
@@ -20,7 +20,7 @@ import WeiXin.PublicPlatform.Utils
 
 -- | 下载一个多媒体文件
 wxppDownloadMedia ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
     -> WxppMediaID
     -> m (Response LB.ByteString)
@@ -35,11 +35,16 @@ wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
     -- 但 content-type 的内容严格地说不是一个简单的字串比较就了事的
     -- rb ^. responseHeader "Content-Type"
     -- 这里使用的方法是先测试一下当作错误报告的 json 解释，不行就认为是正常返回
-    _ :: () <- (liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb)
-                    >>= either throwM return . unWxppWsResp
+    let as_json = liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb
+        unexpected_jsn = \(_ :: ()) -> do
+            -- 至此，说明报文真的是个json，而且不是错误报文
+            $logErrorS wxppLogSource $ "cannot parse download media respnose."
+            throwM $ userError "cannot parse download media respnose."
 
-    -- 至此，我们确定返回内容不是文档所述的错误码
-    return rb
+    (as_json >>= either throwM unexpected_jsn . unWxppWsResp)
+                `catch`
+                    (\(_ :: JSONError) -> return rb)
+
 
 
 -- | 上传本地一个文件
