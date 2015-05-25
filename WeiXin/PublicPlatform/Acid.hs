@@ -137,8 +137,9 @@ instance WxppCacheBackend WxppCacheByAcid where
         fmap (fmap $ _unTimeTag &&& _ttTime) $
             query acid $ WxppAcidGetCachedUserInfo app_id open_id
 
-    wxppCacheSaveUserInfo (WxppCacheByAcid acid) app_id open_id qres = do
+    wxppCacheSaveUserInfo (WxppCacheByAcid acid) app_id qres = do
         now <- liftIO getCurrentTime
+        let open_id = endUserQueryResultOpenID qres
         update acid $ WxppAcidSetCachedUserInfo now app_id open_id qres
 
     wxppCacheLookupUploadedMediaIDByHash (WxppCacheByAcid acid) app_id h = do

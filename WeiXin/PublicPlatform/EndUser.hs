@@ -120,7 +120,7 @@ wxppCachedQueryEndUserInfo cache ttl atk open_id = do
 
         Nothing     -> do
             qres <- wxppQueryEndUserInfo atk open_id
-            liftIO $ wxppCacheSaveUserInfo cache app_id open_id qres
+            liftIO $ wxppCacheSaveUserInfo cache app_id qres
             return qres
     where
         app_id = accessTokenApp atk

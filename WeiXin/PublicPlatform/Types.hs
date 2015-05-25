@@ -1120,7 +1120,6 @@ class WxppCacheBackend a where
     wxppCacheSaveUserInfo ::
         a
         -> WxppAppID
-        -> WxppOpenID
         -> EndUserQueryResult
         -> IO ()
 
