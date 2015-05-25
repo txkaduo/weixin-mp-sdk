@@ -2,13 +2,11 @@ module WeiXin.PublicPlatform.BgWork where
 
 import ClassyPrelude hiding (catch)
 import Control.Monad.Catch                  ( catch )
-import Data.Acid
 import Data.Time                            (addUTCTime, NominalDiffTime)
 import Control.Monad.Logger
 import System.Timeout                       (timeout)
 import Control.Exception                    (evaluate)
 
-import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Security
@@ -17,16 +15,16 @@ import WeiXin.PublicPlatform.Security
 -- | 检查最新的 access token 是否已接近过期
 -- 如是，则向服务器请求更新
 refreshAccessTokenIfNeeded ::
-    (MonadIO m, MonadLogger m, MonadCatch m) =>
+    (MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
     WxppAppConfig
-    -> AcidState WxppAcidState
+    -> c
     -> NominalDiffTime
     -> m ()
-refreshAccessTokenIfNeeded wac acid dt = do
+refreshAccessTokenIfNeeded wac cache dt = do
     now <- liftIO getCurrentTime
     let t = addUTCTime (abs dt) now
     expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
-                        liftIO $ query acid $ WxppAcidGetAcccessToken app_id
+                        liftIO $ wxppCacheGetAccessToken cache app_id
     when (expired) $ do
         ws_res <- tryWxppWsResult $ refreshAccessToken wac
         case ws_res of
@@ -39,8 +37,9 @@ refreshAccessTokenIfNeeded wac acid dt = do
                     "New access token acquired, expired in: " <> show ttl
                 now' <- liftIO getCurrentTime
                 let expiry = addUTCTime (fromIntegral ttl) now'
-                liftIO $ update acid $ WxppAcidAddAcccessToken (atk_p app_id) expiry
-                liftIO $ update acid $ WxppAcidPurgeAcccessToken now'
+                liftIO $ do
+                    wxppCacheAddAccessToken cache (atk_p app_id) expiry
+                    wxppCachePurgeAccessToken cache now'
     where
         app_id = wxppAppConfigAppID wac
 
@@ -48,16 +47,16 @@ refreshAccessTokenIfNeeded wac acid dt = do
 -- | infinite loop to refresh access token
 -- Create a backgroup thread to call this, so that access token can be keep fresh.
 loopRefreshAccessToken ::
-    (MonadIO m, MonadLogger m, MonadCatch m) =>
+    (MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
     IO Bool     -- ^ This function should be a blocking op,
                 -- return True if the infinite should be aborted.
     -> Int      -- ^ interval between successive checking (in seconds)
     -> WxppAppConfig
-    -> AcidState WxppAcidState
+    -> c
     -> NominalDiffTime
     -> m ()
-loopRefreshAccessToken chk_abort intv wac acid dt = do
-    loopRunBgJob chk_abort intv $ refreshAccessTokenIfNeeded wac acid dt
+loopRefreshAccessToken chk_abort intv wac cache dt = do
+    loopRunBgJob chk_abort intv $ refreshAccessTokenIfNeeded wac cache dt
 
 
 loopRunBgJob :: (MonadIO m, MonadCatch m) =>

@@ -114,10 +114,10 @@ $(makeAcidic ''WxppAcidState
 
 
 wxppAcidGetUsableAccessToken :: MonadIO m =>
-    AcidState WxppAcidState -> WxppAppID -> m (Maybe AccessToken)
+    AcidState WxppAcidState -> WxppAppID -> m (Maybe (AccessToken, UTCTime))
 wxppAcidGetUsableAccessToken acid app_id = liftIO $ do
     now <- getCurrentTime
-    fmap (join . (fmap $ \x -> if snd x > now then Just (fst x) else Nothing)) $
+    fmap (join . (fmap $ \x -> if snd x > now then Just x else Nothing)) $
         query acid $ WxppAcidGetAcccessToken app_id
 
 

@@ -351,7 +351,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             then do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") return
+                        >>= maybe (throwE $ "no access token available") (return . fst)
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
@@ -393,7 +393,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just fp' -> do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") return
+                        >>= maybe (throwE $ "no access token available") (return . fst)
                 let fp = setExtIfNotExist "yml" $ fromText fp'
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
@@ -437,7 +437,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just fp -> do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") return
+                        >>= maybe (throwE $ "no access token available") (return . fst)
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
@@ -467,7 +467,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just ime -> do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") return
+                        >>= maybe (throwE $ "no access token available") (return . fst)
                 let open_id = wxppInFromUserName ime
                 qres <- tryWxppWsResultE "wxppQueryEndUserInfo" $
                             wxppQueryEndUserInfo atk open_id
@@ -515,7 +515,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just ime -> do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") return
+                        >>= maybe (throwE $ "no access token available") (return . fst)
                 let opts = defaults
                     open_id = wxppInFromUserName ime
                 qres <- tryWxppWsResultE "wxppCachedQueryEndUserInfo" $
@@ -624,7 +624,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                     Just (scene, ticket) -> do
                         atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                                     wxppCacheGetAccessToken cache app_id)
-                                >>= maybe (throwE $ "no access token available") return
+                                >>= maybe (throwE $ "no access token available") (return . fst)
                         let opts = defaults
                             open_id = wxppInFromUserName ime
                         qres <- tryWxppWsResultE "wxppCachedQueryEndUserInfo" $
@@ -956,7 +956,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     processInMsg (ConstResponse app_id msg_dir is_primary get_outmsg) cache _bs _m_ime = runExceptT $ do
         atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                     wxppCacheGetAccessToken cache app_id)
-                >>= maybe (throwE $ "no access token available") return
+                >>= maybe (throwE $ "no access token available") (return . fst)
         outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                         tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg

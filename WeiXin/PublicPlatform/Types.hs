@@ -1097,7 +1097,11 @@ instance FromJSON WxppForwardedEnv where
 -- 实际cache可以用各种后端，包括acid-state，各种数据库等等
 class WxppCacheBackend a where
     -- | get the lastest available access token
-    wxppCacheGetAccessToken :: a -> WxppAppID -> IO (Maybe AccessToken)
+    wxppCacheGetAccessToken ::
+        a
+        -> WxppAppID
+        -> IO (Maybe (AccessToken, UTCTime))
+                -- ^ access toke and expiry time
 
     -- | save a access token
     wxppCacheAddAccessToken ::

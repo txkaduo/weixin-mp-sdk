@@ -399,7 +399,7 @@ getAccessTokenSubHandler' foundation = do
     let cache = wxppSubCacheBackend foundation
     let app_id = wxppAppConfigAppID $ wxppSubAppConfig foundation
     (liftIO $ wxppCacheGetAccessToken cache app_id)
-            >>= maybe (mimicServerBusy "no access token available") return
+            >>= maybe (mimicServerBusy "no access token available") (return . fst)
 
 
 fakeUnionID :: WxppOpenID -> WxppUnionID

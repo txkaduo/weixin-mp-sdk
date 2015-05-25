@@ -180,7 +180,7 @@ instance (MonadIO m
                 Just True -> void $ runExceptT $ do
                     atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                                 wxppCacheGetAccessToken cache app_id)
-                            >>= maybe (throwE $ "no access token available") return
+                            >>= maybe (throwE $ "no access token available") (return . fst)
                     let open_id = wxppInFromUserName ime
                     qres <- tryWxppWsResultE "wxppQueryEndUserInfo" $
                                 wxppQueryEndUserInfo atk open_id
@@ -251,7 +251,10 @@ downloadSaveMediaToDB atk msg_id media_id = do
 instance WxppCacheBackend (WxppSubDBActionRunner IO) where
     wxppCacheGetAccessToken (WxppSubDBActionRunner run_db) app_id = do
         run_db $ do
-            fmap (fmap $ flip AccessToken app_id . wxppCachedAccessTokenData . entityVal) $
+            fmap
+                (fmap $
+                    ((flip AccessToken app_id . wxppCachedAccessTokenData) &&& wxppCachedAccessTokenExpiryTime) . entityVal)
+                $
                 selectFirst
                     [ WxppCachedAccessTokenApp ==. app_id ]
                     [ Desc WxppCachedAccessTokenCreatedTime ]
