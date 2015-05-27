@@ -127,7 +127,7 @@ mkYesodSubData "MaybeWxppSub" [parseRoutes|
 -- | 为 App 无关的接口打包成一个 subsite
 data WxppSubNoApp = WxppSubNoApp {
                         wxppSubNoAppUnionIdByOpenId     :: WxppUnionID -> IO [(WxppOpenID, WxppAppID)]
-                        , wxppSubNoAppRunLoggingT       :: forall a. LoggingT IO a -> IO a
+                        , wxppSubNoAppRunLoggingT       :: forall a m. LoggingT m a -> m a
                         , wxppSubNoAppCheckWaiReq       :: RequestAuthChecker
                     }
 

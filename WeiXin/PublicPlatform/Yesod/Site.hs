@@ -23,6 +23,9 @@ import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , paramErrorFromEither
                                             , httpErrorRetryWithValidParams
                                             )
+import Yesod.Helpers.Logger
+import Control.Monad.Logger
+
 import Network.Wai                          (lazyRequestBody)
 import Text.XML                             (renderText, parseLBS)
 import Data.Default                         (def)
@@ -54,9 +57,17 @@ import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.InMsgHandler
 
 
-checkSignature :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) ()
-checkSignature = do
-    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
+withWxppSubHandler ::
+    (WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) a)
+    -> HandlerT MaybeWxppSub (HandlerT master IO) a
+withWxppSubHandler f = do
+    getYesod
+        >>= maybe notFound return . unMaybeWxppSub
+        >>= f
+
+checkSignature' :: Yesod master =>
+    WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) ()
+checkSignature' foundation = do
 
     let token = wxppConfigAppToken $ wxppSubAppConfig $ foundation
 
@@ -76,17 +87,24 @@ checkSignature = do
             res = dat >>= paramErrorFromEither "signature" . check_sign
         return $ res *> pure ()
 
+withWxppSubLogging ::
+    WxppSub
+    -> HandlerT MaybeWxppSub (HandlerT master m) a
+    -> HandlerT MaybeWxppSub (HandlerT master m) a
+withWxppSubLogging foundation h = do
+    wxppSubRunLoggingT foundation $ LoggingT $ \log_func -> do
+        withLogFuncInHandlerT log_func h
+
 getMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
-getMessageR = do
-    checkSignature
-    (httpErrorWhenParamError =<<) $ do
-        reqGetParamE' "echostr"
+getMessageR = withWxppSubHandler $ \foundation -> do
+    withWxppSubLogging foundation $ do
+        checkSignature' foundation
+        (httpErrorWhenParamError =<<) $ do
+            reqGetParamE' "echostr"
 
 postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
-postMessageR = do
-    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
-
-    checkSignature
+postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
+    checkSignature' foundation
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
             Nothing -> return False
@@ -203,8 +221,7 @@ postMessageR = do
 checkWaiReqThen :: Yesod master =>
     (WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) a)
     -> HandlerT MaybeWxppSub (HandlerT master IO) a
-checkWaiReqThen f = do
-    foundation <- getYesod >>= maybe notFound return . unMaybeWxppSub
+checkWaiReqThen f = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
     b <- waiRequest >>= liftIO . (wxppSubTrustedWaiReq $ wxppSubOptions foundation)
     if b
         then f foundation
@@ -242,9 +259,9 @@ forwardWsResult op_name res = do
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 AccessToken
 getGetAccessTokenR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
-getGetAccessTokenR = checkWaiReqThen $ \_ -> do
+getGetAccessTokenR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
-    liftM toJSON $ getAccessTokenSubHandler
+    liftM toJSON $ getAccessTokenSubHandler' foundation
 
 
 -- | 找 OpenID 对应的 UnionID
@@ -345,9 +362,8 @@ getShowSimulatedQRCodeR = do
 getLookupOpenIDByUnionIDR :: Yesod master =>
     WxppUnionID
     -> HandlerT WxppSubNoApp (HandlerT master IO) Value
-getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ do
+getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ \foundation -> do
     alreadyExpired
-    foundation <- getYesod
     liftM toJSON $ liftIO $ wxppSubNoAppUnionIdByOpenId foundation union_id
 
 
@@ -363,14 +379,16 @@ instance Yesod master => YesodSubDispatch WxppSubNoApp (HandlerT master IO)
 --------------------------------------------------------------------------------
 
 checkWaiReqThenNA :: Yesod master =>
-    HandlerT WxppSubNoApp (HandlerT master IO) a
+    (WxppSubNoApp -> HandlerT WxppSubNoApp (HandlerT master IO) a)
     -> HandlerT WxppSubNoApp (HandlerT master IO) a
 checkWaiReqThenNA f = do
     foundation <- getYesod
-    b <- waiRequest >>= liftIO . wxppSubNoAppCheckWaiReq foundation
-    if b
-        then f
-        else permissionDenied "denied by security check"
+    wxppSubNoAppRunLoggingT foundation $ LoggingT $ \log_func -> do
+        withLogFuncInHandlerT log_func $ do
+            b <- waiRequest >>= liftIO . wxppSubNoAppCheckWaiReq foundation
+            if b
+                then f foundation
+                else permissionDenied "denied by security check"
 
 decodePostBodyAsYaml :: (Yesod master, FromJSON a) =>
     HandlerT MaybeWxppSub (HandlerT master IO) a
@@ -385,13 +403,6 @@ decodePostBodyAsYaml = do
 
         Right x -> return x
 
-
-getAccessTokenSubHandler :: Yesod master =>
-    HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
-getAccessTokenSubHandler = do
-    getYesod
-        >>= maybe mimicInvalidAppID return . unMaybeWxppSub
-        >>= getAccessTokenSubHandler'
 
 getAccessTokenSubHandler' :: Yesod master =>
     WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) AccessToken

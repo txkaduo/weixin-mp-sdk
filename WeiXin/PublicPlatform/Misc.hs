@@ -11,7 +11,7 @@ import Control.Concurrent                   (threadDelay)
 import Control.Monad.Logger
 import Control.Monad.Catch
 
-import Yesod.Helpers.Utils                  (LoggingTRunner(..))
+import Yesod.Helpers.Logger                 (LoggingTRunner(..))
 import Yesod.Helpers.Persist
 
 import Database.Persist.Sql
