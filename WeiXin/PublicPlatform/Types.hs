@@ -29,7 +29,9 @@ import Text.Read                            (Read(..))
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
-                                            , derivePersistFieldS, makeSimpleParserByTable)
+                                            , derivePersistFieldS, makeSimpleParserByTable
+                                            , deriveJsonS
+                                            )
 import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
 
@@ -350,6 +352,32 @@ instance FromJSON WxppAppConfig where
                                         data_dir
 
 
+-- | 见高级群发接口文档
+data GroupSendStatus =    GroupSendSuccess
+                        | GroupSendFail
+                        | GroupSendError Int
+                        deriving (Show, Eq)
+
+$(deriveJsonS "GroupSendStatus")
+
+instance SimpleStringRep GroupSendStatus where
+    simpleEncode GroupSendSuccess   = "send success"
+    simpleEncode GroupSendFail      = "send fail"
+    simpleEncode (GroupSendError x) = "err(" <> show x <> ")"
+
+    simpleParser = choice
+                    [ try $ string "send success" >> return GroupSendSuccess
+                    , try $ string "send fail" >> return GroupSendFail
+                    , parse_err
+                    ]
+        where
+            parse_err = do
+                _ <- string "err("
+                code <- simpleParser
+                _ <- string ")"
+                return  $ GroupSendError code
+
+
 -- | 事件推送的各种值
 data WxppEvent = WxppEvtSubscribe
                 | WxppEvtUnsubscribe
@@ -365,6 +393,8 @@ data WxppEvent = WxppEvtSubscribe
                     -- ^ (纬度，经度） 精度
                 | WxppEvtClickItem Text
                 | WxppEvtFollowUrl UrlText
+                | WxppEvtGroupSendReport GroupSendStatus Int Int Int Int
+                    -- ^ status, total, filter count, sent count, error count
                 deriving (Show, Eq)
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
@@ -377,6 +407,7 @@ wxppEventTypeString (WxppEvtClickItem {})         = "click_item"
 wxppEventTypeString (WxppEvtFollowUrl {})         = "follow_url"
 wxppEventTypeString (WxppEvtScanCodePush {})      = "scancode_push"
 wxppEventTypeString (WxppEvtScanCodeWaitMsg {})   = "scancode_waitmsg"
+wxppEventTypeString (WxppEvtGroupSendReport {})   = "MASSSENDJOBFINISH"
 
 instance ToJSON WxppEvent where
     toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
@@ -416,6 +447,14 @@ instance ToJSON WxppEvent where
 
         get_others (WxppEvtFollowUrl url) = [ "url" .= unUrlText url ]
 
+        get_others (WxppEvtGroupSendReport status total f_cnt sent_cnt err_cnt) =
+                                          [ "status"        .= status
+                                          , "total_count"   .= total
+                                          , "filter_count"  .= f_cnt
+                                          , "sent_count"    .= sent_cnt
+                                          , "error_count"   .= err_cnt
+                                          ]
+
 
 instance FromJSON WxppEvent where
     parseJSON = withObject "WxppEvent" $ \obj -> do
@@ -447,6 +486,14 @@ instance FromJSON WxppEvent where
           "click_item"  -> WxppEvtClickItem <$> obj .: "key"
 
           "follow_url"  -> WxppEvtFollowUrl . UrlText <$> obj .: "url"
+
+          "MASSSENDJOBFINISH" -> WxppEvtGroupSendReport
+                                    <$> obj .: "status"
+                                    <*> obj .: "total_count"
+                                    <*> obj .: "filter_count"
+                                    <*> obj .: "sent_count"
+                                    <*> obj .: "error_count"
+
 
           _ -> fail $ "unknown type: " ++ typ
 

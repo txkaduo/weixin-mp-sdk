@@ -15,7 +15,8 @@ import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import Numeric                              (readDec, readFloat)
 import Text.Parsec
 
-import Yesod.Helpers.Parsec                 (SimpleStringRep(..))
+import Yesod.Helpers.Parsec                 (SimpleStringRep(..), strictParseSimpleEncoded)
+import Yesod.Helpers.Utils                  (mapLeft)
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Utils
@@ -279,6 +280,25 @@ wxppEventFromDocument doc = do
                     scan_type <- getElementContent scan_info "ScanType"
                     scan_result <- getElementContent scan_info "ScanResult"
                     return $ WxppEvtScanCodeWaitMsg ek scan_type scan_result
+
+        "MASSSENDJOBFINISH" -> do
+                    status <- get_ele_s "Status"
+                                >>= mapLeft (\x -> "failed to parse Status: " ++ show x)
+                                    . strictParseSimpleEncoded
+                    total <- get_ele_s "TotalCount"
+                                >>= maybe (Left $ "failed to parse TotalCount") Right
+                                        . simpleParseDecT
+                    f_cnt <- get_ele_s "FilterCount"
+                                >>= maybe (Left $ "failed to parse FilterCount") Right
+                                        . simpleParseDecT
+                    sent_cnt <- get_ele_s "SentCount"
+                                >>= maybe (Left $ "failed to parse SentCount") Right
+                                        . simpleParseDecT
+                    err_cnt <- get_ele_s "ErrorCount"
+                                >>= maybe (Left $ "failed to parse ErrorCount") Right
+                                        . simpleParseDecT
+                    return $ WxppEvtGroupSendReport
+                                status total f_cnt sent_cnt err_cnt
 
         _       -> Left $ T.unpack $
                     "unknown/unsupported Event type: " <> evt_type
