@@ -159,11 +159,11 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
 
             forM_ (Map.toList m2) $ \((open_id, app_id), (_, (_, txt))) -> do
                 let outmsg_e = WxppOutMsgEntity open_id
-                                (error "wxppOutFromUserName forced in loopCheckAndPrompt")
+                                (error "wxppOutFromUserName forced in loopCleanupTimedOutForwardUrl")
                                 now
                                 (WxppOutMsgText txt)
 
-                logWxppWsExcThen "loopCheckAndPrompt" (const $ return ()) (const $ return ()) $ do
+                logWxppWsExcThen "loopCleanupTimedOutForwardUrl" (const $ return ()) (const $ return ()) $ do
                     m_atk <- liftIO $ get_atk app_id
                     case m_atk of
                         Nothing -> do
