@@ -279,7 +279,7 @@ getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
             let cache = wxppSubCacheBackend foundation
 
             (tryWxppWsResult $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id)
-                >>= forwardWsResult "wxppSubGetUnionID"
+                >>= forwardWsResult "wxppCacheLookupUserInfo"
 
 
 -- | 初始化 WxppUserCachedInfo 表的数据
