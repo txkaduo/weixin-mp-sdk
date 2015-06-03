@@ -258,7 +258,7 @@ tryInMsgHandlerUntilFirstPrimary handlers bs m_ime = do
     forM_ errs $ \err -> do
         $(logWarnS) wxppLogSource $ T.pack $
             "Error when handling incoming message, "
-            <> "MsgId=" <> (show $ join $ fmap wxppInMessageID m_ime)
+            <> "MsgId=" <> (show $ fmap unWxppInMsgID $ join $ fmap wxppInMessageID m_ime)
             <> ": " <> err
 
     return $ Right $ join res_lst
