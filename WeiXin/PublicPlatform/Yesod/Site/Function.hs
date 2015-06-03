@@ -106,7 +106,8 @@ instance (MonadIO m, MonadLogger m
             msg_record_id <- case old_or_msg_record_id of
                 Left (Entity old_id _) -> do
                     $logWarnS wxppLogSource $
-                        "got a duplicate message from WeiXin platform: " <> toPathPiece old_id
+                        "got a duplicate message from WeiXin platform: db id=" <> toPathPiece old_id
+                            <>", MsgId=" <> (fromString $ show $ fmap unWxppInMsgID m_msg_id)
                     mzero
 
                 Right x -> return x
