@@ -50,19 +50,19 @@ mkMaybeWxppSub ::
     -> (WxppAppID -> Maybe (IORef (Maybe [SomeWxppInMsgHandler (LoggingT IO)])))
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> Chan (WxppAppID, [WxppOutMsgEntity])
-    -> Chan (WxppAppID, (WxppInMsgRecordId, WxppMediaID))
+    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> WxppInMsgRecordId -> WxppMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg_ch down_media_ch opts app_id =
+mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg down_media opts app_id =
     MaybeWxppSub $ case Map.lookup app_id wxpp_config_map of
         Nothing     -> Nothing
         Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
                         in Just $ WxppSub wac
                                     (SomeWxppCacheBackend cache)
                                     (runDBWith foundation)
-                                    send_msg
+                                    (send_msg app_id)
                                     (handle_msg data_dir)
                                     middlewares
                                     (runLoggingTWith foundation)
@@ -76,7 +76,7 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
                 SomeWxppInMsgProcMiddleware $
                     (StoreInMsgToDB app_id
                         db_runner
-                        (\x y -> liftIO $ writeChan down_media_ch (app_id, (x, y)))
+                        (\x y -> liftIO $ down_media app_id x y)
                     :: StoreInMsgToDB (LoggingT IO)
                     )
 
@@ -127,8 +127,6 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
                             cache
                             in_msg_handlers
                             bs ime
-
-        send_msg msgs = writeChan send_msg_ch (app_id, msgs)
 
 
 -- | 如果要计算的操作有异常，记日志并重试
