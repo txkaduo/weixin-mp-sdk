@@ -41,6 +41,7 @@ data Options = Options {
                 , optAppToken   :: Maybe Token
                 , optAppSecret  :: WxppAppSecret
                 , optAppAesKey  :: Maybe AesKey
+                , optAppAccessTokenData :: Maybe Text
                 , optVerbose    :: Int
                 , optCommand    :: ManageCmd
                 }
@@ -118,6 +119,10 @@ optionsParse = Options
                                     (long "aes-key"
                                     <> metavar "AES_KEY"
                                     <> help "Base64-encoded App AES Key"))
+                <*> (optional $ fromString <$> strOption
+                                    (long "access-token"
+                                    <> metavar "ACCESS_TOKEN"
+                                    <> help "Provide an known Access Token String of the App rather than get a new one."))
                 <*> (option auto
                         $ long "verbose" <> short 'v' <> value 1
                         <> metavar "LEVEL"
@@ -131,8 +136,13 @@ start = do
     let app_id = optAppID opts
         app_secret = optAppSecret opts
         get_atk = do
-            AccessTokenResp atk_p _ttl <- refreshAccessToken' app_id app_secret
-            return $ atk_p app_id
+            case optAppAccessTokenData opts of
+                Nothing -> do
+                    AccessTokenResp atk_p _ttl <- refreshAccessToken' app_id app_secret
+                    return $ atk_p app_id
+
+                Just atk_data -> do
+                    return $ AccessToken atk_data app_id
 
     case optCommand opts of
 
