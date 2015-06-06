@@ -11,6 +11,7 @@ import qualified Data.Text                  as T
 import qualified Data.Map.Lazy              as LM
 import Filesystem.Path.CurrentOS            (FilePath)
 import Network.Mime                         (defaultMimeMap, MimeType)
+import System.IO                            (hFlush)
 import Data.Conduit
 import qualified Data.Conduit.List          as CL
 -- import Control.Monad.Reader                 (asks)
@@ -33,15 +34,19 @@ data ManageCmd = QueryAutoReplyRules
                 | ListAllMaterialMedia WxppMediaType
                 | GetAllMaterialNews
                     Bool    -- ^ show material id only
+                | SearchMaterialNewsByTitle
+                    Bool    -- ^ edit if true, show otherwise
+                    Text
                 deriving (Show, Eq, Ord)
 
 
 data Options = Options {
                 optAppID        :: WxppAppID
                 , optAppToken   :: Maybe Token
-                , optAppSecret  :: WxppAppSecret
+                , optAppSecret  :: Maybe WxppAppSecret
                 , optAppAesKey  :: Maybe AesKey
                 , optAppAccessTokenData :: Maybe Text
+                , optEditor     :: Maybe Text
                 , optVerbose    :: Int
                 , optCommand    :: ManageCmd
                 }
@@ -72,6 +77,12 @@ manageCmdParser = subparser $
         (info (helper <*> (GetAllMaterialNews
                             <$> switch (long "show-id-only" <> help "show material id only")))
             (progDesc "取永久素材中的所有图文消息"))
+    <> command "search-material-news-title"
+        (info (helper <*> (SearchMaterialNewsByTitle
+                            <$> switch (long "edit" <> help "edit the located news")
+                            <*> (fromString <$> argument str (metavar "STRING"))
+                            ))
+            (progDesc "根据搜索永久素材中标题含有指定关键字的图文消息"))
     <> command "count-material"
         (info (helper <*> pure CountMaterial)
             (progDesc "统计永久素材数量"))
@@ -111,7 +122,7 @@ optionsParse = Options
                 <*> (optional $ Token . fromString <$> strOption (long "token"
                                                 <> metavar "TOKEN"
                                                 <> help "App Token String"))
-                <*> (WxppAppSecret . fromString <$> strOption
+                <*> (optional $ WxppAppSecret . fromString <$> strOption
                                     (long "secret"
                                     <> metavar "SECRET"
                                     <> help "App Secret String"))
@@ -123,6 +134,10 @@ optionsParse = Options
                                     (long "access-token"
                                     <> metavar "ACCESS_TOKEN"
                                     <> help "Provide an known Access Token String of the App rather than get a new one."))
+                <*> (optional $ fromString <$> strOption
+                                    (long "editor"
+                                    <> metavar "EDITOR_CMD"
+                                    <> help "external editor command"))
                 <*> (option auto
                         $ long "verbose" <> short 'v' <> value 1
                         <> metavar "LEVEL"
@@ -134,12 +149,16 @@ start :: (MonadLogger m, MonadThrow m, MonadCatch m, MonadIO m) => ReaderT Optio
 start = do
     opts <- ask
     let app_id = optAppID opts
-        app_secret = optAppSecret opts
+        m_app_secret = optAppSecret opts
         get_atk = do
             case optAppAccessTokenData opts of
                 Nothing -> do
-                    AccessTokenResp atk_p _ttl <- refreshAccessToken' app_id app_secret
-                    return $ atk_p app_id
+                    case m_app_secret of
+                        Nothing -> do
+                            throwM $ userError "need either app secret or access token"
+                        Just app_secret -> do
+                            AccessTokenResp atk_p _ttl <- refreshAccessToken' app_id app_secret
+                            return $ atk_p app_id
 
                 Just atk_data -> do
                     return $ AccessToken atk_data app_id
@@ -215,6 +234,26 @@ start = do
                             )
                 $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
 
+        SearchMaterialNewsByTitle edit_mode keyword -> do
+            atk <- get_atk
+            let has_keyword item =
+                    let articles = wxppBatchGetMaterialNewsItemContent item
+                    in any (T.isInfixOf keyword . wxppMaterialArticleTitle) articles
+
+            results <- wxppBatchGetMaterialToSrc (wxppBatchGetMaterialNews atk 20)
+                $= (awaitForever $ \x -> do
+                        liftIO $ putStr "." >> hFlush stdout
+                        yield x
+                )
+                $= CL.filter has_keyword
+                $$ CL.consume
+
+            if edit_mode
+                then do
+                    liftIO $ putStrLn "not implemented"
+                else do
+                    mapM_ (liftIO . B.putStr . Y.encode) results
+
 
 -- | 根据 mime 反查出一个扩展名
 extByMime :: MimeType -> Maybe Text
@@ -249,6 +288,10 @@ main = execParser opts >>= start'
     where
         opts = info (helper <*> optionsParse)
                 ( fullDesc
-                    <> progDesc "执行一些微信公众平台管理查询操作\n警告：执行操作会更新 access token，服务器使用中的token可能会失效"
+                    <> progDesc (unlines
+                        [ "执行一些微信公众平台管理查询操作"
+                        , "警告：执行操作会更新 access token，服务器使用中的access token可能会失效"
+                        , "建议从命令行参数直接指定 access token"
+                        ])
                     <> header "wxpp-manage - 微信公众平台管理查询小工具"
                     )
