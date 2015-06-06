@@ -651,8 +651,11 @@ instance FromJSON WxppArticle where
 data WxppOutMsg = WxppOutMsgText Text
                 | WxppOutMsgImage WxppMediaID
                 | WxppOutMsgVoice WxppMediaID
-                | WxppOutMsgVideo WxppMediaID WxppMediaID (Maybe Text) (Maybe Text)
+                | WxppOutMsgVideo WxppMediaID (Maybe WxppMediaID) (Maybe Text) (Maybe Text)
                     -- ^ media_id thumb_media_id title description
+                    -- XXX: 缩略图字段出现在"客服接口"文档里，
+                    -- 但又没出现在回复用户消息文档里
+                    -- 暂时为它留着一个字段
                 | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgNews [WxppArticle]
@@ -678,7 +681,7 @@ instance ToJSON WxppOutMsg where
         get_others (WxppOutMsgVoice media_id) = [ "media_id" .= media_id ]
         get_others (WxppOutMsgVideo media_id thumb_media_id title desc) =
                                                 [ "media_id"        .= media_id
-                                                , "thumb_media_id"  .= thumb_media_id
+                                                , "thumb_media_id"  .= fmap unWxppMediaID thumb_media_id
                                                 , "title"           .= title
                                                 , "desc"            .= desc
                                                 ]
@@ -726,8 +729,11 @@ instance FromJSON WxppOutMsg where
 data WxppOutMsgL = WxppOutMsgTextL Text
                 | WxppOutMsgImageL FilePath
                 | WxppOutMsgVoiceL FilePath
-                | WxppOutMsgVideoL FilePath FilePath (Maybe Text) (Maybe Text)
-                    -- ^ media_id title description
+                | WxppOutMsgVideoL FilePath (Maybe FilePath) (Maybe Text) (Maybe Text)
+                    -- ^ media_id thumb_image title description
+                    -- XXX: 缩略图字段出现在"客服接口"文档里，
+                    -- 但又没出现在回复用户消息文档里
+                    -- 暂时为它留着一个字段
                 | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgNewsL [WxppArticleLoader]
@@ -746,12 +752,12 @@ instance FromJSON WxppOutMsgL where
                         "voice" -> WxppOutMsgVoiceL . fromText <$> obj .: "path"
                         "video" -> do
                                     path <- fromText <$> obj .: "path"
-                                    path2 <- fromText <$> obj .: "thumb-image"
+                                    path2 <- fmap fromText <$> obj .:? "thumb-image"
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
                                     return $ WxppOutMsgVideoL path path2 title desc
                         "music" -> do
-                                    path <- fromText <$> obj .: "path"
+                                    path <- fromText <$> obj .: "thumb-image"
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
                                     url <- fmap UrlText <$> obj .:? "url"

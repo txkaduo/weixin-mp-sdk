@@ -51,12 +51,12 @@ wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_en
                                             [ "msgtype" .= ("voice" :: Text)
                                             , "voice"   .= object [ "media_id" .= unWxppMediaID media_id ]
                                             ]
-        obj_for_out_msg (WxppOutMsgVideo media_id thumb_media_id title desc) = Just $
+        obj_for_out_msg (WxppOutMsgVideo media_id m_thumb_media_id title desc) = Just $
                             object
                                 [ "msgtype" .= ("video" :: Text)
                                 , "video"   .= object
                                                 [ "media_id"        .= unWxppMediaID media_id
-                                                , "thumb_media_id"  .= unWxppMediaID thumb_media_id
+                                                , "thumb_media_id"  .= fmap unWxppMediaID m_thumb_media_id
                                                 , "title"           .= title
                                                 , "description"     .= desc
                                                 ]
