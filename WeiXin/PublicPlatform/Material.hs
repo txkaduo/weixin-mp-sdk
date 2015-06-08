@@ -235,6 +235,7 @@ data WxppBatchGetMaterialNewsItem = WxppBatchGetMaterialNewsItem {
                                         , wxppBatchGetMaterialNewsItemContent   :: [WxppMaterialArticle]
                                         , wxppBatchGetMaterialNewsItemTime      :: UTCTime
                                     }
+                                    deriving (Eq)
 
 instance FromJSON WxppBatchGetMaterialNewsItem where
     parseJSON = withObject "WxppBatchGetMaterialNewsItem" $ \obj -> do

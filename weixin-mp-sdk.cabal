@@ -154,6 +154,8 @@ executable wxpp-manage
                      , containers
                      , conduit
                      , system-filepath
+                     , directory
+                     , process
 
   default-extensions:  NoImplicitPrelude
                        CPP

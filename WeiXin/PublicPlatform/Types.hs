@@ -782,6 +782,7 @@ data WxppMaterialArticle = WxppMaterialArticle {
                                 , wxppMaterialArticleContent        :: Text
                                 , wxppMaterialArticleContentSrcUrl  :: UrlText
                             }
+                            deriving (Eq)
 
 instance FromJSON WxppMaterialArticle where
     parseJSON = withObject "WxppMaterialArticle" $ \obj -> do
