@@ -246,7 +246,7 @@ instance ToJSON WxppBatchGetMaterialNewsItem where
     toJSON x = object
                     [ "media_id" .= wxppBatchGetMaterialNewsItemID x
                     , "content" .= object [ "news_item" .= wxppBatchGetMaterialNewsItemContent x ]
-                    , "update_time" .= wxppBatchGetMaterialNewsItemTime x
+                    , "update_time" .= utcTimeToEpochInt (wxppBatchGetMaterialNewsItemTime x)
                     ]
 
 -- | 调用批量取图文消息类型的永久素材的接口
