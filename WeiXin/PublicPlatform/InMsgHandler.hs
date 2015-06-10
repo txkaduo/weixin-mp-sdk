@@ -309,7 +309,7 @@ parseWxppOutMsgLoader obj = do
     -- parseDelayedYamlLoader (Just "msg") "file"
     -- 逐一尝试以下字段
     -- msg: 内嵌表示的完整消息
-    -- artcile-file: 外部文件定义的单图文消息
+    -- article-file: 外部文件定义的单图文消息
     -- file: 外部文件定义的完整消息
     parse_direct
         <|> (fmap (fmap $ \x -> WxppOutMsgNewsL [ return (Right x) ] ) <$> parse_indirect1)
@@ -324,6 +324,7 @@ parseWxppOutMsgLoader obj = do
 data WelcomeSubscribe = WelcomeSubscribe
                             WxppAppID
                             FilePath            -- ^ 所有消息文件存放的目录
+                            Bool                -- ^ if primary
                             WxppOutMsgLoader    -- ^ 打算回复用户的消息
                         deriving (Typeable)
 
@@ -333,7 +334,9 @@ instance JsonConfigable WelcomeSubscribe where
     isNameOfInMsgHandler _ x = x == "welcome-subscribe"
 
     parseWithExtraData _ (app_id, msg_dir) obj = do
-        WelcomeSubscribe app_id msg_dir <$> parseWxppOutMsgLoader obj
+        WelcomeSubscribe app_id msg_dir
+                <$> (obj .:? "primary" .!= False)
+                <*> parseWxppOutMsgLoader obj
 
 
 type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
@@ -342,7 +345,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
     where
 
-    processInMsg (WelcomeSubscribe app_id msg_dir get_outmsg) cache _bs m_ime = runExceptT $ do
+    processInMsg (WelcomeSubscribe app_id msg_dir primary get_outmsg) cache _bs m_ime = runExceptT $ do
         is_subs <- case fmap wxppInMessage m_ime of
                     Just (WxppInMsgEvent WxppEvtSubscribe)              -> return True
                     Just (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))  -> return True
@@ -353,7 +356,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                             wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") (return . fst)
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
-                liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
+                liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
             else return []
 
