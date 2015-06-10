@@ -178,6 +178,12 @@ test-suite test
                      , data-default
                      , xml-conduit
                      , text
+                     , yesod-helpers
+
+  if flag(parsec3)
+      build-depends:   parsec3
+  else
+      build-depends:   parsec == 3.*
 
   default-language:    Haskell2010
 
