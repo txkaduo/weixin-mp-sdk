@@ -42,18 +42,18 @@ wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_en
                                             ]
         obj_for_out_msg (WxppOutMsgImage media_id) = Just $ object
                                             [ "msgtype" .= ("image" :: Text)
-                                            , "image"   .= object [ "media_id" .= unWxppBriefMediaID media_id ]
+                                            , "image"   .= object [ "media_id" .= media_id ]
                                             ]
         obj_for_out_msg (WxppOutMsgVoice media_id) = Just $ object
                                             [ "msgtype" .= ("voice" :: Text)
-                                            , "voice"   .= object [ "media_id" .= unWxppBriefMediaID media_id ]
+                                            , "voice"   .= object [ "media_id" .= media_id ]
                                             ]
         obj_for_out_msg (WxppOutMsgVideo media_id m_thumb_media_id title desc) = Just $
                             object
                                 [ "msgtype" .= ("video" :: Text)
                                 , "video"   .= object
-                                                [ "media_id"        .= unWxppBriefMediaID media_id
-                                                , "thumb_media_id"  .= fmap unWxppBriefMediaID m_thumb_media_id
+                                                [ "media_id"        .= media_id
+                                                , "thumb_media_id"  .= m_thumb_media_id
                                                 , "title"           .= title
                                                 , "description"     .= desc
                                                 ]
@@ -62,7 +62,7 @@ wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_en
                             object
                                 [ "msgtype" .= ("music" :: Text)
                                 , "music"   .= object
-                                                [ "thumb_media_id"  .= unWxppBriefMediaID thumb_media_id
+                                                [ "thumb_media_id"  .= thumb_media_id
                                                 , "musicurl"        .= fmap unUrlText url
                                                 , "hqmusicurl"      .= fmap unUrlText hq_url
                                                 , "title"           .= title

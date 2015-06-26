@@ -106,20 +106,21 @@ fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
             sequence $ map (runDelayedYamlLoaderExc msg_dir) loaders
 
 fromWxppOutMsgL _ cache    atk (WxppOutMsgImageL fp)   = do
-        liftM (WxppOutMsgImage . urMediaId) $
+        liftM (WxppOutMsgImage . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeImage fp
 
 fromWxppOutMsgL _ cache    atk (WxppOutMsgVoiceL fp)   = do
-        liftM (WxppOutMsgVoice . urMediaId) $
+        liftM (WxppOutMsgVoice . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
 fromWxppOutMsgL _ cache    atk (WxppOutMsgVideoL fp m_fp2 x1 x2)   = do
         liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
-            (liftM urMediaId $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp)
-            (liftM (fmap urMediaId) $ mapM (wxppUploadMediaCached cache atk WxppMediaTypeVoice) m_fp2)
+            (liftM (fromWxppBriefMediaID . urMediaId) $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp)
+            (liftM (fmap $ fromWxppBriefMediaID . urMediaId) $
+                mapM (wxppUploadMediaCached cache atk WxppMediaTypeVoice) m_fp2)
 
 fromWxppOutMsgL _ cache    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
-        liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . urMediaId) $
+        liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
 fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =

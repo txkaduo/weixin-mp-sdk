@@ -99,6 +99,23 @@ instance FromJSON WxppDurableMediaID where
     parseJSON = fmap WxppDurableMediaID . parseJSON
 
 
+-- | 代表永久或临时的素材ID
+newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
+                    deriving (Show, Eq)
+
+fromWxppBriefMediaID :: WxppBriefMediaID -> WxppMediaID
+fromWxppBriefMediaID = WxppMediaID . unWxppBriefMediaID
+
+fromWxppDurableMediaID :: WxppDurableMediaID -> WxppMediaID
+fromWxppDurableMediaID = WxppMediaID . unWxppDurableMediaID
+
+instance ToJSON WxppMediaID where
+    toJSON = toJSON . unWxppMediaID
+
+instance FromJSON WxppMediaID where
+    parseJSON = fmap WxppMediaID . parseJSON
+
+
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Read, Eq, Ord, Typeable)
 
@@ -660,15 +677,17 @@ instance FromJSON WxppArticle where
                 return $ WxppArticle title desc pic_url url
 
 -- | 外发的信息
+-- XXX: 虽然文档没有明确说明，media_id是否可以是永久素材的ID，
+--      目录假定这是可以的，因为许多其它接口都支付永久素材了
 data WxppOutMsg = WxppOutMsgText Text
-                | WxppOutMsgImage WxppBriefMediaID
-                | WxppOutMsgVoice WxppBriefMediaID
-                | WxppOutMsgVideo WxppBriefMediaID (Maybe WxppBriefMediaID) (Maybe Text) (Maybe Text)
+                | WxppOutMsgImage WxppMediaID
+                | WxppOutMsgVoice WxppMediaID
+                | WxppOutMsgVideo WxppMediaID (Maybe WxppMediaID) (Maybe Text) (Maybe Text)
                     -- ^ media_id thumb_media_id title description
                     -- XXX: 缩略图字段出现在"客服接口"文档里，
                     -- 但又没出现在回复用户消息文档里
                     -- 暂时为它留着一个字段
-                | WxppOutMsgMusic WxppBriefMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
+                | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgNews [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
@@ -693,7 +712,7 @@ instance ToJSON WxppOutMsg where
         get_others (WxppOutMsgVoice media_id) = [ "media_id" .= media_id ]
         get_others (WxppOutMsgVideo media_id thumb_media_id title desc) =
                                                 [ "media_id"        .= media_id
-                                                , "thumb_media_id"  .= fmap unWxppBriefMediaID thumb_media_id
+                                                , "thumb_media_id"  .= thumb_media_id
                                                 , "title"           .= title
                                                 , "desc"            .= desc
                                                 ]
