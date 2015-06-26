@@ -22,12 +22,12 @@ import WeiXin.PublicPlatform.Utils
 wxppDownloadMedia ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
-    -> WxppMediaID
+    -> WxppBriefMediaID
     -> m (Response LB.ByteString)
 wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
     let url = wxppRemoteApiBaseUrl <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
-                        & param "media_id" .~ [ unWxppMediaID mid ]
+                        & param "media_id" .~ [ unWxppBriefMediaID mid ]
     rb <- liftIO $ getWith opts url
 
     -- 需要某种方法区别正常和异常的返回
@@ -88,7 +88,7 @@ wxppUploadMediaCached cache atk mtype fp = do
 
 -- | 从 WxppOutMsgL 计算出 WxppOutMsg
 -- 工作包括：
--- * 把 WxppOutMsgL 里的文件路径变换成 WxppMediaID
+-- * 把 WxppOutMsgL 里的文件路径变换成 WxppBriefMediaID
 -- * 执行必要的延迟加载
 -- 这个函数会抛出异常 见 tryWxppWsResult
 -- 下面还有个尽量不抛出异常的版本

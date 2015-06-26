@@ -51,7 +51,7 @@ data StoreInMsgToDB m = StoreInMsgToDB
                             WxppAppID
                             (WxppSubDBActionRunner m)
                                 -- ^ function to run DB actions
-                            (WxppInMsgRecordId -> WxppMediaID -> m ())
+                            (WxppInMsgRecordId -> WxppBriefMediaID -> m ())
                                 -- ^ function to download media file
                                 -- 推荐使用异步方式下载
 
@@ -61,7 +61,7 @@ instance JsonConfigable (StoreInMsgToDB m) where
     type JsonConfigableUnconfigData (StoreInMsgToDB m) =
             ( WxppAppID
             , WxppSubDBActionRunner m
-            , WxppInMsgRecordId -> WxppMediaID -> m ()
+            , WxppInMsgRecordId -> WxppBriefMediaID -> m ()
             )
 
     isNameOfInMsgHandler _ = ( == "db-store-all" )
@@ -220,7 +220,7 @@ downloadSaveMediaToDB ::
     ) =>
     AccessToken
     -> WxppInMsgRecordId
-    -> WxppMediaID
+    -> WxppBriefMediaID
 #if MIN_VERSION_persistent(2, 0, 0)
     -> ReaderT backend m ()
 #else
@@ -230,7 +230,7 @@ downloadSaveMediaToDB atk msg_id media_id = do
     err_or_rb <- tryWxppWsResult $ wxppDownloadMedia atk media_id
     case err_or_rb of
         Left err -> do
-                    $(logErrorS) wxppLogSource $ "Failed to download media '" <> unWxppMediaID media_id
+                    $(logErrorS) wxppLogSource $ "Failed to download media '" <> unWxppBriefMediaID media_id
                                     <> "': " <> (fromString $ show err)
         Right rb -> do
                     now <- liftIO getCurrentTime
@@ -243,7 +243,7 @@ downloadSaveMediaToDB atk msg_id media_id = do
                                                 now
                     case old_or_id of
                         Left (Entity old_id _) -> do
-                            $(logWarnS) wxppLogSource $ "Media '" <> unWxppMediaID media_id
+                            $(logWarnS) wxppLogSource $ "Media '" <> unWxppBriefMediaID media_id
                                             <> "' already in DB, record id: "
                                             <> toPathPiece old_id
                         Right _ -> return ()

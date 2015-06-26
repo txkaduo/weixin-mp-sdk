@@ -55,25 +55,25 @@ newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
 
 
 -- | 为区分临时素材和永久素材，这个值专指 临时素材
-newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
+newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
                         deriving (Show, Eq, Ord)
 
-instance SafeCopy WxppMediaID where
-    getCopy                 = contain $ safeGet
-    putCopy (WxppMediaID x) = contain $ safePut x
+instance SafeCopy WxppBriefMediaID where
+    getCopy                         = contain $ safeGet
+    putCopy (WxppBriefMediaID x)    = contain $ safePut x
 
-instance PersistField WxppMediaID where
-    toPersistValue      = toPersistValue . unWxppMediaID
-    fromPersistValue    = fmap WxppMediaID . fromPersistValue
+instance PersistField WxppBriefMediaID where
+    toPersistValue      = toPersistValue . unWxppBriefMediaID
+    fromPersistValue    = fmap WxppBriefMediaID . fromPersistValue
 
-instance PersistFieldSql WxppMediaID where
+instance PersistFieldSql WxppBriefMediaID where
     sqlType _ = SqlString
 
-instance ToJSON WxppMediaID where
-    toJSON = toJSON . unWxppMediaID
+instance ToJSON WxppBriefMediaID where
+    toJSON = toJSON . unWxppBriefMediaID
 
-instance FromJSON WxppMediaID where
-    parseJSON = fmap WxppMediaID . parseJSON
+instance FromJSON WxppBriefMediaID where
+    parseJSON = fmap WxppBriefMediaID . parseJSON
 
 
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
@@ -513,11 +513,11 @@ instance FromJSON WxppEvent where
 -- | 收到的各种消息: 包括普通消息和事件推送
 data WxppInMsg =  WxppInMsgText Text
                     -- ^ 文本消息
-                | WxppInMsgImage WxppMediaID UrlText
+                | WxppInMsgImage WxppBriefMediaID UrlText
                     -- ^ 消息
-                | WxppInMsgVoice WxppMediaID Text (Maybe Text)
+                | WxppInMsgVoice WxppBriefMediaID Text (Maybe Text)
                     -- ^ format recognition
-                | WxppInMsgVideo WxppMediaID WxppMediaID
+                | WxppInMsgVideo WxppBriefMediaID WxppBriefMediaID
                     -- ^ media_id, thumb_media_id
                 | WxppInMsgLocation (Double, Double) Double Text
                     -- ^ (latitude, longitude) scale label
@@ -661,14 +661,14 @@ instance FromJSON WxppArticle where
 
 -- | 外发的信息
 data WxppOutMsg = WxppOutMsgText Text
-                | WxppOutMsgImage WxppMediaID
-                | WxppOutMsgVoice WxppMediaID
-                | WxppOutMsgVideo WxppMediaID (Maybe WxppMediaID) (Maybe Text) (Maybe Text)
+                | WxppOutMsgImage WxppBriefMediaID
+                | WxppOutMsgVoice WxppBriefMediaID
+                | WxppOutMsgVideo WxppBriefMediaID (Maybe WxppBriefMediaID) (Maybe Text) (Maybe Text)
                     -- ^ media_id thumb_media_id title description
                     -- XXX: 缩略图字段出现在"客服接口"文档里，
                     -- 但又没出现在回复用户消息文档里
                     -- 暂时为它留着一个字段
-                | WxppOutMsgMusic WxppMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
+                | WxppOutMsgMusic WxppBriefMediaID (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgNews [WxppArticle]
                     -- ^ 根据文档，图文总数不可超过10
@@ -693,7 +693,7 @@ instance ToJSON WxppOutMsg where
         get_others (WxppOutMsgVoice media_id) = [ "media_id" .= media_id ]
         get_others (WxppOutMsgVideo media_id thumb_media_id title desc) =
                                                 [ "media_id"        .= media_id
-                                                , "thumb_media_id"  .= fmap unWxppMediaID thumb_media_id
+                                                , "thumb_media_id"  .= fmap unWxppBriefMediaID thumb_media_id
                                                 , "title"           .= title
                                                 , "desc"            .= desc
                                                 ]
@@ -1120,7 +1120,7 @@ instance PersistFieldSql MD5Hash where
 -- | 上传媒体文件的结果
 data UploadResult = UploadResult {
                         urMediaType     :: WxppMediaType
-                        , urMediaId     :: WxppMediaID
+                        , urMediaId     :: WxppBriefMediaID
                         , urCreateTime  :: UTCTime
                         }
                         deriving (Show, Typeable)
@@ -1136,7 +1136,7 @@ instance FromJSON UploadResult where
                 "video" -> return WxppMediaTypeVideo
                 "thumb" -> return WxppMediaTypeThumb
                 _       -> fail $ "unknown type: " <> type_s
-        media_id <- WxppMediaID <$> obj .: "media_id"
+        media_id <- WxppBriefMediaID <$> obj .: "media_id"
         t <- epochIntToUtcTime <$> obj .: "created_at"
         return $ UploadResult typ media_id t
 

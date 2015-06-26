@@ -51,7 +51,7 @@ mkMaybeWxppSub ::
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
-    -> (WxppAppID -> WxppInMsgRecordId -> WxppMediaID -> IO ())
+    -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
