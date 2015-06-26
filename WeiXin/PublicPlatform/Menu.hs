@@ -16,7 +16,6 @@ import System.Directory                     (doesFileExist)
 import Control.Concurrent                   (threadDelay)
 
 import WeiXin.PublicPlatform.Types
-import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.WS
 
 
@@ -36,11 +35,8 @@ wxppCreateMenu ::
 wxppCreateMenu (AccessToken { accessTokenData = atk }) menus = do
     let url = wxppRemoteApiBaseUrl <> "/menu/create"
         opts = defaults & param "access_token" .~ [ atk ]
-    err_resp@(WxppAppError err _msg) <-
-                (liftIO $ postWith opts url $ toJSON $ object [ "button" .= menus ])
-                    >>= liftM (view responseBody) . asJSON
-    when ( err /= WxppErrorX (Right WxppNoError) ) $ do
-        throwM err_resp
+    (liftIO $ postWith opts url $ toJSON $ object [ "button" .= menus ])
+        >>= asWxppWsResponseVoid
 
 
 -- | 调用服务器接口，查询菜单
@@ -82,11 +78,8 @@ wxppDeleteMenu ::
 wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/menu/delete"
         opts = defaults & param "access_token" .~ [ atk ]
-    err_resp@(WxppAppError err _msg) <-
-                (liftIO $ getWith opts url)
-                    >>= liftM (view responseBody) . asJSON
-    when ( err /= WxppErrorX (Right WxppNoError) ) $ do
-        throwM err_resp
+    (liftIO $ getWith opts url)
+        >>= asWxppWsResponseVoid
 
 
 -- | 根据指定 YAML 文件配置调用远程接口，修改菜单

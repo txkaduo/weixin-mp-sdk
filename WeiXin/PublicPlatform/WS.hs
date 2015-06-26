@@ -87,6 +87,14 @@ asWxppWsResponseNormal r = do
     liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
 
 
+asWxppWsResponseVoid :: (MonadThrow m) =>
+    Response LB.ByteString -> m ()
+asWxppWsResponseVoid r = do
+    err_resp@(WxppAppError err _msg) <-
+        liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
+    when ( err /= WxppErrorX (Right WxppNoError) ) $ do
+        throwM err_resp
+
 alterContentTypeToJson :: Response body -> Response body
 alterContentTypeToJson r =
     if r ^. responseHeader "Content-Type" == "text/plain"

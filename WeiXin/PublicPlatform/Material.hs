@@ -20,7 +20,6 @@ import Data.Conduit.Combinators hiding (null)
 import WeiXin.PublicPlatform.Types
 -- import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
-import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Utils
 
 
@@ -302,12 +301,9 @@ wxppReplaceArticleOfMaterialNews ::
 wxppReplaceArticleOfMaterialNews (AccessToken { accessTokenData = atk }) material_id idx article = do
     let url = wxppRemoteApiBaseUrl <> "/material/update_news"
         opts = defaults & param "access_token" .~ [ atk ]
-    err_resp@(WxppAppError err _msg) <-
-                    (liftIO $ postWith opts url $ object $
-                                [ "media_id"    .= unWxppMaterialID material_id
-                                , "index"       .= idx
-                                , "articles"    .= article
-                                ])
-                    >>= liftM (view responseBody) . asJSON . alterContentTypeToJson
-    when ( err /= WxppErrorX (Right WxppNoError) ) $ do
-        throwM err_resp
+    (liftIO $ postWith opts url $ object $
+                [ "media_id"    .= unWxppMaterialID material_id
+                , "index"       .= idx
+                , "articles"    .= article
+                ])
+    >>= asWxppWsResponseVoid
