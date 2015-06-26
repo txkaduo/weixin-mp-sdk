@@ -23,23 +23,23 @@ import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 
 
-newtype MaterialUploadResult = MaterialUploadResult WxppMaterialID
+newtype DurableUploadResult = DurableUploadResult WxppDurableMediaID
 
-instance FromJSON MaterialUploadResult where
-    parseJSON = withObject "MaterialUploadResult" $ \obj ->
-                    MaterialUploadResult <$> obj .: "media_id"
+instance FromJSON DurableUploadResult where
+    parseJSON = withObject "DurableUploadResult" $ \obj ->
+                    DurableUploadResult <$> obj .: "media_id"
 
 
 -- | 上传本地一个媒体文件，成为永久素材
-wxppUploadMaterialMediaInternal ::
+wxppUploadDurableMediaInternal ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
     -> WxppMediaType
     -> FilePath
     -> Maybe (Text, Text)
         -- ^ 上传视频素材所需的额外信息：标题，简介
-    -> m MaterialUploadResult
-wxppUploadMaterialMediaInternal (AccessToken { accessTokenData = atk }) mtype fp m_title_intro = do
+    -> m DurableUploadResult
+wxppUploadDurableMediaInternal (AccessToken { accessTokenData = atk }) mtype fp m_title_intro = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $
@@ -58,40 +58,40 @@ wxppUploadMaterialMediaInternal (AccessToken { accessTokenData = atk }) mtype fp
 
 
 -- | 上传本地视频成为永久素材
-wxppUploadMaterialMediaVideo ::
+wxppUploadDurableMediaVideo ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
     -> FilePath
     -> Text     -- ^ 标题
     -> Text     -- ^ 简介
-    -> m MaterialUploadResult
-wxppUploadMaterialMediaVideo atk fp title intro = do
-    wxppUploadMaterialMediaInternal atk WxppMediaTypeVideo fp (Just (title, intro))
+    -> m DurableUploadResult
+wxppUploadDurableMediaVideo atk fp title intro = do
+    wxppUploadDurableMediaInternal atk WxppMediaTypeVideo fp (Just (title, intro))
 
 
 -- | 上传本地非视频媒体成为永久素材
-wxppUploadMaterialMediaNonVideo ::
+wxppUploadDurableMediaNonVideo ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
     -> WxppMediaType
     -> FilePath
-    -> m MaterialUploadResult
-wxppUploadMaterialMediaNonVideo atk mtype fp = do
+    -> m DurableUploadResult
+wxppUploadDurableMediaNonVideo atk mtype fp = do
     case mtype of
         WxppMediaTypeVideo ->
             throwM $ userError
-                "wxppUploadMaterialMediaNonVideo cannot be used to upload video."
+                "wxppUploadDurableMediaNonVideo cannot be used to upload video."
         _   -> return ()
-    wxppUploadMaterialMediaInternal atk mtype fp Nothing
+    wxppUploadDurableMediaInternal atk mtype fp Nothing
 
 
 -- | 上传一个图文素材成为永久素材
-wxppUploadMaterialNews ::
+wxppUploadDurableNews ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
-    -> WxppMaterialNews
-    -> m MaterialUploadResult
-wxppUploadMaterialNews (AccessToken { accessTokenData = atk }) news = do
+    -> WxppDurableNews
+    -> m DurableUploadResult
+wxppUploadDurableNews (AccessToken { accessTokenData = atk }) news = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_news"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ encode $ toJSON news)
@@ -100,16 +100,16 @@ wxppUploadMaterialNews (AccessToken { accessTokenData = atk }) news = do
 
 -- | 查询永久素材的结果内容完全只能通过尝试的方式决定
 -- 混合了多种情况
-data WxppGetMaterialResult =    WxppGetMaterialNews [WxppMaterialArticle]
-                            |   WxppGetMaterialVideo Text Text UrlText
+data WxppGetDurableResult =    WxppGetDurableNews [WxppDurableArticle]
+                            |   WxppGetDurableVideo Text Text UrlText
                                 -- ^ title description download_url
-                            |   WxppGetMaterialRaw ByteString LB.ByteString
+                            |   WxppGetDurableRaw ByteString LB.ByteString
 
-instance FromJSON WxppGetMaterialResult where
-    -- 这个函数不用处理 WxppGetMaterialRaw，因为这种情况并非用 JSON 表示
-    parseJSON = withObject "WxppGetMaterialResult" $ \obj -> do
-                    let parse_as_news = WxppGetMaterialNews <$> obj .: "news_item"
-                        parse_as_video = WxppGetMaterialVideo
+instance FromJSON WxppGetDurableResult where
+    -- 这个函数不用处理 WxppGetDurableRaw，因为这种情况并非用 JSON 表示
+    parseJSON = withObject "WxppGetDurableResult" $ \obj -> do
+                    let parse_as_news = WxppGetDurableNews <$> obj .: "news_item"
+                        parse_as_video = WxppGetDurableVideo
                                             <$> obj .: "title"
                                             <*> obj .: "description"
                                             <*> (UrlText <$> obj .: "down_url")
@@ -117,53 +117,53 @@ instance FromJSON WxppGetMaterialResult where
 
 
 -- | 获取永久素材
-wxppGetMaterial ::
+wxppGetDurableMedia ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
-    -> WxppMaterialID
-    -> m WxppGetMaterialResult
-wxppGetMaterial (AccessToken { accessTokenData = atk }) (WxppMaterialID mid) = do
+    -> WxppDurableMediaID
+    -> m WxppGetDurableResult
+wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID mid) = do
     let url = wxppRemoteApiBaseUrl <> "/material/get_material"
         opts = defaults & param "access_token" .~ [ atk ]
     r <- liftIO $ postWith opts url $ object [ "media_id" .= mid ]
     asWxppWsResponseNormal' r
         `catch`
         (\(_ :: JSONError) -> do
-            return $ WxppGetMaterialRaw
+            return $ WxppGetDurableRaw
                         (r ^. responseHeader "Content-Type")
                         (r ^. responseBody)
             )
 
 
 -- | 永久素材统计数
-data WxppMaterialCount = WxppMaterialCount {
-                            wxppMaterialCountVoice      :: Int
-                            , wxppMaterialCountVideo    :: Int
-                            , wxppMaterialCountImage    :: Int
-                            , wxppMaterialCountNews     :: Int
+data WxppDurableCount = WxppDurableCount {
+                            wxppDurableCountVoice      :: Int
+                            , wxppDurableCountVideo    :: Int
+                            , wxppDurableCountImage    :: Int
+                            , wxppDurableCountNews     :: Int
                         }
 
-instance FromJSON WxppMaterialCount where
-    parseJSON = withObject "WxppMaterialCount" $ \obj -> do
-                    WxppMaterialCount
+instance FromJSON WxppDurableCount where
+    parseJSON = withObject "WxppDurableCount" $ \obj -> do
+                    WxppDurableCount
                         <$> ( obj .: "voice_count" )
                         <*> ( obj .: "video_count" )
                         <*> ( obj .: "image_count" )
                         <*> ( obj .: "news_count" )
 
-instance ToJSON WxppMaterialCount where
+instance ToJSON WxppDurableCount where
     toJSON x = object
-                [ "voice_count" .= wxppMaterialCountVoice x
-                , "video_count" .= wxppMaterialCountVideo x
-                , "image_count" .= wxppMaterialCountImage x
-                , "news_count"  .= wxppMaterialCountNews x
+                [ "voice_count" .= wxppDurableCountVoice x
+                , "video_count" .= wxppDurableCountVideo x
+                , "image_count" .= wxppDurableCountImage x
+                , "news_count"  .= wxppDurableCountNews x
                 ]
 
-wxppCountMaterial ::
+wxppCountDurableMedia ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
-    -> m WxppMaterialCount
-wxppCountMaterial (AccessToken { accessTokenData = atk }) = do
+    -> m WxppDurableCount
+wxppCountDurableMedia (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/material/get_materialcount"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ getWith opts url)
@@ -172,49 +172,49 @@ wxppCountMaterial (AccessToken { accessTokenData = atk }) = do
 
 -- | 批量取永久素材接口，无论是图文还是一般的多媒体
 -- 返回报文都是这样子的结构
-data WxppBatchGetMaterialResult a = WxppBatchGetMaterialResult {
-                                        wxppBatchGetMaterialResultTotal     :: Int
-                                        , wxppBatchGetMaterialResultCount   :: Int
-                                        , wxppBatchGetMaterialResultItems   :: [a]
+data WxppBatchGetDurableResult a = WxppBatchGetDurableResult {
+                                        wxppBatchGetDurableResultTotal     :: Int
+                                        , wxppBatchGetDurableResultCount   :: Int
+                                        , wxppBatchGetDurableResultItems   :: [a]
                                     }
 
-instance FromJSON a => FromJSON (WxppBatchGetMaterialResult a) where
-    parseJSON = withObject "WxppBatchGetMaterialResult" $ \obj -> do
-                    WxppBatchGetMaterialResult
+instance FromJSON a => FromJSON (WxppBatchGetDurableResult a) where
+    parseJSON = withObject "WxppBatchGetDurableResult" $ \obj -> do
+                    WxppBatchGetDurableResult
                         <$> ( obj .: "total_count" )
                         <*> ( obj .: "item_count" )
                         <*> ( obj .: "item" )
 
 -- | 批量取多媒体类型的永久素材，返回报文中的项目
-data WxppBatchGetMaterialMediaItem = WxppBatchGetMaterialMediaItem {
-                                        wxppBatchGetMaterialMediaItemID     :: WxppMaterialID
-                                        , wxppBatchGetMaterialMediaItemName :: Text
-                                        , wxppBatchGetMaterialMediaItemTime :: UTCTime
+data WxppBatchGetDurableMediaItem = WxppBatchGetDurableMediaItem {
+                                        wxppBatchGetDurableMediaItemID     :: WxppDurableMediaID
+                                        , wxppBatchGetDurableMediaItemName :: Text
+                                        , wxppBatchGetDurableMediaItemTime :: UTCTime
                                     }
 
-instance FromJSON WxppBatchGetMaterialMediaItem where
-    parseJSON = withObject "WxppBatchGetMaterialMediaItem" $ \obj -> do
-                    WxppBatchGetMaterialMediaItem
+instance FromJSON WxppBatchGetDurableMediaItem where
+    parseJSON = withObject "WxppBatchGetDurableMediaItem" $ \obj -> do
+                    WxppBatchGetDurableMediaItem
                         <$> ( obj .: "media_id" )
                         <*> ( obj .: "name")
                         <*> ( epochIntToUtcTime <$> obj .: "update_time")
 
-instance ToJSON WxppBatchGetMaterialMediaItem where
+instance ToJSON WxppBatchGetDurableMediaItem where
     toJSON x = object
-                    [ "media_id" .= wxppBatchGetMaterialMediaItemID x
-                    , "name" .= wxppBatchGetMaterialMediaItemName x
-                    , "update_time" .= wxppBatchGetMaterialMediaItemTime x
+                    [ "media_id" .= wxppBatchGetDurableMediaItemID x
+                    , "name" .= wxppBatchGetDurableMediaItemName x
+                    , "update_time" .= wxppBatchGetDurableMediaItemTime x
                     ]
 
 -- | 调用批量取多媒体类型的永久素材的接口
-wxppBatchGetMaterialMedia ::
+wxppBatchGetDurableMedia ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
     -> WxppMediaType
     -> Int      -- ^ limit
     -> Int      -- ^ offset
-    -> m (WxppBatchGetMaterialResult WxppBatchGetMaterialMediaItem)
-wxppBatchGetMaterialMedia (AccessToken { accessTokenData = atk }) mtype limit' offset' = do
+    -> m (WxppBatchGetDurableResult WxppBatchGetDurableMediaItem)
+wxppBatchGetDurableMedia (AccessToken { accessTokenData = atk }) mtype limit' offset' = do
     let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ object $
@@ -229,35 +229,35 @@ wxppBatchGetMaterialMedia (AccessToken { accessTokenData = atk }) mtype limit' o
 
 
 -- | 批量取图文类型的永久素材，返回报文中的项目
-data WxppBatchGetMaterialNewsItem = WxppBatchGetMaterialNewsItem {
-                                        wxppBatchGetMaterialNewsItemID          :: WxppMaterialID
-                                        , wxppBatchGetMaterialNewsItemContent   :: [WxppMaterialArticle]
-                                        , wxppBatchGetMaterialNewsItemTime      :: UTCTime
+data WxppBatchGetDurableNewsItem = WxppBatchGetDurableNewsItem {
+                                        wxppBatchGetDurableNewsItemID          :: WxppDurableMediaID
+                                        , wxppBatchGetDurableNewsItemContent   :: [WxppDurableArticle]
+                                        , wxppBatchGetDurableNewsItemTime      :: UTCTime
                                     }
                                     deriving (Eq)
 
-instance FromJSON WxppBatchGetMaterialNewsItem where
-    parseJSON = withObject "WxppBatchGetMaterialNewsItem" $ \obj -> do
-                    WxppBatchGetMaterialNewsItem
+instance FromJSON WxppBatchGetDurableNewsItem where
+    parseJSON = withObject "WxppBatchGetDurableNewsItem" $ \obj -> do
+                    WxppBatchGetDurableNewsItem
                         <$> ( obj .: "media_id" )
                         <*> ( obj .: "content" >>= (\o -> o .: "news_item"))
                         <*> ( epochIntToUtcTime <$> obj .: "update_time")
 
-instance ToJSON WxppBatchGetMaterialNewsItem where
+instance ToJSON WxppBatchGetDurableNewsItem where
     toJSON x = object
-                    [ "media_id" .= wxppBatchGetMaterialNewsItemID x
-                    , "content" .= object [ "news_item" .= wxppBatchGetMaterialNewsItemContent x ]
-                    , "update_time" .= utcTimeToEpochInt (wxppBatchGetMaterialNewsItemTime x)
+                    [ "media_id" .= wxppBatchGetDurableNewsItemID x
+                    , "content" .= object [ "news_item" .= wxppBatchGetDurableNewsItemContent x ]
+                    , "update_time" .= utcTimeToEpochInt (wxppBatchGetDurableNewsItemTime x)
                     ]
 
 -- | 调用批量取图文消息类型的永久素材的接口
-wxppBatchGetMaterialNews ::
+wxppBatchGetDurableNews ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     AccessToken
     -> Int      -- ^ limit
     -> Int      -- ^ offset
-    -> m (WxppBatchGetMaterialResult WxppBatchGetMaterialNewsItem)
-wxppBatchGetMaterialNews (AccessToken { accessTokenData = atk }) limit' offset' = do
+    -> m (WxppBatchGetDurableResult WxppBatchGetDurableNewsItem)
+wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' = do
     let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ object $
@@ -271,38 +271,38 @@ wxppBatchGetMaterialNews (AccessToken { accessTokenData = atk }) limit' offset' 
         offset = max 1 $ offset'
 
 -- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
-wxppBatchGetMaterialToSrc ::
+wxppBatchGetDurableToSrc ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     (Int     -- ^ offset
-        -> m (WxppBatchGetMaterialResult a)
+        -> m (WxppBatchGetDurableResult a)
     )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到
     -> Source m a
-wxppBatchGetMaterialToSrc get_by_offset = go 0
+wxppBatchGetDurableToSrc get_by_offset = go 0
     where
         go offset = do
             result <- lift $ get_by_offset offset
-            let items = wxppBatchGetMaterialResultItems result
+            let items = wxppBatchGetDurableResultItems result
             if null items
                 then return ()
                 else do
                     yieldMany items
-                    let batch_count = wxppBatchGetMaterialResultCount result
+                    let batch_count = wxppBatchGetDurableResultCount result
                     go $ offset + batch_count
 
 
 -- | 修改一个图文类型的永久素材: 只能修改其中一个文章
-wxppReplaceArticleOfMaterialNews ::
+wxppReplaceArticleOfDurableNews ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
     AccessToken
-    -> WxppMaterialID
+    -> WxppDurableMediaID
     -> Int      -- ^ index
-    -> WxppMaterialArticle
+    -> WxppDurableArticle
     -> m ()
-wxppReplaceArticleOfMaterialNews (AccessToken { accessTokenData = atk }) material_id idx article = do
+wxppReplaceArticleOfDurableNews (AccessToken { accessTokenData = atk }) material_id idx article = do
     let url = wxppRemoteApiBaseUrl <> "/material/update_news"
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ object $
-                [ "media_id"    .= unWxppMaterialID material_id
+                [ "media_id"    .= unWxppDurableMediaID material_id
                 , "index"       .= idx
                 , "articles"    .= article
                 ])

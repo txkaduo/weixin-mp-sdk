@@ -34,14 +34,14 @@ data ManageCmd = QueryAutoReplyRules
                 | QueryOriginMenu
                 | QueryCurrentMenu
                 | LoadMenu FilePath
-                | GetMaterial
-                    WxppMaterialID
+                | GetDurable
+                    WxppDurableMediaID
                     Bool    -- ^ edit if true, save otherwise. Only valid for news.
-                | CountMaterial
-                | ListAllMaterialMedia WxppMediaType
-                | GetAllMaterialNews
-                    Bool    -- ^ show material id only
-                | SearchMaterialNewsByTitle
+                | CountDurable
+                | ListAllDurableMedia WxppMediaType
+                | GetAllDurableNews
+                    Bool    -- ^ show durable media id only
+                | SearchDurableNewsByTitle
                     Bool    -- ^ edit if true, show otherwise
                     Text
                 | ListGroup
@@ -79,27 +79,27 @@ manageCmdParser = subparser $
     <> command "query-current-menu"
         (info (helper <*> pure QueryCurrentMenu)
             (progDesc "取当前通过程序设定的菜单"))
-    <> command "get-material"
-        (info (helper <*> (flip GetMaterial
+    <> command "get-durable-media"
+        (info (helper <*> (flip GetDurable
                             <$> switch (long "edit" <> help "edit it if it is news")
-                            <*> ((WxppMaterialID . fromString) <$> argument str (metavar "MEDIA_ID"))
+                            <*> ((WxppDurableMediaID . fromString) <$> argument str (metavar "MEDIA_ID"))
                         ))
             (progDesc "下载（获取）永久素材"))
-    <> command "list-all-material-media"
-        (info (helper <*> (ListAllMaterialMedia <$> argument mediaTypeReader (metavar "MEDIA_TYPE")))
+    <> command "list-all-durable-media"
+        (info (helper <*> (ListAllDurableMedia <$> argument mediaTypeReader (metavar "MEDIA_TYPE")))
             (progDesc "列出特定类型的所有多媒体永久素材"))
-    <> command "get-all-material-news"
-        (info (helper <*> (GetAllMaterialNews
-                            <$> switch (long "show-id-only" <> help "show material id only")))
+    <> command "get-all-durable-news"
+        (info (helper <*> (GetAllDurableNews
+                            <$> switch (long "show-id-only" <> help "show durable media id only")))
             (progDesc "取永久素材中的所有图文消息"))
-    <> command "search-material-news-title"
-        (info (helper <*> (SearchMaterialNewsByTitle
+    <> command "search-durable-news-title"
+        (info (helper <*> (SearchDurableNewsByTitle
                             <$> switch (long "edit" <> help "edit the located news")
                             <*> (fromString <$> argument str (metavar "STRING"))
                             ))
             (progDesc "根据搜索永久素材中标题含有指定关键字的图文消息"))
-    <> command "count-material"
-        (info (helper <*> pure CountMaterial)
+    <> command "count-durable-media"
+        (info (helper <*> pure CountDurable)
             (progDesc "统计永久素材数量"))
     <> command "list-groups"
         (info (helper <*> pure ListGroup)
@@ -232,17 +232,17 @@ start = do
             result <- get_atk >>= wxppQueryMenu
             liftIO $ B.putStr $ Y.encode result
 
-        GetMaterial mid edit_mode -> do
+        GetDurable mid edit_mode -> do
             atk <- get_atk
-            result <- wxppGetMaterial atk mid
+            result <- wxppGetDurableMedia atk mid
 
             case result of
-                WxppGetMaterialNews articles -> do
+                WxppGetDurableNews articles -> do
                     if edit_mode
-                        then editNewsMaterial atk mid articles
+                        then editNewsDurable atk mid articles
                         else liftIO $ B.putStr $ Y.encode articles
 
-                WxppGetMaterialVideo title desc down_url -> do
+                WxppGetDurableVideo title desc down_url -> do
                     liftIO $ B.putStr $ Y.encode $ object
                         [ "title"           .= title
                         , "description"     .= desc
@@ -250,9 +250,9 @@ start = do
                         , "download_url"    .= unUrlText down_url
                         ]
 
-                WxppGetMaterialRaw mime bs -> do
+                WxppGetDurableRaw mime bs -> do
                     let ext = fromMaybe "dat" $ extByMime mime
-                        fn  = unWxppMaterialID mid <> "." <> ext
+                        fn  = unWxppDurableMediaID mid <> "." <> ext
                     liftIO $ do
                         putStr "Content-Type: "
                         B.putStr mime
@@ -260,9 +260,9 @@ start = do
                         LB.writeFile (T.unpack fn) bs
                         putStrLn $ "Saved to file: " <> fn
 
-        CountMaterial -> do
+        CountDurable -> do
             atk <- get_atk
-            result <- wxppCountMaterial atk
+            result <- wxppCountDurableMedia atk
             liftIO $ B.putStr $ Y.encode result
 
         ListGroup -> do
@@ -295,28 +295,28 @@ start = do
                 [open_id]   -> wxppSetUserGroup atk grp_id open_id
                 _           -> wxppBatchSetUserGroup atk grp_id open_id_list
 
-        ListAllMaterialMedia mtype -> do
+        ListAllDurableMedia mtype -> do
             atk <- get_atk
-            wxppBatchGetMaterialToSrc (wxppBatchGetMaterialMedia atk mtype 20)
+            wxppBatchGetDurableToSrc (wxppBatchGetDurableMedia atk mtype 20)
                 $=  CL.map toJSON
                 $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
 
-        GetAllMaterialNews show_id_only -> do
+        GetAllDurableNews show_id_only -> do
             atk <- get_atk
-            wxppBatchGetMaterialToSrc (wxppBatchGetMaterialNews atk 20)
+            wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $=  CL.map (if show_id_only
-                                then toJSON . unWxppMaterialID . wxppBatchGetMaterialNewsItemID
+                                then toJSON . unWxppDurableMediaID . wxppBatchGetDurableNewsItemID
                                 else toJSON
                             )
                 $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
 
-        SearchMaterialNewsByTitle edit_mode keyword -> do
+        SearchDurableNewsByTitle edit_mode keyword -> do
             atk <- get_atk
             let has_keyword item =
-                    let articles = wxppBatchGetMaterialNewsItemContent item
-                    in any (T.isInfixOf keyword . wxppMaterialArticleTitle) articles
+                    let articles = wxppBatchGetDurableNewsItemContent item
+                    in any (T.isInfixOf keyword . wxppDurableArticleTitle) articles
 
-            results <- wxppBatchGetMaterialToSrc (wxppBatchGetMaterialNews atk 20)
+            results <- wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $= (awaitForever $ \x -> do
                         liftIO $ putStr "." >> hFlush stdout
                         yield x
@@ -327,20 +327,20 @@ start = do
             if edit_mode
                 then do
                     m_the_one <- liftIO $ chooseOne
-                                    (unWxppMaterialID . wxppBatchGetMaterialNewsItemID)
+                                    (unWxppDurableMediaID . wxppBatchGetDurableNewsItemID)
                                     results
                     case m_the_one of
                         Nothing -> return ()
                         Just result -> do
-                            let mid = wxppBatchGetMaterialNewsItemID result
-                            editNewsMaterial atk mid (wxppBatchGetMaterialNewsItemContent result)
+                            let mid = wxppBatchGetDurableNewsItemID result
+                            editNewsDurable atk mid (wxppBatchGetDurableNewsItemContent result)
                 else do
                     mapM_ (liftIO . B.putStr . Y.encode) results
 
 
-editNewsMaterial :: (MonadIO m, MonadLogger m, MonadCatch m) =>
-    AccessToken -> WxppMaterialID -> [WxppMaterialArticle] -> m ()
-editNewsMaterial atk mid articles = do
+editNewsDurable :: (MonadIO m, MonadLogger m, MonadCatch m) =>
+    AccessToken -> WxppDurableMediaID -> [WxppDurableArticle] -> m ()
+editNewsDurable atk mid articles = do
     let go bs = do
             bs' <- liftIO $ editWithEditor bs
             case Y.decodeEither bs' of
@@ -358,9 +358,9 @@ editNewsMaterial atk mid articles = do
                     let old_len = length articles
                     forM_ (zip [0..old_len] $ zip articles new_articles) $ \(idx, (old_a, article)) -> do
                         when (old_a /= article) $ do
-                            wxppReplaceArticleOfMaterialNews atk mid idx article
+                            wxppReplaceArticleOfDurableNews atk mid idx article
 
-    putStrLn $ "launch editor to edit material news: " <> unWxppMaterialID mid
+    putStrLn $ "launch editor to edit durable news: " <> unWxppDurableMediaID mid
     go (Y.encode articles)
 
 

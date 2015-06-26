@@ -78,25 +78,25 @@ instance FromJSON WxppBriefMediaID where
 
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
 -- 虽然文档叫这种值 media id，但接口用的词是 material
-newtype WxppMaterialID = WxppMaterialID { unWxppMaterialID :: Text }
+newtype WxppDurableMediaID = WxppDurableMediaID { unWxppDurableMediaID :: Text }
                         deriving (Show, Eq, Ord)
 
-instance SafeCopy WxppMaterialID where
-    getCopy                 = contain $ safeGet
-    putCopy (WxppMaterialID x) = contain $ safePut x
+instance SafeCopy WxppDurableMediaID where
+    getCopy                         = contain $ safeGet
+    putCopy (WxppDurableMediaID x)  = contain $ safePut x
 
-instance PersistField WxppMaterialID where
-    toPersistValue      = toPersistValue . unWxppMaterialID
-    fromPersistValue    = fmap WxppMaterialID . fromPersistValue
+instance PersistField WxppDurableMediaID where
+    toPersistValue      = toPersistValue . unWxppDurableMediaID
+    fromPersistValue    = fmap WxppDurableMediaID . fromPersistValue
 
-instance PersistFieldSql WxppMaterialID where
+instance PersistFieldSql WxppDurableMediaID where
     sqlType _ = SqlString
 
-instance ToJSON WxppMaterialID where
-    toJSON = toJSON . unWxppMaterialID
+instance ToJSON WxppDurableMediaID where
+    toJSON = toJSON . unWxppDurableMediaID
 
-instance FromJSON WxppMaterialID where
-    parseJSON = fmap WxppMaterialID . parseJSON
+instance FromJSON WxppDurableMediaID where
+    parseJSON = fmap WxppDurableMediaID . parseJSON
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
@@ -791,20 +791,20 @@ instance FromJSON WxppOutMsgL where
 
 
 -- | 永久图文素材结构中的一个文章
-data WxppMaterialArticle = WxppMaterialArticle {
-                                wxppMaterialArticleTitle            :: Text
-                                , wxppMaterialArticleThumb          :: WxppMaterialID
-                                , wxppMaterialArticleAuthor         :: Maybe Text
-                                , wxppMaterialArticleDigest         :: Maybe Text
-                                , wxppMaterialArticleShowCoverPic   :: Bool
-                                , wxppMaterialArticleContent        :: Text
-                                , wxppMaterialArticleContentSrcUrl  :: UrlText
+data WxppDurableArticle = WxppDurableArticle {
+                                wxppDurableArticleTitle            :: Text
+                                , wxppDurableArticleThumb          :: WxppDurableMediaID
+                                , wxppDurableArticleAuthor         :: Maybe Text
+                                , wxppDurableArticleDigest         :: Maybe Text
+                                , wxppDurableArticleShowCoverPic   :: Bool
+                                , wxppDurableArticleContent        :: Text
+                                , wxppDurableArticleContentSrcUrl  :: UrlText
                             }
                             deriving (Eq)
 
-instance FromJSON WxppMaterialArticle where
-    parseJSON = withObject "WxppMaterialArticle" $ \obj -> do
-                    WxppMaterialArticle
+instance FromJSON WxppDurableArticle where
+    parseJSON = withObject "WxppDurableArticle" $ \obj -> do
+                    WxppDurableArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
                         <*> ( obj .:? "author" )
@@ -816,27 +816,27 @@ instance FromJSON WxppMaterialArticle where
                 int_to_bool x = (x :: Int) /= 0
 
 
-instance ToJSON WxppMaterialArticle where
-    toJSON x = object   [ "title"           .= wxppMaterialArticleTitle x
-                        , "thumb_media_id"  .= wxppMaterialArticleThumb x
-                        , "author"          .= (fromMaybe "" $ wxppMaterialArticleAuthor x)
-                        , "digest"          .= (fromMaybe "" $ wxppMaterialArticleDigest x)
-                        , "show_cover_pic"  .= bool_to_int (wxppMaterialArticleShowCoverPic x)
-                        , "content"         .= wxppMaterialArticleContent x
-                        , "content_source_url" .= unUrlText (wxppMaterialArticleContentSrcUrl x)
+instance ToJSON WxppDurableArticle where
+    toJSON x = object   [ "title"           .= wxppDurableArticleTitle x
+                        , "thumb_media_id"  .= wxppDurableArticleThumb x
+                        , "author"          .= (fromMaybe "" $ wxppDurableArticleAuthor x)
+                        , "digest"          .= (fromMaybe "" $ wxppDurableArticleDigest x)
+                        , "show_cover_pic"  .= bool_to_int (wxppDurableArticleShowCoverPic x)
+                        , "content"         .= wxppDurableArticleContent x
+                        , "content_source_url" .= unUrlText (wxppDurableArticleContentSrcUrl x)
                         ]
             where
                 bool_to_int b = if b then 1 :: Int else 0
 
 -- | 永久图文素材结构
-newtype WxppMaterialNews = WxppMaterialNews [WxppMaterialArticle]
+newtype WxppDurableNews = WxppDurableNews [WxppDurableArticle]
 
-instance FromJSON WxppMaterialNews where
-    parseJSON = withObject "WxppMaterialNews" $ \obj -> do
-                    WxppMaterialNews <$> obj .: "articles"
+instance FromJSON WxppDurableNews where
+    parseJSON = withObject "WxppDurableNews" $ \obj -> do
+                    WxppDurableNews <$> obj .: "articles"
 
-instance ToJSON WxppMaterialNews where
-    toJSON (WxppMaterialNews articles) = object [ "articles" .= articles ]
+instance ToJSON WxppDurableNews where
+    toJSON (WxppDurableNews articles) = object [ "articles" .= articles ]
 
 
 -- | 上传多媒体文件接口中的 type 参数
