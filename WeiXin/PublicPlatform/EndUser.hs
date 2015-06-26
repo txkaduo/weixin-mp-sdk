@@ -1,4 +1,19 @@
-module WeiXin.PublicPlatform.EndUser where
+module WeiXin.PublicPlatform.EndUser
+    ( wxppQueryEndUserInfo
+    , GetUserResult(..)
+    , wxppOpenIdListInGetUserResult
+    , wxppGetEndUserSource
+    , wxppCachedGetEndUserUnionID
+    , wxppCachedQueryEndUserInfo
+    , GroupBasicInfo(..)
+    , wxppListUserGroups
+    , wxppCreateUserGroup
+    , wxppDeleteUserGroup
+    , wxppRenameUserGroup
+    , wxppGetGroupOfUser
+    , wxppSetUserGroup
+    , wxppBatchSetUserGroup
+    ) where
 
 import ClassyPrelude
 import Network.Wreq
