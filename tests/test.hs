@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main where
 
 import ClassyPrelude
@@ -9,6 +11,10 @@ import qualified Data.ByteString.Lazy       as LB
 import Data.Default                         (def)
 import Text.XML                             (renderText)
 import qualified Data.Text.Lazy             as LT
+import qualified Data.Text                  as T
+
+import Text.Parsec
+import Yesod.Helpers.Parsec
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
@@ -93,7 +99,30 @@ testMsgToXml = do
                         WxppOutMsgText "中文\n<xml>"
 
 
+testCharParser :: (Eq a, Show a) =>
+    CharParser a -> Text -> a -> IO ()
+testCharParser p input expected = do
+    case parse p "" (T.unpack input) of
+        Left err -> do
+                    putStrLn $ "cannot parse input: " <> input
+                    putStrLn $ "error was: " <> (T.pack $ show err)
+                    exitFailure
+        Right x -> do
+                if x /= expected
+                    then do
+                        putStrLn $ "parse result error: " <> (fromString $ show x)
+                        putStrLn $ "error was: not equal to the expected: "
+                                    <> (fromString $ show expected)
+                        exitFailure
+                    else return ()
+
+testParseScene :: IO ()
+testParseScene = do
+    let test = testCharParser simpleParser
+    test "qrscene_online2015 bind 123" (WxppSceneStr $ WxppStrSceneID "online2015 bind 123")
+
 main :: IO ()
 main = do
     testMsgToXml
-    testLikeJava
+    -- testLikeJava
+    testParseScene

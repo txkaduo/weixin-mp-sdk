@@ -366,11 +366,13 @@ wxppOutMsgToNodes (WxppOutMsgVoice (WxppMediaID media_id)) = [xml|
 <MediaId>#{media_id}
 |]
 
-wxppOutMsgToNodes (WxppOutMsgVideo (WxppMediaID media_id) _thumb_media_id m_title m_desc) = [xml|
+wxppOutMsgToNodes (WxppOutMsgVideo (WxppMediaID media_id) m_thumb_media_id m_title m_desc) = [xml|
 -- XXX: _thumb_media_id 在客服发送接口里有出现，但没有在“回复”接口文档里出现
--- 暂时忽略这个参数
+-- 目前仿照音乐消息的element格式写到XML去
 <MsgType>video
 <MediaId>#{media_id}
+$maybe thumb_media_id <- m_thumb_media_id
+    <ThumbMediaId>#{unWxppMediaID thumb_media_id}
 $maybe title <- m_title
     <Title>#{title}
 $maybe desc <- m_desc

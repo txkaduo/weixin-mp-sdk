@@ -47,21 +47,22 @@ mkMaybeWxppSub ::
     ) =>
     app
     -> c
+    -> (WxppAppID -> Maybe (IORef (Maybe [SomeWxppInMsgHandler (LoggingT IO)])))
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> Chan (WxppAppID, [WxppOutMsgEntity])
-    -> Chan (WxppAppID, (WxppInMsgRecordId, WxppMediaID))
+    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> WxppInMsgRecordId -> WxppMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub foundation cache wxpp_config_map get_protos send_msg_ch down_media_ch opts app_id =
+mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg down_media opts app_id =
     MaybeWxppSub $ case Map.lookup app_id wxpp_config_map of
         Nothing     -> Nothing
         Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
                         in Just $ WxppSub wac
                                     (SomeWxppCacheBackend cache)
                                     (runDBWith foundation)
-                                    send_msg
+                                    (send_msg app_id)
                                     (handle_msg data_dir)
                                     middlewares
                                     (runLoggingTWith foundation)
@@ -75,7 +76,7 @@ mkMaybeWxppSub foundation cache wxpp_config_map get_protos send_msg_ch down_medi
                 SomeWxppInMsgProcMiddleware $
                     (StoreInMsgToDB app_id
                         db_runner
-                        (\x y -> liftIO $ writeChan down_media_ch (app_id, (x, y)))
+                        (\x y -> liftIO $ down_media app_id x y)
                     :: StoreInMsgToDB (LoggingT IO)
                     )
 
@@ -92,13 +93,33 @@ mkMaybeWxppSub foundation cache wxpp_config_map get_protos send_msg_ch down_medi
                         (get_protos app_id)
                         (encodeString $ data_dir </> fromText "msg-handlers.yml")
 
-            case err_or_in_msg_handlers of
+            let m_last_handlers_ref = get_last_handlers_ref app_id
+            m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $
                         "cannot parse msg-handlers.yml: " ++ show err
+                    m_cached_handlers <- liftIO $ fmap join $
+                                            mapM readIORef m_last_handlers_ref
+                    case m_cached_handlers of
+                        Nothing -> do
+                            $logWarnS wxppLogSource $
+                                "no cached message handlers available"
+                            return Nothing
+
+                        Just x -> do
+                            $logDebugS wxppLogSource $
+                                "using last message handlers"
+                            return $ Just x
+
+                Right x -> return $ Just x
+
+            case m_in_msg_handlers of
+                Nothing -> do
                     return $ Left "msg-handlers.yml error"
 
-                Right in_msg_handlers -> do
+                Just in_msg_handlers -> do
+                    liftIO $ mapM_ (flip writeIORef $ Just in_msg_handlers) m_last_handlers_ref
+
                     -- 这里可以选择使用 tryEveryInMsgHandler'
                     -- 那样就会所有 handler 保证处理一次
                     -- tryEveryInMsgHandler'
@@ -106,8 +127,6 @@ mkMaybeWxppSub foundation cache wxpp_config_map get_protos send_msg_ch down_medi
                             cache
                             in_msg_handlers
                             bs ime
-
-        send_msg msgs = writeChan send_msg_ch (app_id, msgs)
 
 
 -- | 如果要计算的操作有异常，记日志并重试

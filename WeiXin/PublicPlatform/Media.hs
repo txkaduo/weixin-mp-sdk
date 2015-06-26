@@ -113,10 +113,10 @@ fromWxppOutMsgL _ cache    atk (WxppOutMsgVoiceL fp)   = do
         liftM (WxppOutMsgVoice . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
-fromWxppOutMsgL _ cache    atk (WxppOutMsgVideoL fp fp2 x1 x2)   = do
+fromWxppOutMsgL _ cache    atk (WxppOutMsgVideoL fp m_fp2 x1 x2)   = do
         liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
             (liftM urMediaId $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp)
-            (liftM urMediaId $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp2)
+            (liftM (fmap urMediaId) $ mapM (wxppUploadMediaCached cache atk WxppMediaTypeVoice) m_fp2)
 
 fromWxppOutMsgL _ cache    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . urMediaId) $

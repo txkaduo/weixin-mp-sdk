@@ -20,6 +20,7 @@ import Data.Conduit.Combinators hiding (null)
 import WeiXin.PublicPlatform.Types
 -- import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Utils
 
 
@@ -234,6 +235,7 @@ data WxppBatchGetMaterialNewsItem = WxppBatchGetMaterialNewsItem {
                                         , wxppBatchGetMaterialNewsItemContent   :: [WxppMaterialArticle]
                                         , wxppBatchGetMaterialNewsItemTime      :: UTCTime
                                     }
+                                    deriving (Eq)
 
 instance FromJSON WxppBatchGetMaterialNewsItem where
     parseJSON = withObject "WxppBatchGetMaterialNewsItem" $ \obj -> do
@@ -246,7 +248,7 @@ instance ToJSON WxppBatchGetMaterialNewsItem where
     toJSON x = object
                     [ "media_id" .= wxppBatchGetMaterialNewsItemID x
                     , "content" .= object [ "news_item" .= wxppBatchGetMaterialNewsItemContent x ]
-                    , "update_time" .= wxppBatchGetMaterialNewsItemTime x
+                    , "update_time" .= utcTimeToEpochInt (wxppBatchGetMaterialNewsItemTime x)
                     ]
 
 -- | 调用批量取图文消息类型的永久素材的接口
@@ -287,3 +289,25 @@ wxppBatchGetMaterialToSrc get_by_offset = go 0
                     yieldMany items
                     let batch_count = wxppBatchGetMaterialResultCount result
                     go $ offset + batch_count
+
+
+-- | 修改一个图文类型的永久素材: 只能修改其中一个文章
+wxppReplaceArticleOfMaterialNews ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
+    AccessToken
+    -> WxppMaterialID
+    -> Int      -- ^ index
+    -> WxppMaterialArticle
+    -> m ()
+wxppReplaceArticleOfMaterialNews (AccessToken { accessTokenData = atk }) material_id idx article = do
+    let url = wxppRemoteApiBaseUrl <> "/material/update_news"
+        opts = defaults & param "access_token" .~ [ atk ]
+    err_resp@(WxppAppError err _msg) <-
+                    (liftIO $ postWith opts url $ object $
+                                [ "media_id"    .= unWxppMaterialID material_id
+                                , "index"       .= idx
+                                , "articles"    .= article
+                                ])
+                    >>= liftM (view responseBody) . asJSON . alterContentTypeToJson
+    when ( err /= WxppErrorX (Right WxppNoError) ) $ do
+        throwM err_resp

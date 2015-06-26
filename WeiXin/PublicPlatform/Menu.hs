@@ -2,7 +2,7 @@
 {-#LANGUAGE FlexibleContexts #-}
 module WeiXin.PublicPlatform.Menu where
 
-import ClassyPrelude hiding (FilePath, (</>), (<.>), directory, filename)
+import ClassyPrelude hiding (FilePath, (</>), (<.>))
 import Network.Wreq
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger

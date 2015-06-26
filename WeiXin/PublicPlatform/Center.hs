@@ -10,7 +10,6 @@ import Network.Wreq
 -- import Control.Monad.Logger
 import Yesod.Core
 
-import qualified Data.Text                  as T
 -- import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Lazy.Char8 as LBC8
 import Blaze.ByteString.Builder             (toLazyByteString)
@@ -29,8 +28,7 @@ wxppCenterGetAccessToken ::
     -> WxppAppID
     -> m AccessToken
 wxppCenterGetAccessToken base_url app_id = do
-    let url = T.unpack $ T.intercalate "/"
-                            [ unUrlText base_url, toPathPiece app_id, "x/atk" ]
+    let url = mkWxppSubAppUrl base_url app_id GetAccessTokenR
         opts = defaults
     (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
 
@@ -43,11 +41,7 @@ wxppCenterLookupUnionID ::
     -> WxppOpenID
     -> m (Maybe WxppUnionID)
 wxppCenterLookupUnionID base_url app_id open_id = do
-    let url = T.unpack $ T.intercalate "/"
-                            [ unUrlText base_url, toPathPiece app_id
-                            , "x/union_id"
-                            , toPathPiece open_id
-                            ]
+    let url = mkWxppSubAppUrl base_url app_id (GetUnionIDR open_id)
         opts = defaults
     (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
 
@@ -60,11 +54,7 @@ wxppCenterQueryUserInfo ::
     -> WxppOpenID
     -> m EndUserQueryResult
 wxppCenterQueryUserInfo base_url app_id open_id = do
-    let url = T.unpack $ T.intercalate "/"
-                            [ unUrlText base_url, toPathPiece app_id
-                            , "x/user/info"
-                            , toPathPiece open_id
-                            ]
+    let url = mkWxppSubAppUrl base_url app_id (QueryUserInfoR open_id)
         opts = defaults
     (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
 
@@ -98,26 +88,12 @@ mkWxppSubNoAppUrl base_url route =
         partial_foundation = (LiteApp (error "unLiteApp forced"))
         (ps, qs) = renderRoute route
 
-partialWxppSubNoApp :: WxppSubNoApp
-partialWxppSubNoApp = WxppSubNoApp
-                        (error "wxppSubNoAppUnionIdByOpenId forced")
-                        (error "wxppSubNoAppRunLoggingT forced")
-                        (error "wxppSubNoAppCheckWaiReq forced")
 
-partialWxppAppConfig :: WxppAppID -> WxppAppConfig
-partialWxppAppConfig app_id = WxppAppConfig app_id
-                            (error "wxppConfigAppSecret forced")
-                            (error "wxppConfigAppToken forced")
-                            (error "wxppConfigAppAesKey forced")
-                            (error "wxppConfigAppBackupAesKeys forced")
-                            (error "wxppAppConfigDataDir forced")
-
-partialWxppSub :: WxppAppID -> WxppSub
-partialWxppSub app_id = WxppSub (partialWxppAppConfig app_id)
-                            (error "wxppSubCacheBackend forced")
-                            (error "wxppSubRunDBActionRunner forced")
-                            (error "wxppSubSendOutMsgs forced")
-                            (error "wxppSubMsgHandler forced")
-                            (error "wxppSubMsgMiddlewares forced")
-                            (error "wxppSubRunLoggingT forced")
-                            (error "wxppSubOptions forced")
+mkWxppSubAppUrl ::
+    UrlText -> WxppAppID -> Route MaybeWxppSub -> String
+mkWxppSubAppUrl base_url app_id route =
+    LBC8.unpack $ toLazyByteString $
+        joinPath partial_foundation (unUrlText base_url) (unWxppAppID app_id : ps) qs
+    where
+        partial_foundation = (LiteApp (error "unLiteApp forced"))
+        (ps, qs) = renderRoute route
