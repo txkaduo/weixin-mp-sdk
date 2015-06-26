@@ -2,7 +2,7 @@ module WeiXin.PublicPlatform.EndUser where
 
 import ClassyPrelude
 import Network.Wreq
-import Control.Lens
+import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Data.Aeson
 import Data.Conduit                         (Source, yield)
@@ -124,3 +124,129 @@ wxppCachedQueryEndUserInfo cache ttl atk open_id = do
             return qres
     where
         app_id = accessTokenApp atk
+
+
+data GroupBasicInfo = GroupBasicInfo
+                        WxppUserGroupID
+                        Text
+                        Int
+
+instance FromJSON GroupBasicInfo where
+    parseJSON = withObject "GroupBasicInfo" $ \o ->
+                    GroupBasicInfo <$> o .: "id"
+                                    <*> o .: "name"
+                                    <*> o .: "count"
+
+instance ToJSON GroupBasicInfo where
+    toJSON (GroupBasicInfo group_id name cnt) = object
+                                                    [ "id"      .= group_id
+                                                    , "name"    .= name
+                                                    , "count"   .= cnt
+                                                    ]
+
+data ListGroupResult = ListGroupResult { unListGroupResult :: [GroupBasicInfo] }
+
+instance FromJSON ListGroupResult where
+    parseJSON = withObject "ListGroupResult" $ \o ->
+                    ListGroupResult <$> o .: "groups"
+
+-- | 取所有分组的基本信息
+wxppListUserGroups ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> m [GroupBasicInfo]
+wxppListUserGroups (AccessToken { accessTokenData = atk }) = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/get"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ getWith opts url)
+                >>= asWxppWsResponseNormal'
+                >>= return . unListGroupResult
+
+
+data CreateGroupResult = CreateGroupResult WxppUserGroupID Text
+
+instance FromJSON CreateGroupResult where
+    parseJSON = withObject "CreateGroupResult" $ \o -> do
+                    o2 <- o .: "group"
+                    CreateGroupResult <$> o2 .: "id"
+                                      <*> o2 .: "name"
+
+
+-- | 取所有分组的基本信息
+wxppCreateUserGroup ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> Text -> m WxppUserGroupID
+wxppCreateUserGroup (AccessToken { accessTokenData = atk }) name = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/create"
+        opts = defaults & param "access_token" .~ [ atk ]
+    CreateGroupResult grp_id name' <-
+        (liftIO $ postWith opts url $ object [ "group" .= object [ "name" .= name ] ])
+                >>= asWxppWsResponseNormal'
+    when (name' /= name) $ do
+        $logErrorS wxppLogSource $ "creating user group but get different name: "
+                    <> "expecting " <> name
+                    <> ", but got " <> name'
+        throwM $ userError "unexpected group name returned"
+    return grp_id
+
+
+-- | 删除一个用户分组
+wxppDeleteUserGroup ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> WxppUserGroupID -> m ()
+wxppDeleteUserGroup (AccessToken { accessTokenData = atk }) grp_id = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/delete"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ object [ "group" .= object [ "id" .= grp_id ] ])
+            >>= asWxppWsResponseVoid
+
+
+-- | 修改分组名
+wxppRenameUserGroup ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> WxppUserGroupID -> Text -> m ()
+wxppRenameUserGroup (AccessToken { accessTokenData = atk }) grp_id name = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/update"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ object [ "group" .= object [ "id" .= grp_id, "name" .= name ] ])
+            >>= asWxppWsResponseVoid
+
+
+data GetGroupResult = GetGroupResult WxppUserGroupID
+
+instance FromJSON GetGroupResult where
+    parseJSON = withObject "GetGroupResult" $ \o -> do
+                    GetGroupResult <$> o .: "groupid"
+
+-- | 查询用户所在分组
+wxppGetGroupOfUser ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> WxppOpenID -> m WxppUserGroupID
+wxppGetGroupOfUser (AccessToken { accessTokenData = atk }) open_id = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/getid"
+        opts = defaults & param "access_token" .~ [ atk ]
+    GetGroupResult grp_id <-
+        (liftIO $ postWith opts url $ object [ "openid" .= open_id ])
+            >>= asWxppWsResponseNormal'
+    return grp_id
+
+
+-- | 移动用户至指定分组
+wxppSetUserGroup ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> WxppUserGroupID -> WxppOpenID -> m ()
+wxppSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/members/update"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ object [ "to_groupid" .= grp_id, "openid" .= open_id ])
+            >>= asWxppWsResponseVoid
+
+
+-- | 批量移动用户至指定分组
+wxppBatchSetUserGroup ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken -> WxppUserGroupID -> [WxppOpenID] -> m ()
+wxppBatchSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id_list = do
+    let url = wxppRemoteApiBaseUrl <> "/groups/members/batchupdate"
+        opts = defaults & param "access_token" .~ [ atk ]
+    (liftIO $ postWith opts url $ object [ "to_groupid" .= grp_id, "openid_list" .= open_id_list ])
+            >>= asWxppWsResponseVoid

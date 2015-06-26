@@ -37,6 +37,18 @@ import qualified Data.HashMap.Strict        as HM
 
 import WeiXin.PublicPlatform.Utils
 
+
+-- | 用户分组的ID
+newtype WxppUserGroupID = WxppUserGroupID { unWxppUserGroupID :: Int }
+                        deriving (Show, Eq, Ord)
+
+instance ToJSON WxppUserGroupID where
+    toJSON = toJSON . unWxppUserGroupID
+
+instance FromJSON WxppUserGroupID where
+    parseJSON = fmap WxppUserGroupID . parseJSON
+
+
 -- | 客服帐号
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
                         deriving (Show, Eq, Ord)

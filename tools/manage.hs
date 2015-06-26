@@ -21,11 +21,11 @@ import Data.Conduit
 import qualified Data.Conduit.List          as CL
 -- import Control.Monad.Reader                 (asks)
 
-import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet
-                                            , LoggerSet, LogStr)
+import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
 
 import WeiXin.PublicPlatform.AutoReplyRules
 import WeiXin.PublicPlatform.Menu
+import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Material
 -- import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
@@ -44,6 +44,12 @@ data ManageCmd = QueryAutoReplyRules
                 | SearchMaterialNewsByTitle
                     Bool    -- ^ edit if true, show otherwise
                     Text
+                | ListGroup
+                | CreateGroup Text
+                | DeleteGroup WxppUserGroupID
+                | RenameGroup WxppUserGroupID Text
+                | GroupOfUser WxppOpenID
+                | SetUserGroup WxppUserGroupID [WxppOpenID]
                 deriving (Show, Eq, Ord)
 
 
@@ -95,6 +101,35 @@ manageCmdParser = subparser $
     <> command "count-material"
         (info (helper <*> pure CountMaterial)
             (progDesc "统计永久素材数量"))
+    <> command "list-groups"
+        (info (helper <*> pure ListGroup)
+            (progDesc "列出所有用户分组"))
+    <> command "new-group"
+        (info (helper <*> (CreateGroup <$> (fmap fromString $ argument str (metavar "NAME"))))
+            (progDesc "新建用户分组"))
+    <> command "del-group"
+        (info (helper <*> (DeleteGroup <$> (fmap WxppUserGroupID $ argument auto (metavar "GROUP_ID"))))
+            (progDesc "删除用户分组"))
+    <> command "rename-group"
+        (info (helper <*> (RenameGroup
+                            <$> (fmap WxppUserGroupID $ argument auto (metavar "GROUP_ID"))
+                            <*> (fmap fromString $ argument str (metavar "NEW_NAME"))
+                        )
+                )
+            (progDesc "修改用户分组名"))
+    <> command "group-of-user"
+        (info (helper <*> (GroupOfUser
+                            <$> (fmap (WxppOpenID . fromString) $ argument str (metavar "USER_OPEN_ID"))
+                        )
+                )
+            (progDesc "取用户所在分组"))
+    <> command "set-user-group"
+        (info (helper <*> (SetUserGroup
+                            <$> (fmap WxppUserGroupID $ argument auto (metavar "GROUP_ID"))
+                            <*> (some $ fmap (WxppOpenID . fromString) $ argument str (metavar "USER_OPEN_ID"))
+                            )
+                )
+            (progDesc "移动用户至指定分组"))
 
 
 mediaTypeReader ::
@@ -229,6 +264,36 @@ start = do
             atk <- get_atk
             result <- wxppCountMaterial atk
             liftIO $ B.putStr $ Y.encode result
+
+        ListGroup -> do
+            atk <- get_atk
+            result <- wxppListUserGroups atk
+            liftIO $ B.putStr $ Y.encode result
+
+        CreateGroup name -> do
+            atk <- get_atk
+            grp_id <- wxppCreateUserGroup atk name
+            liftIO $ putStrLn $ "group created, id is " <> (fromString $ show $ unWxppUserGroupID grp_id)
+
+        DeleteGroup grp_id -> do
+            atk <- get_atk
+            wxppDeleteUserGroup atk grp_id
+
+        RenameGroup grp_id name -> do
+            atk <- get_atk
+            wxppRenameUserGroup atk grp_id name
+
+        GroupOfUser open_id -> do
+            atk <- get_atk
+            grp_id <- wxppGetGroupOfUser atk open_id
+            liftIO $ putStrLn $ "user's group id is " <> (fromString $ show $ unWxppUserGroupID grp_id)
+
+        SetUserGroup grp_id open_id_list -> do
+            atk <- get_atk
+            case open_id_list of
+                []          -> return ()
+                [open_id]   -> wxppSetUserGroup atk grp_id open_id
+                _           -> wxppBatchSetUserGroup atk grp_id open_id_list
 
         ListAllMaterialMedia mtype -> do
             atk <- get_atk
