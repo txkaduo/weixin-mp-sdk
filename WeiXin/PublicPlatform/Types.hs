@@ -1,4 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.Types
     ( module WeiXin.PublicPlatform.Types
     , Gender(..)
@@ -38,15 +40,14 @@ import qualified Data.HashMap.Strict        as HM
 import WeiXin.PublicPlatform.Utils
 
 
+-- | 微信用户名
+newtype WeixinUserName = WeixinUserName { unWeixinUserName :: Text }
+                        deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
+
 -- | 用户分组的ID
 newtype WxppUserGroupID = WxppUserGroupID { unWxppUserGroupID :: Int }
-                        deriving (Show, Eq, Ord)
-
-instance ToJSON WxppUserGroupID where
-    toJSON = toJSON . unWxppUserGroupID
-
-instance FromJSON WxppUserGroupID where
-    parseJSON = fmap WxppUserGroupID . parseJSON
+                        deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 
 -- | 客服帐号
