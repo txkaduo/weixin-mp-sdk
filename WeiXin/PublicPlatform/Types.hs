@@ -271,7 +271,7 @@ instance PersistFieldSql QRTicket where
 
 
 newtype Token = Token { unToken :: Text }
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, PersistFieldSql, PersistField)
 
 newtype AesKey = AesKey { unAesKey :: Key AES }
                     deriving (Eq)
@@ -349,7 +349,7 @@ instance FromJSON AccessToken where
 type AccessTokenP = WxppAppID -> AccessToken
 
 newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, PersistFieldSql, PersistField)
 
 data WxppAppConfig = WxppAppConfig {
                     wxppAppConfigAppID         :: WxppAppID
