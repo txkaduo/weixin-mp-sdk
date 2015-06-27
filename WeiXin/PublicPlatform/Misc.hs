@@ -62,7 +62,7 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
         cache
         get_last_handlers_ref
         (\x -> return $ Map.lookup x wxpp_config_map)
-        get_protos
+        (return . get_protos)
         send_msg
         down_media
         opts
@@ -80,7 +80,7 @@ mkMaybeWxppSub' ::
     -> (WxppAppID -> Maybe (IORef (Maybe [SomeWxppInMsgHandler (LoggingT IO)])))
     -> (WxppAppID -> IO (Maybe WxppAppConfig))
             -- ^ 根据 app id 找到相应配置的函数
-    -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
+    -> (WxppAppID -> IO [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
     -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> WxppSubsiteOpts
@@ -120,9 +120,10 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                 ]
 
         handle_msg data_dir bs ime = do
-            err_or_in_msg_handlers <- liftIO $
+            err_or_in_msg_handlers <- liftIO $ do
+                    protos <- get_protos app_id
                     readWxppInMsgHandlers
-                        (get_protos app_id)
+                        protos
                         (encodeString $ data_dir </> fromText "msg-handlers.yml")
 
             let m_last_handlers_ref = get_last_handlers_ref app_id
