@@ -8,6 +8,7 @@ import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
 import Filesystem.Path.CurrentOS            (encodeString, fromText, (</>))
 import Control.Concurrent                   (threadDelay)
+import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Control.Monad.Catch
 
@@ -56,17 +57,48 @@ mkMaybeWxppSub ::
     -> WxppAppID
     -> MaybeWxppSub
 mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg down_media opts app_id =
-    MaybeWxppSub $ case Map.lookup app_id wxpp_config_map of
-        Nothing     -> Nothing
-        Just wac    ->  let data_dir    = wxppAppConfigDataDir wac
-                        in Just $ WxppSub wac
-                                    (SomeWxppCacheBackend cache)
-                                    (runDBWith foundation)
-                                    (send_msg app_id)
-                                    (handle_msg data_dir)
-                                    middlewares
-                                    (runLoggingTWith foundation)
-                                    opts
+    mkMaybeWxppSub'
+        foundation
+        cache
+        get_last_handlers_ref
+        (\x -> return $ Map.lookup x wxpp_config_map)
+        get_protos
+        send_msg
+        down_media
+        opts
+        app_id
+
+
+mkMaybeWxppSub' ::
+    ( LoggingTRunner app
+    , DBActionRunner app
+    , DBAction app ~ SqlPersistT
+    , WxppCacheBackend c
+    ) =>
+    app
+    -> c
+    -> (WxppAppID -> Maybe (IORef (Maybe [SomeWxppInMsgHandler (LoggingT IO)])))
+    -> (WxppAppID -> IO (Maybe WxppAppConfig))
+            -- ^ 根据 app id 找到相应配置的函数
+    -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
+    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
+    -> WxppSubsiteOpts
+    -> WxppAppID
+    -> MaybeWxppSub
+mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg down_media opts app_id =
+    MaybeWxppSub $ runMaybeT $ do
+        wac <- MaybeT $ get_wxpp_config app_id
+        let data_dir    = wxppAppConfigDataDir wac
+        return $ WxppSub
+                    wac
+                    (SomeWxppCacheBackend cache)
+                    (runDBWith foundation)
+                    (send_msg app_id)
+                    (handle_msg data_dir)
+                    middlewares
+                    (runLoggingTWith foundation)
+                    opts
     where
         db_runner = WxppSubDBActionRunner $ runDBWith foundation
 

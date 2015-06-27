@@ -62,7 +62,8 @@ withWxppSubHandler ::
     -> HandlerT MaybeWxppSub (HandlerT master IO) a
 withWxppSubHandler f = do
     getYesod
-        >>= maybe notFound return . unMaybeWxppSub
+        >>= liftIO . unMaybeWxppSub
+        >>= maybe notFound return
         >>= f
 
 checkSignature' :: Yesod master =>
