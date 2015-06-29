@@ -6,6 +6,7 @@ import ClassyPrelude hiding (try, FilePath, (<.>), (</>))
 import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
+import qualified Data.StateVar              as SV
 import Filesystem.Path.CurrentOS            (encodeString, fromText, (</>))
 import Control.Concurrent                   (threadDelay)
 import Control.Monad.Trans.Maybe
@@ -38,6 +39,8 @@ parseMultWxppAppConfig obj = do
                 else return Nothing
 
 
+type LoInMsgHandlerList = [SomeWxppInMsgHandler (LoggingT IO)]
+
 -- | 用于生成 yesod 的 subsite 类型的辅助工具
 -- 它就是为了辅助制造一个 App -> WxppAppID -> MaybeWxppSub 这样的函数
 mkMaybeWxppSub ::
@@ -48,7 +51,7 @@ mkMaybeWxppSub ::
     ) =>
     app
     -> c
-    -> (WxppAppID -> Maybe (IORef (Maybe [SomeWxppInMsgHandler (LoggingT IO)])))
+    -> (WxppAppID -> Maybe (IORef (Maybe LoInMsgHandlerList)))
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
@@ -60,7 +63,7 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
     mkMaybeWxppSub'
         foundation
         cache
-        get_last_handlers_ref
+        (return . get_last_handlers_ref)
         (\x -> return $ Map.lookup x wxpp_config_map)
         (return . get_protos)
         send_msg
@@ -74,10 +77,12 @@ mkMaybeWxppSub' ::
     , DBActionRunner app
     , DBAction app ~ SqlPersistT
     , WxppCacheBackend c
+    , SV.HasSetter hvar (Maybe LoInMsgHandlerList), SV.HasGetter hvar (Maybe LoInMsgHandlerList)
     ) =>
     app
     -> c
-    -> (WxppAppID -> Maybe (IORef (Maybe [SomeWxppInMsgHandler (LoggingT IO)])))
+    -> (WxppAppID -> IO (Maybe hvar))
+            -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
     -> (WxppAppID -> IO (Maybe WxppAppConfig))
             -- ^ 根据 app id 找到相应配置的函数
     -> (WxppAppID -> IO [WxppInMsgHandlerPrototype (LoggingT IO)])
@@ -126,13 +131,13 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                         protos
                         (encodeString $ data_dir </> fromText "msg-handlers.yml")
 
-            let m_last_handlers_ref = get_last_handlers_ref app_id
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_id
             m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $
                         "cannot parse msg-handlers.yml: " ++ show err
                     m_cached_handlers <- liftIO $ fmap join $
-                                            mapM readIORef m_last_handlers_ref
+                                            mapM SV.get m_last_handlers_ref
                     case m_cached_handlers of
                         Nothing -> do
                             $logWarnS wxppLogSource $
@@ -151,7 +156,7 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                     return $ Left "msg-handlers.yml error"
 
                 Just in_msg_handlers -> do
-                    liftIO $ mapM_ (flip writeIORef $ Just in_msg_handlers) m_last_handlers_ref
+                    liftIO $ mapM_ (SV.$= Just in_msg_handlers) m_last_handlers_ref
 
                     -- 这里可以选择使用 tryEveryInMsgHandler'
                     -- 那样就会所有 handler 保证处理一次

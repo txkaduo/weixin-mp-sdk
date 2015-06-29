@@ -117,6 +117,7 @@ library
                      , http-types
                      , blaze-builder
                      , network
+                     , StateVar
                      , diagrams-qrcode
                      , diagrams-svg
                      , diagrams-lib
