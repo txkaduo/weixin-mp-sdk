@@ -25,8 +25,10 @@ import Filesystem.Path.CurrentOS            (encodeString, fromText, FilePath)
 import qualified Crypto.Hash.MD5            as MD5
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(..))
+import Database.Persist                     (PersistValue)
 import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
+import Data.Proxy                           (Proxy(..))
 
 import Yesod.Helpers.Aeson                  (parseArray)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
@@ -278,6 +280,14 @@ newtype AesKey = AesKey { unAesKey :: Key AES }
 instance Show AesKey where
     show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
 
+instance PersistField AesKey where
+    toPersistValue      = toPersistValue . toBytes . unAesKey
+    fromPersistValue    = (fromPersistValue :: PersistValue -> Either Text ByteString)
+                            >=> either (Left . fromString . show) (Right . AesKey)
+                                . makeKey
+
+instance PersistFieldSql AesKey where
+    sqlType _ = sqlType (Proxy :: Proxy ByteString)
 
 decodeBase64Encoded :: Text -> Either String ByteString
 decodeBase64Encoded = B64.decode . encodeUtf8
