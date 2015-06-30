@@ -965,7 +965,48 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
 
 
+-- | Handler: 解释扫描的二维码
+data WxppInMsgParseScanCodePush m a = WxppInMsgParseScanCodePush
+                                        (Text -> m (Either String a))
+                                            -- ^ parser for command
+                                        (Text       -- ^ event key
+                                            -> WxppInMsgEntity
+                                            -> a
+                                            -> m (Either String WxppInMsgHandlerResult)
+                                        )
+                                        -- ^ handle the command
+
+instance JsonConfigable (WxppInMsgParseScanCodePush m a) where
+    type JsonConfigableUnconfigData (WxppInMsgParseScanCodePush m a) =
+            ( Text -> m (Either String a)
+            , Text -> WxppInMsgEntity -> a -> m (Either String WxppInMsgHandlerResult)
+            )
+
+    isNameOfInMsgHandler _ x = x == "generic-scancode-push"
+
+    parseWithExtraData _ (f1, f2) _obj = return $ WxppInMsgParseScanCodePush f1 f2
+
+type instance WxppInMsgProcessResult (WxppInMsgParseScanCodePush m a) = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m (WxppInMsgParseScanCodePush m a)
+    where
+
+    processInMsg (WxppInMsgParseScanCodePush parse_f handle_f) _cache _bs m_ime = runExceptT $ do
+        case m_ime of
+            Nothing -> return []
+            Just ime -> do
+                case wxppInMessage ime of
+                    WxppInMsgEvent (WxppEvtScanCodePush ev_key _scan_type scan_txt) -> do
+                        x <- ExceptT $ parse_f scan_txt
+                        ExceptT $ handle_f ev_key ime x
+
+                    _ -> return []
+
+
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
+-- 结果中不包含 WxppInMsgParseScanCodePush
+-- 因为不想传入太多不相关的参数
 allBasicWxppInMsgHandlerPrototypes ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
     WxppAppID
