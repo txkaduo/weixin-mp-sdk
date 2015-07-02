@@ -998,8 +998,12 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Just ime -> do
                 case wxppInMessage ime of
                     WxppInMsgEvent (WxppEvtScanCodePush ev_key _scan_type scan_txt) -> do
-                        x <- ExceptT $ parse_f scan_txt
-                        ExceptT $ handle_f ev_key ime x
+                        -- scancode_push 事件好像不能直接回复信息
+                        -- 所以，如果结果非空，就在前面多加一个空的回复
+                        let fix_out xs = if null xs then [] else (True, Nothing) : xs
+                        (ExceptT $ parse_f scan_txt)
+                            >>= (ExceptT . handle_f ev_key ime)
+                            >>= return . fix_out
 
                     _ -> return []
 
