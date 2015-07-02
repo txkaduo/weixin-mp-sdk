@@ -1043,7 +1043,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
             Nothing -> return []
             Just ime -> do
                 case wxppInMessage ime of
-                    WxppInMsgEvent (WxppEvtScanCodePush ev_key _scan_type scan_txt) -> do
+                    WxppInMsgEvent (WxppEvtScanCodeWaitMsg ev_key _scan_type scan_txt) -> do
                         (ExceptT $ parse_f scan_txt)
                             >>= (ExceptT . handle_f ev_key ime)
 
