@@ -965,7 +965,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
 
 
--- | Handler: 解释扫描的二维码
+-- | Handler: 解释菜单扫描的二维码事件, 对应菜单事件的 scancode_msg
 data WxppInMsgParseScanCodePush m a = WxppInMsgParseScanCodePush
                                         (Text -> m (Either String a))
                                             -- ^ parser for command
@@ -1011,8 +1011,47 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                     _ -> return []
 
 
+-- | Handler: 解释菜单扫描的二维码事件, 对应菜单事件的 scancode_waitmsg
+data WxppInMsgParseScanCodeWaitMsg m a = WxppInMsgParseScanCodeWaitMsg
+                                        (Text -> m (Either String a))
+                                            -- ^ parser for command
+                                        (Text       -- ^ event key
+                                            -> WxppInMsgEntity
+                                            -> a
+                                            -> m (Either String WxppInMsgHandlerResult)
+                                        )
+                                        -- ^ handle the command
+
+instance JsonConfigable (WxppInMsgParseScanCodeWaitMsg m a) where
+    type JsonConfigableUnconfigData (WxppInMsgParseScanCodeWaitMsg m a) =
+            ( Text -> m (Either String a)
+            , Text -> WxppInMsgEntity -> a -> m (Either String WxppInMsgHandlerResult)
+            )
+
+    isNameOfInMsgHandler _ x = x == "generic-scancode-waitmsg"
+
+    parseWithExtraData _ (f1, f2) _obj = return $ WxppInMsgParseScanCodeWaitMsg f1 f2
+
+type instance WxppInMsgProcessResult (WxppInMsgParseScanCodeWaitMsg m a) = WxppInMsgHandlerResult
+
+instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    IsWxppInMsgProcessor m (WxppInMsgParseScanCodeWaitMsg m a)
+    where
+
+    processInMsg (WxppInMsgParseScanCodeWaitMsg parse_f handle_f) _cache _bs m_ime = runExceptT $ do
+        case m_ime of
+            Nothing -> return []
+            Just ime -> do
+                case wxppInMessage ime of
+                    WxppInMsgEvent (WxppEvtScanCodePush ev_key _scan_type scan_txt) -> do
+                        (ExceptT $ parse_f scan_txt)
+                            >>= (ExceptT . handle_f ev_key ime)
+
+                    _ -> return []
+
+
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
--- 结果中不包含 WxppInMsgParseScanCodePush
+-- 结果中不包含 WxppInMsgParseScanCodePush, WxppInMsgParseScanCodeWaitMsg
 -- 因为不想传入太多不相关的参数
 allBasicWxppInMsgHandlerPrototypes ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
