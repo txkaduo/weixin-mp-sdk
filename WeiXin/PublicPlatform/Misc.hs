@@ -7,11 +7,17 @@ import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
 import qualified Data.StateVar              as SV
+import qualified Data.ByteString.Base64     as B64
+import qualified Data.ByteString.Char8      as C8
 import Filesystem.Path.CurrentOS            (encodeString, fromText, (</>))
 import Control.Concurrent                   (threadDelay)
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Control.Monad.Catch
+import Data.Byteable                        (toBytes)
+import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
+import Yesod.Core                           (HandlerSite)
+import Text.Shakespeare.I18N                (RenderMessage)
 
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
 import Yesod.Helpers.Persist
@@ -27,6 +33,13 @@ import WeiXin.PublicPlatform.Yesod.Site.Function
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
+
+
+aesKeyField :: forall m. (Monad m, RenderMessage (HandlerSite m) FormMessage) => Field m AesKey
+aesKeyField = checkMMap conv conv_back textField
+    where
+        conv t = return $ either (Left . T.pack) Right $ decodeBase64AesKey t
+        conv_back = fromString . C8.unpack . B64.encode . toBytes . unAesKey
 
 
 -- | 从字典中找出形如 "wxpp~xxxx" 的字段，每个那样的字段解释出一个 WxppAppConfig
