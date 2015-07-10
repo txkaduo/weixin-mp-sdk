@@ -30,7 +30,17 @@ talkerRun :: (Monad m, TalkerState a) =>
     (m a)
     -> (a -> m ())
     -> Conduit Text m Text
-talkerRun get_state put_state = go
+talkerRun = talkerRun' False
+
+talkerRun' :: (Monad m, TalkerState a) =>
+    Bool
+    -> (m a)
+    -> (a -> m ())
+    -> Conduit Text m Text
+talkerRun' skip_first_prompt get_state put_state =
+    if skip_first_prompt
+        then chk_wait_and_go
+        else go
     where
         prompt = do
             st <- lift get_state
@@ -38,8 +48,9 @@ talkerRun get_state put_state = go
             maybe (return ()) yield m_t
             lift $ put_state s
 
-        go = do
-            prompt
+        go = prompt >> chk_wait_and_go
+
+        chk_wait_and_go = do
             done <- liftM talkDone $ lift get_state
             if done
                 then return ()
