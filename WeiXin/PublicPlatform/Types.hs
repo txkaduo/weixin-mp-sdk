@@ -365,7 +365,7 @@ data WxppAppConfig = WxppAppConfig {
                     wxppAppConfigAppID         :: WxppAppID
                     , wxppConfigAppSecret   :: WxppAppSecret
                     , wxppConfigAppToken    :: Token
-                    , wxppConfigAppAesKey   :: AesKey
+                    , wxppConfigAppAesKey   :: Maybe AesKey
                     , wxppConfigAppBackupAesKeys  :: [AesKey]
                         -- ^ 多个 aes key 是为了过渡时使用
                         -- 加密时仅使用第一个
@@ -383,13 +383,15 @@ instance FromJSON WxppAppConfig where
                     aes_key_lst <- obj .: "aes-key"
                                     >>= return . filter (not . T.null) . map T.strip
                                     >>= mapM parseAesKeyFromText
-                    case aes_key_lst of
-                        []      -> fail $ "At least one AesKey is required"
-                        (x:xs)  ->
-                            return $ WxppAppConfig app_id secret app_token
-                                        x
-                                        xs
-                                        data_dir
+                    let (ak1, backup_aks) =
+                                case aes_key_lst of
+                                    []      -> (Nothing, [])
+                                    (x:xs)  -> (Just x, xs)
+
+                    return $ WxppAppConfig app_id secret app_token
+                                ak1
+                                backup_aks
+                                data_dir
 
 
 -- | 见高级群发接口文档

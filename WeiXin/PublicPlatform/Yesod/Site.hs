@@ -120,7 +120,8 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
     lbs <- liftIO $ lazyRequestBody req
     let app_config  = wxppSubAppConfig foundation
         app_id      = wxppAppConfigAppID app_config
-        aks         = wxppConfigAppAesKey app_config : wxppConfigAppBackupAesKeys app_config
+        aks         = catMaybes $ wxppConfigAppAesKey app_config :
+                                    (map Just $ wxppConfigAppBackupAesKeys app_config)
         app_token   = wxppConfigAppToken app_config
 
 
@@ -129,7 +130,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
             if enc
                 then do
                     (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
-                        >>= maybe (throwE $ "Internal Error: Assertion Failed")
+                        >>= maybe (throwE $ "Internal Error: no AesKey available to decrypt")
                                 (return . (LB.fromStrict *** Just))
                 else return (lbs, Nothing)
 
