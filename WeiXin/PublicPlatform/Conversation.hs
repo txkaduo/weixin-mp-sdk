@@ -7,7 +7,8 @@ module WeiXin.PublicPlatform.Conversation
 
 import ClassyPrelude
 
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict hiding (mapM_)
+import Control.Monad.Trans.Except
 import Data.Conduit
 import qualified Data.Conduit.List          as CL
 
@@ -15,6 +16,7 @@ import Text.Parsec.Text
 import Text.Parsec.Error
 import Text.Parsec.Prim
 
+import WeiXin.PublicPlatform.Types
 
 class TalkerState a where
     talkPromptNext :: a -> (Maybe Text, a)
@@ -106,3 +108,89 @@ conversationInputOneStep get_st set_st m_input = do
                         Just x -> yield x
     let cond = talkerRun' (isJust m_input) get_st set_st
     send_intput =$= cond $$ CL.consume
+
+
+-- | 支持更多操作的接口: 例如可以使用 IO 之类
+-- 处理的用户输入也不仅仅是文字输入
+class Eq a => WxTalkerState m a where
+    -- | 根据当前（刚更新过的）状态，提供一些响应
+    wxTalkPromptNext :: a
+                        -> m (Either String ([WxppOutMsg], a))
+                        -- ^ 回应消息及新的状态
+
+    -- | 对用户的消息作出响应
+    wxTalkResponse :: a
+                    -> WxppInMsgEntity
+                    -> m (Either String (Maybe ([WxppOutMsg], a)))
+                    -- ^ 在会话过程中，消息可能会被无条件传入这个函数处理
+                    -- 因此，要表达这个函数是否真正有处理用户输入
+
+    -- | 判断对话是否已结束
+    wxTalkDone :: a -> m (Either String Bool)
+
+
+wxTalkerRun :: (Monad m, WxTalkerState m a) =>
+    Bool
+    -> (m a)
+    -> (a -> m ())
+    -> Conduit WxppInMsgEntity (ExceptT String m) WxppOutMsg
+wxTalkerRun skip_first_prompt get_state put_state =
+    if skip_first_prompt
+        then chk_wait_and_go
+        else go
+    where
+        prompt = do
+            st <- lift $ lift $ get_state
+            (replies, new_st) <- lift $ ExceptT $ wxTalkPromptNext st
+            mapM_ yield replies
+            unless (st == new_st) $ do
+                lift $ lift $ put_state new_st
+
+        go = prompt >> chk_wait_and_go
+
+        chk_wait_and_go = do
+            done <- lift $ lift get_state >>= ExceptT . wxTalkDone
+            if done
+                then return ()
+                else wait_and_go
+
+        wait_and_go = do
+            mx <- await
+            case mx of
+                Nothing -> return ()
+                Just t  -> do
+                    st <- lift $ lift get_state
+                    m_resp <- lift $ ExceptT $ wxTalkResponse st t
+                    case m_resp of
+                        Nothing -> do
+                            wait_and_go
+
+                        Just (replies, new_st) -> do
+                            mapM_ yield replies
+                            unless (st == new_st) $ do
+                                lift $ lift $ put_state new_st
+                            go
+
+
+newtype WrapTalkerState a = WrapTalkerState a
+                            deriving (Eq)
+
+instance (Eq a, TalkerState a, Monad m) => WxTalkerState m (WrapTalkerState a) where
+    wxTalkPromptNext (WrapTalkerState s) = runExceptT $ do
+        let (m_reply, new_s) = talkPromptNext s
+        return $ (maybe [] (return . WxppOutMsgText) m_reply, WrapTalkerState new_s)
+
+    wxTalkResponse (WrapTalkerState s) ime = runExceptT $ do
+        case wxppInMessage ime of
+            WxppInMsgText t -> do
+                case parse (talkParser s) "" t of
+                    Left err -> do
+                        let (m_t, new_s) = talkNotUnderstanding s err
+                        return $ Just $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+
+                    Right (m_t, new_s) -> do
+                        return $ Just $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+
+            _ -> return Nothing
+
+    wxTalkDone (WrapTalkerState s) = runExceptT $ return $ talkDone s
