@@ -27,6 +27,15 @@ class TalkerState a where
     talkDone :: a -> Bool
 
 
+data SomeTalkerState = forall a. TalkerState a => SomeTalkerState a
+
+instance TalkerState SomeTalkerState where
+    talkPromptNext (SomeTalkerState x)          = second SomeTalkerState $ talkPromptNext x
+    talkNotUnderstanding (SomeTalkerState x)    = second SomeTalkerState . talkNotUnderstanding x
+    talkParser (SomeTalkerState x)              = second SomeTalkerState <$> talkParser x
+    talkDone (SomeTalkerState x)                = talkDone x
+
+
 talkerRun :: (Monad m, TalkerState a) =>
     (m a)
     -> (a -> m ())
