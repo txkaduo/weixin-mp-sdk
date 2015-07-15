@@ -54,6 +54,8 @@ type WxppInMsgHandlerResult = [(Bool, Maybe WxppOutMsg)]
 
 type WxppInMsgHandler m = WxppInMsgProcessor m WxppInMsgHandlerResult
 
+wxppInMsgHandleSingleTextOut :: Bool -> Text -> WxppInMsgHandlerResult
+wxppInMsgHandleSingleTextOut is_prim t = return (is_prim, Just (WxppOutMsgText t))
 
 hasPrimaryOutMsg :: WxppInMsgHandlerResult -> Bool
 hasPrimaryOutMsg = isJust . find fst
