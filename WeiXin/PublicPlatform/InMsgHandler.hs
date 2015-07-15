@@ -354,12 +354,12 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                     _                                                   -> return False
         if is_subs
             then do
-                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
-                            wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") (return . fst)
+                let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                                    wxppCacheGetAccessToken cache app_id)
+                                >>= maybe (throwE $ "no access token available") (return . fst)
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
                 liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache get_atk outmsg
             else return []
 
 
@@ -396,13 +396,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
         case m_fp of
             Nothing -> return []
             Just fp' -> do
-                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
-                            wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") (return . fst)
+                let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                                    wxppCacheGetAccessToken cache app_id)
+                                >>= maybe (throwE $ "no access token available") (return . fst)
                 let fp = setExtIfNotExist "yml" $ fromText fp'
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache get_atk outmsg
 
 
 -- | Handler: 回复原文本消息中路径指定的任意消息
@@ -440,12 +440,12 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
         case m_fp of
             Nothing -> return []
             Just fp -> do
-                atk <- (tryWxppWsResultE "getting access token" $ liftIO $
-                            wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwE $ "no access token available") (return . fst)
+                let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                                    wxppCacheGetAccessToken cache app_id)
+                                >>= maybe (throwE $ "no access token available") (return . fst)
                 outmsg <- ExceptT $ runDelayedYamlLoader msg_dir $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
+                                tryYamlExcE $ fromWxppOutMsgL msg_dir cache get_atk outmsg
 
 
 -- | Handler: 回复用户的 OpenID 及 UnionID
@@ -959,12 +959,12 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     where
 
     processInMsg (ConstResponse app_id msg_dir is_primary get_outmsg) cache _bs _m_ime = runExceptT $ do
-        atk <- (tryWxppWsResultE "getting access token" $ liftIO $
-                    wxppCacheGetAccessToken cache app_id)
-                >>= maybe (throwE $ "no access token available") (return . fst)
+        let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
+                        >>= maybe (throwE $ "no access token available") (return . fst)
         outmsg <- ExceptT $ runDelayedYamlLoader msg_dir get_outmsg
         liftM (return . (is_primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                        tryYamlExcE $ fromWxppOutMsgL msg_dir cache atk outmsg
+                        tryYamlExcE $ fromWxppOutMsgL msg_dir cache get_atk outmsg
 
 
 -- | Handler: 解释菜单扫描的二维码事件, 对应菜单事件的 scancode_msg
