@@ -106,7 +106,7 @@ library
                      , conduit-extra
                      , conduit-combinators
                      , scientific
-                     , yaml
+                     , yaml >= 0.8.11
                      , system-filepath
                      , cryptohash
                      , containers

@@ -7,7 +7,7 @@ import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
 import Filesystem.Path.CurrentOS            (encodeString, fromText, extension, FilePath, (<.>), (</>))
 import Data.Aeson.Types                     (Parser)
 import Data.Aeson
-import Data.Yaml                            (ParseException, decodeFileEither)
+import Data.Yaml                            (ParseException, decodeFileEither, prettyPrintParseException)
 import Control.Monad.Catch                  ( Handler(..) )
 
 epochIntToUtcTime :: Int64 -> UTCTime
@@ -16,11 +16,22 @@ epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffT
 utcTimeToEpochInt :: UTCTime -> Int64
 utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
+
+data YamlFileParseException = YamlFileParseException
+                                    String      -- ^ file path
+                                    ParseException
+                                deriving (Typeable)
+
+instance Show YamlFileParseException where
+    show (YamlFileParseException fp exc) = fp ++ ": " ++ prettyPrintParseException exc
+
+instance Exception YamlFileParseException
+
 -- | 在实现允许在解释一个 YAML 时，引用另一个 YAML这样的功能时
 -- 在第一次解释时，结果不再是一个简单的值，而是一个 IO 函数。
 -- 以下类型就是表达这种延期加载的函数
 -- ReaderT 的 r 参数是相对路径相对的目录
-type DelayedYamlLoader a = ReaderT FilePath IO (Either ParseException a)
+type DelayedYamlLoader a = ReaderT FilePath IO (Either YamlFileParseException a)
 
 
 setExtIfNotExist :: Text -> FilePath -> FilePath
@@ -49,7 +60,11 @@ parseDelayedYamlLoader m_direct_field indirect_field obj =
 mkDelayedYamlLoader :: FromJSON a => FilePath -> DelayedYamlLoader a
 mkDelayedYamlLoader fp = do
     base_dir <- ask
-    liftIO $ decodeFileEither (encodeString $ base_dir </> fp)
+    let full_path = encodeString $ base_dir </> fp
+    err_or_x <- liftIO $ decodeFileEither full_path
+    case err_or_x of
+        Left err -> return $ Left $ YamlFileParseException full_path err
+        Right x -> return $ Right x
 
 runDelayedYamlLoader :: (MonadIO m, FromJSON a) =>
     FilePath    -- ^ 消息文件存放目录
@@ -70,9 +85,9 @@ runDelayedYamlLoaderExc base_dir get_ext = liftIO $
     runReaderT get_ext base_dir
         >>= either throwM return
 
-parseMsgErrorToString :: Either ParseException a -> Either String a
-parseMsgErrorToString (Left err)   = Left $ "failed to parse from file: " ++ show err
-parseMsgErrorToString (Right x)    = Right x
+parseMsgErrorToString :: Either YamlFileParseException a -> Either String a
+parseMsgErrorToString (Left err)    = Left $ "failed to parse from file: " ++ show err
+parseMsgErrorToString (Right x)     = Right x
 
 unifyExcHandler :: (Show e, Monad m) => Handler m (Either e a) -> Handler m (Either String a)
 unifyExcHandler = fmap $ either (Left . show) Right
