@@ -14,7 +14,9 @@ import qualified Data.Conduit.List          as CL
 
 import Text.Parsec.Text
 import Text.Parsec.Error
+import Text.Parsec.Pos                      (initialPos)
 import Text.Parsec.Prim
+import Data.Aeson.TH                        (deriveJSON, defaultOptions)
 
 import WeiXin.PublicPlatform.Types
 
@@ -112,27 +114,33 @@ conversationInputOneStep get_st set_st m_input = do
 
 -- | 支持更多操作的接口: 例如可以使用 IO 之类
 -- 处理的用户输入也不仅仅是文字输入
-class Eq a => WxTalkerState m a where
-    -- | 根据当前（刚更新过的）状态，提供一些响应
-    wxTalkPromptNext :: a
+class WxTalkerState m a where
+    -- | 为用户下一个输入提供提示
+    -- 注意：这个方法会在 wxTalkHandleInput 之后调用
+    wxTalkPromptToInput :: a
                         -> m (Either String ([WxppOutMsg], a))
                         -- ^ 回应消息及新的状态
 
-    -- | 对用户的消息作出响应
-    wxTalkResponse :: a
+    -- | 处理用户的输入，并产生结果
+    -- 在会话过程中，消息可能会被无条件传入这个函数处理
+    -- 要表达这个函数是否真正有处理用户输入，因此结果是个 Maybe
+    wxTalkHandleInput :: a
                     -> WxppInMsgEntity
-                    -> m (Either String (Maybe ([WxppOutMsg], a)))
+                    -> m (Either String ([WxppOutMsg], a))
                     -- ^ 在会话过程中，消息可能会被无条件传入这个函数处理
-                    -- 因此，要表达这个函数是否真正有处理用户输入
 
     -- | 判断对话是否已结束
-    wxTalkDone :: a -> m (Either String Bool)
+    wxTalkIfDone :: a -> m (Either String Bool)
 
 
-wxTalkerRun :: (Monad m, WxTalkerState m a) =>
+class WxTalkerDoneAction m a where
+    wxTalkDone :: a -> m (Either String [WxppOutMsg])
+
+
+wxTalkerRun :: (Monad m, Eq a, WxTalkerState m a) =>
     Bool
-    -> (m a)
-    -> (a -> m ())
+    -> (m (Either String a))
+    -> (a -> m (Either String ()))
     -> Conduit WxppInMsgEntity (ExceptT String m) WxppOutMsg
 wxTalkerRun skip_first_prompt get_state put_state =
     if skip_first_prompt
@@ -140,16 +148,16 @@ wxTalkerRun skip_first_prompt get_state put_state =
         else go
     where
         prompt = do
-            st <- lift $ lift $ get_state
-            (replies, new_st) <- lift $ ExceptT $ wxTalkPromptNext st
+            st <- lift $ ExceptT $ get_state
+            (replies, new_st) <- lift $ ExceptT $ wxTalkPromptToInput st
             mapM_ yield replies
             unless (st == new_st) $ do
-                lift $ lift $ put_state new_st
+                lift $ ExceptT $ put_state new_st
 
         go = prompt >> chk_wait_and_go
 
         chk_wait_and_go = do
-            done <- lift $ lift get_state >>= ExceptT . wxTalkDone
+            done <- lift $ ExceptT get_state >>= ExceptT . wxTalkIfDone
             if done
                 then return ()
                 else wait_and_go
@@ -159,38 +167,85 @@ wxTalkerRun skip_first_prompt get_state put_state =
             case mx of
                 Nothing -> return ()
                 Just t  -> do
-                    st <- lift $ lift get_state
-                    m_resp <- lift $ ExceptT $ wxTalkResponse st t
-                    case m_resp of
-                        Nothing -> do
-                            wait_and_go
+                    st <- lift $ ExceptT get_state
+                    (replies, new_st) <- lift $ ExceptT $ wxTalkHandleInput st t
+                    mapM_ yield replies
+                    unless (st == new_st) $ do
+                        lift $ ExceptT $ put_state new_st
+                    go
 
-                        Just (replies, new_st) -> do
-                            mapM_ yield replies
-                            unless (st == new_st) $ do
-                                lift $ lift $ put_state new_st
-                            go
+
+wxTalkerInputOneStep :: (Monad m, WxTalkerState m s, Eq s) =>
+    m (Either String s)                 -- ^ get state
+    -> (s -> m (Either String ()))      -- ^ set state
+    -> Maybe WxppInMsgEntity
+        -- ^ 新建立的会话时，用户输入理解为 Nothing
+        -- 之后的调用都应该是 Just
+    -> m (Either String [WxppOutMsg])
+        -- ^ 状态机的输出文字
+wxTalkerInputOneStep get_st set_st m_input = runExceptT $ do
+    send_intput =$= cond $$ CL.consume
+    where
+        send_intput = case m_input of
+                        Nothing -> return ()
+                        Just x -> yield x
+        cond = wxTalkerRun (isJust m_input) get_st set_st
 
 
 newtype WrapTalkerState a = WrapTalkerState a
                             deriving (Eq)
 
 instance (Eq a, TalkerState a, Monad m) => WxTalkerState m (WrapTalkerState a) where
-    wxTalkPromptNext (WrapTalkerState s) = runExceptT $ do
+    wxTalkPromptToInput (WrapTalkerState s) = runExceptT $ do
         let (m_reply, new_s) = talkPromptNext s
         return $ (maybe [] (return . WxppOutMsgText) m_reply, WrapTalkerState new_s)
 
-    wxTalkResponse (WrapTalkerState s) ime = runExceptT $ do
+    wxTalkHandleInput (WrapTalkerState s) ime = runExceptT $ do
         case wxppInMessage ime of
             WxppInMsgText t -> do
                 case parse (talkParser s) "" t of
                     Left err -> do
                         let (m_t, new_s) = talkNotUnderstanding s err
-                        return $ Just $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+                        return $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
 
                     Right (m_t, new_s) -> do
-                        return $ Just $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+                        return $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
 
-            _ -> return Nothing
+            _ -> do
+                let err = newErrorMessage (Message "unknown weixin message") (initialPos "")
+                let (m_t, new_s) = talkNotUnderstanding s err
+                return $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
 
-    wxTalkDone (WrapTalkerState s) = runExceptT $ return $ talkDone s
+    wxTalkIfDone (WrapTalkerState s) = runExceptT $ return $ talkDone s
+
+
+-- | as a place holder
+data NullTalkerState = NullTalkerState
+                        deriving (Eq, Ord, Enum, Bounded)
+
+$(deriveJSON defaultOptions ''NullTalkerState)
+
+instance Monad m => WxTalkerState m NullTalkerState where
+    wxTalkPromptToInput x   = return $ Right ([], x)
+    wxTalkHandleInput   x _ = return $ Right ([], x)
+    wxTalkIfDone        _   = return $ Right True
+
+instance Monad m => WxTalkerDoneAction m NullTalkerState where
+    wxTalkDone _ = return $ Right []
+
+
+data SomeWxTalkerState m = forall a. (WxTalkerState m a, WxTalkerDoneAction m a) =>
+                                SomeWxTalkerState a
+
+instance Monad m => WxTalkerState m (SomeWxTalkerState m) where
+    wxTalkPromptToInput (SomeWxTalkerState x)    = liftM (fmap $ second SomeWxTalkerState) $
+                                                    wxTalkPromptToInput x
+
+    wxTalkHandleInput (SomeWxTalkerState x)   = liftM (fmap $ second SomeWxTalkerState) .
+                                                    wxTalkHandleInput x
+
+    wxTalkIfDone (SomeWxTalkerState x)      = wxTalkIfDone x
+
+
+instance WxTalkerDoneAction m (SomeWxTalkerState m) where
+    wxTalkDone (SomeWxTalkerState x) = wxTalkDone x
