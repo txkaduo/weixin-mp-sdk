@@ -96,7 +96,7 @@ fromWxppOutMsgL ::
     ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
     FilePath
     -> c
-    -> AccessToken
+    -> m AccessToken
     -> WxppOutMsgL
     -> m WxppOutMsg
 fromWxppOutMsgL _       _   _   (WxppOutMsgTextL x)     = return (WxppOutMsgText x)
@@ -105,21 +105,25 @@ fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
         liftM WxppOutMsgNews $ do
             sequence $ map (runDelayedYamlLoaderExc msg_dir) loaders
 
-fromWxppOutMsgL _ cache    atk (WxppOutMsgImageL fp)   = do
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgImageL fp)   = do
+        atk <- get_atk
         liftM (WxppOutMsgImage . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeImage fp
 
-fromWxppOutMsgL _ cache    atk (WxppOutMsgVoiceL fp)   = do
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgVoiceL fp)   = do
+        atk <- get_atk
         liftM (WxppOutMsgVoice . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
-fromWxppOutMsgL _ cache    atk (WxppOutMsgVideoL fp m_fp2 x1 x2)   = do
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgVideoL fp m_fp2 x1 x2)   = do
+        atk <- get_atk
         liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
             (liftM (fromWxppBriefMediaID . urMediaId) $ wxppUploadMediaCached cache atk WxppMediaTypeVoice fp)
             (liftM (fmap $ fromWxppBriefMediaID . urMediaId) $
                 mapM (wxppUploadMediaCached cache atk WxppMediaTypeVoice) m_fp2)
 
-fromWxppOutMsgL _ cache    atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
+        atk <- get_atk
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
@@ -131,11 +135,11 @@ fromWxppOutMsgL' ::
     ( MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
     FilePath
     -> c
-    -> AccessToken
+    -> m AccessToken
     -> WxppOutMsgL
     -> m (Either String WxppOutMsg)
-fromWxppOutMsgL' fp cache atk out_msg_l =
-    (liftM Right $ fromWxppOutMsgL fp cache atk out_msg_l) `catches`
+fromWxppOutMsgL' fp cache get_atk out_msg_l =
+    (liftM Right $ fromWxppOutMsgL fp cache get_atk out_msg_l) `catches`
         (Handler h_yaml_exc : map unifyExcHandler wxppWsExcHandlers)
     where
         h_yaml_exc e = return $ Left $ show (e :: ParseException)
