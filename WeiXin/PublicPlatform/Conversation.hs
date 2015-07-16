@@ -210,13 +210,14 @@ wxTalkerInputOneStep get_st set_st env m_input = flip runWxTalkerMonad env $ do
 
 
 -- | used to implement processInMsg of class IsWxppInMsgProcessor
+-- 用于处理会话建立后的消息处理
 wxTalkerInputProcessInMsg :: forall m r s .
     (MonadIO m, Eq s
     , WxTalkerState r m s
     , WxTalkerDoneAction r m s
     ) =>
-    (WxppOpenID -> WxTalkerMonad r m s) -- ^ get state
-    -> (WxppOpenID -> s -> WxTalkerMonad r m ())      -- ^ set state
+    (WxppOpenID -> WxTalkerMonad r m s)             -- ^ get state
+    -> (WxppOpenID -> s -> WxTalkerMonad r m ())    -- ^ set state
     -> r
     -> Maybe WxppInMsgEntity
         -- ^ this is nothing only if caller cannot parse the message
@@ -226,8 +227,7 @@ wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
         Nothing -> return []
         Just ime -> do
             let open_id = wxppInFromUserName ime
-                get_st' = get_st open_id
-                set_st' = set_st open_id
+            (get_st', set_st') <- ioCachedGetSet (get_st open_id) (set_st open_id)
             st <- run_wx_monad $ get_st'
             done <- run_wx_monad $ wxTalkIfDone st
             if done
@@ -248,17 +248,19 @@ wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
         run_wx_monad = flip runWxTalkerMonadE env
 
 
+-- 用于处理会话刚刚建立，产生一些输出消息
 wxTalkerInputProcessJustInited :: forall m r s .
     (MonadIO m, MonadLogger m, Eq s
     , WxTalkerState r m s
     , WxTalkerDoneAction r m s
     ) =>
-    (WxTalkerMonad r m s) -- ^ get state
+    (WxTalkerMonad r m s)               -- ^ get state
     -> (s -> WxTalkerMonad r m ())      -- ^ set state
     -> r
     -> m (Either String WxppInMsgHandlerResult)
 wxTalkerInputProcessJustInited get_st set_st env = runExceptT $ do
-    st <- run_wx_monad $ get_st
+    (get_st', set_st') <- ioCachedGetSet get_st set_st
+    st <- run_wx_monad $ get_st'
     done <- run_wx_monad $ wxTalkIfDone st
     if done
         then do
@@ -267,8 +269,8 @@ wxTalkerInputProcessJustInited get_st set_st env = runExceptT $ do
             return []
 
         else do
-            msgs <- ExceptT $ wxTalkerInputOneStep get_st set_st env Nothing
-            new_st <- run_wx_monad $ get_st
+            msgs <- ExceptT $ wxTalkerInputOneStep get_st' set_st' env Nothing
+            new_st <- run_wx_monad $ get_st'
             done2 <- run_wx_monad $ wxTalkIfDone new_st
             msgs2 <- if done2
                         then run_wx_monad $ wxTalkDone new_st
@@ -281,8 +283,6 @@ wxTalkerInputProcessJustInited get_st set_st env = runExceptT $ do
 
 -- | 这个小工具用于减少 getter, setter 访问数据库
 -- 前提：状态的读写是单线程的
--- XXX: 目前这是函数还用不了，
--- 因为 wxTalkerInputProcessInMsg 要的 getter 类型里还要一个 open id 参数
 ioCachedGetSet :: (MonadIO m, MonadIO n) =>
     m s
     -> (s -> m ())
