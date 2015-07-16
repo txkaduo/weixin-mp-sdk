@@ -24,7 +24,7 @@ import Yesod.Helpers.Persist
 
 import Database.Persist.Sql
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.CS
 import WeiXin.PublicPlatform.InMsgHandler

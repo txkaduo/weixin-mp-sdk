@@ -24,7 +24,7 @@ import Data.Conduit                         (Source, yield)
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import qualified Data.Text                  as T
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 
 -- | 调用服务器接口，查询用户基础信息

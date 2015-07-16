@@ -18,7 +18,7 @@ import Data.Default
 
 import Database.Persist.Sql
 
-import WeiXin.PublicPlatform.Security
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
 
 

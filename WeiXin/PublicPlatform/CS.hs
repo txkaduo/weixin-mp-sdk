@@ -6,9 +6,9 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Data.Aeson
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
-import WeiXin.PublicPlatform.Error
+-- import WeiXin.PublicPlatform.Error
 import qualified Data.HashMap.Strict        as HM
 
 
