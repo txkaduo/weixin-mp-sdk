@@ -4,6 +4,7 @@ module WeiXin.PublicPlatform.Class
     ) where
 
 import ClassyPrelude hiding (FilePath, (<.>), (</>), try)
+import Filesystem.Path.CurrentOS            (FilePath)
 
 import WeiXin.PublicPlatform.Types
 
@@ -84,3 +85,22 @@ instance WxppCacheBackend SomeWxppCacheBackend where
                             (SomeWxppCacheBackend x)    = wxppCacheSaveUploadedMediaID x
 
 
+class HasWxppAppID a where
+    getWxppAppID :: a -> WxppAppID
+
+instance HasWxppAppID WxppAppID where
+    getWxppAppID = id
+
+
+class HasSomeWxppCacheBackend a where
+    getSomeWxppCacheBackend :: a -> SomeWxppCacheBackend
+
+instance HasSomeWxppCacheBackend SomeWxppCacheBackend where
+    getSomeWxppCacheBackend = id
+
+
+class HasWxppOutMsgDir a where
+    getWxppOutMsgDir :: a -> FilePath
+
+instance HasWxppOutMsgDir FilePath where
+    getWxppOutMsgDir = id
