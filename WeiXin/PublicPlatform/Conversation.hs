@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Conversation
     ( module WeiXin.PublicPlatform.Conversation
     , module Text.Parsec.Text
@@ -10,6 +11,7 @@ import ClassyPrelude
 import Control.Monad.State.Strict hiding (mapM_)
 import Control.Monad.Trans.Except
 import Data.Conduit
+import Control.Monad.Logger
 import qualified Data.Conduit.List          as CL
 
 import Text.Parsec.Text
@@ -19,6 +21,7 @@ import Text.Parsec.Prim
 import Data.Aeson.TH                        (deriveJSON, defaultOptions)
 
 import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.InMsgHandler
 
 class TalkerState a where
     talkPromptNext :: a -> (Maybe Text, a)
@@ -122,6 +125,9 @@ mkWxTalkerMonad f = do
 runWxTalkerMonad :: Monad m => WxTalkerMonad r m a -> r -> m (Either String a)
 runWxTalkerMonad f env = runExceptT $ runReaderT f env
 
+runWxTalkerMonadE :: Monad m => WxTalkerMonad r m a -> r -> ExceptT String m a
+runWxTalkerMonadE = runReaderT
+
 -- | 支持更多操作的接口: 例如可以使用 IO 之类
 -- 处理的用户输入也不仅仅是文字输入
 class WxTalkerState r m a where
@@ -203,6 +209,96 @@ wxTalkerInputOneStep get_st set_st env m_input = flip runWxTalkerMonad env $ do
         cond = wxTalkerRun (isJust m_input) get_st set_st
 
 
+-- | used to implement processInMsg of class IsWxppInMsgProcessor
+wxTalkerInputProcessInMsg :: forall m r s .
+    (MonadIO m, Eq s
+    , WxTalkerState r m s
+    , WxTalkerDoneAction r m s
+    ) =>
+    (WxppOpenID -> WxTalkerMonad r m s) -- ^ get state
+    -> (WxppOpenID -> s -> WxTalkerMonad r m ())      -- ^ set state
+    -> r
+    -> Maybe WxppInMsgEntity
+        -- ^ this is nothing only if caller cannot parse the message
+    -> m (Either String WxppInMsgHandlerResult)
+wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
+    case m_ime of
+        Nothing -> return []
+        Just ime -> do
+            let open_id = wxppInFromUserName ime
+                get_st' = get_st open_id
+                set_st' = set_st open_id
+            st <- run_wx_monad $ get_st'
+            done <- run_wx_monad $ wxTalkIfDone st
+            if done
+                then do
+                    -- not in conversation
+                    return []
+
+                else do
+                    msgs <- ExceptT $ wxTalkerInputOneStep get_st' set_st' env m_ime
+                    new_st <- run_wx_monad $ get_st'
+                    done2 <- run_wx_monad $ wxTalkIfDone new_st
+                    msgs2 <- if done2
+                                then run_wx_monad $ wxTalkDone new_st
+                                else return []
+                    return $ (map $ (True,) . Just) $ msgs <> msgs2
+    where
+        run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
+        run_wx_monad = flip runWxTalkerMonadE env
+
+
+wxTalkerInputProcessJustInited :: forall m r s .
+    (MonadIO m, MonadLogger m, Eq s
+    , WxTalkerState r m s
+    , WxTalkerDoneAction r m s
+    ) =>
+    (WxTalkerMonad r m s) -- ^ get state
+    -> (s -> WxTalkerMonad r m ())      -- ^ set state
+    -> r
+    -> m (Either String WxppInMsgHandlerResult)
+wxTalkerInputProcessJustInited get_st set_st env = runExceptT $ do
+    st <- run_wx_monad $ get_st
+    done <- run_wx_monad $ wxTalkIfDone st
+    if done
+        then do
+            -- not in conversation
+            $logWarn $ "inited state is done?"
+            return []
+
+        else do
+            msgs <- ExceptT $ wxTalkerInputOneStep get_st set_st env Nothing
+            new_st <- run_wx_monad $ get_st
+            done2 <- run_wx_monad $ wxTalkIfDone new_st
+            msgs2 <- if done2
+                        then run_wx_monad $ wxTalkDone new_st
+                        else return []
+            return $ (map $ (True,) . Just) $ msgs <> msgs2
+    where
+        run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
+        run_wx_monad = flip runWxTalkerMonadE env
+
+
+-- | 这个小工具用于减少 getter, setter 访问数据库
+-- 前提：状态的读写是单线程的
+-- XXX: 目前这是函数还用不了，
+-- 因为 wxTalkerInputProcessInMsg 要的 getter 类型里还要一个 open id 参数
+ioCachedGetSet :: (MonadIO m, MonadIO n) =>
+    m s
+    -> (s -> m ())
+    -> n (m s, s -> m ())
+        -- ^ 新的 getter, setter
+ioCachedGetSet get_f set_f = do
+    ior <- liftIO $ newIORef Nothing
+    let set_f' x = do
+            set_f x
+            liftIO $ writeIORef ior $ Just x
+
+    let get_f' = (liftIO $ readIORef ior) >>= maybe get_f return
+
+    return (get_f', set_f')
+
+
 newtype WrapTalkerState a = WrapTalkerState a
                             deriving (Eq)
 
@@ -243,6 +339,7 @@ instance Monad m => WxTalkerState r m NullTalkerState where
 
 instance Monad m => WxTalkerDoneAction r m NullTalkerState where
     wxTalkDone _ = mkWxTalkerMonad $ \_ -> return $ Right []
+
 
 {-
 data SomeWxTalkerState m = forall a. (WxTalkerState m a, WxTalkerDoneAction m a) =>
