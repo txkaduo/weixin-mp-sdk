@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RankNTypes #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
 import ClassyPrelude hiding (catch, FilePath, (<.>), (</>))
@@ -1050,6 +1051,19 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                             >>= (ExceptT . handle_f ev_key ime)
 
                     _ -> return []
+
+
+-- | 直接包装一个函数，相当于可以用任意类型适合的函数处理消息
+newtype WxppInMsgProcessorFunc m h = WxppInMsgProcessorFunc
+                                        (forall c. WxppCacheBackend c =>
+                                            c
+                                            -> WxppInMsgProcessor m h
+                                        )
+
+type instance WxppInMsgProcessResult (WxppInMsgProcessorFunc m h) = h
+
+instance IsWxppInMsgProcessor m (WxppInMsgProcessorFunc m h) where
+    processInMsg (WxppInMsgProcessorFunc f) = f
 
 
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
