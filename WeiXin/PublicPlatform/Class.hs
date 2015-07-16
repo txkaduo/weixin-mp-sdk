@@ -55,6 +55,13 @@ class WxppCacheBackend a where
         -> IO ()
 
 
+class HasAccessToken a where
+    wxppGetAccessToken :: a -> IO (Maybe (AccessToken, UTCTime))
+
+instance HasAccessToken (IO (Maybe (AccessToken, UTCTime))) where
+    wxppGetAccessToken = id
+
+
 wxppGetUsableAccessToken :: (MonadIO m, WxppCacheBackend c) =>
     c -> WxppAppID -> m (Maybe (AccessToken, UTCTime))
 wxppGetUsableAccessToken cache app_id = liftIO $ do
