@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Media
     ( module WeiXin.PublicPlatform.Media
-    , module WeiXin.PublicPlatform.Types
+    , module WeiXin.PublicPlatform.Class
     ) where
 
 import ClassyPrelude hiding (FilePath, (<.>), (</>), catch)
@@ -13,7 +13,7 @@ import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 

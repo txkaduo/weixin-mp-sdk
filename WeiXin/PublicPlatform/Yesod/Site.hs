@@ -48,6 +48,7 @@ import qualified Diagrams.Prelude as D            -- diagrams-lib
 import qualified Diagrams.QRCode as QR            -- diagrams-qrcode
 
 import WeiXin.PublicPlatform.Yesod.Site.Data
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
 import WeiXin.PublicPlatform.Error

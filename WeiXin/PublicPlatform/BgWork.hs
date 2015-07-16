@@ -8,7 +8,7 @@ import System.Timeout                       (timeout)
 import Control.Exception                    (evaluate)
 
 import WeiXin.PublicPlatform.WS
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Security
 
 

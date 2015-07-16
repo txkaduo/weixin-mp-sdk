@@ -13,7 +13,7 @@ import Control.Monad.State                  (modify)
 import qualified Data.Map.Strict            as Map
 
 import Yesod.Helpers.SafeCopy
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 
 -- | a helper used with 'WxppAcidGetAcccessTokens'
 newestUsableAccessToken :: UTCTime -> [(AccessToken, UTCTime)] -> Maybe (AccessToken, UTCTime)

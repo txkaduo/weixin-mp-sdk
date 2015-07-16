@@ -31,6 +31,7 @@ Flag parsec3
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
                        WeiXin.PublicPlatform.Types
+                       WeiXin.PublicPlatform.Class
                        WeiXin.PublicPlatform.WS
                        WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
