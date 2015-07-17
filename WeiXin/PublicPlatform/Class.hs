@@ -91,6 +91,12 @@ class HasWxppAppID a where
 instance HasWxppAppID WxppAppID where
     getWxppAppID = id
 
+class HasWxppOpenID a where
+    getWxppOpenID :: a -> WxppOpenID
+
+instance HasWxppOpenID WxppOpenID where
+    getWxppOpenID = id
+
 
 class HasSomeWxppCacheBackend a where
     getSomeWxppCacheBackend :: a -> SomeWxppCacheBackend
