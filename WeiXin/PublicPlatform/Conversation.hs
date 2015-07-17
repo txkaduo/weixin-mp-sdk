@@ -149,6 +149,13 @@ class WxTalkerState r m a where
                     -> WxTalkerMonad r m Bool
 
 
+-- | 代表一种可以从零知识开始的会话
+class WxTalkerFreshState r m a where
+    -- | 新建一个会话
+    -- Left 代表不能创建状态时，应返回的消息
+    wxTalkInitiate :: WxTalkerMonad r m (Either [WxppOutMsg] a)
+
+
 class WxTalkerDoneAction r m a where
     wxTalkDone :: a -> WxTalkerMonad r m [WxppOutMsg]
 
@@ -336,6 +343,9 @@ instance Monad m => WxTalkerState r m NullTalkerState where
     wxTalkPromptToInput x   = mkWxTalkerMonad $ \_ -> runExceptT $ return $ ([], x)
     wxTalkHandleInput   x _ = mkWxTalkerMonad $ \_ -> runExceptT $ return $ ([], x)
     wxTalkIfDone        _   = mkWxTalkerMonad $ \_ -> runExceptT $ return $ True
+
+instance Monad m => WxTalkerFreshState r m NullTalkerState where
+    wxTalkInitiate          = return $ Right NullTalkerState
 
 instance Monad m => WxTalkerDoneAction r m NullTalkerState where
     wxTalkDone _ = mkWxTalkerMonad $ \_ -> return $ Right []
