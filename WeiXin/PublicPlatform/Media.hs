@@ -76,11 +76,12 @@ wxppUploadMediaBS ::
     AccessToken
     -> WxppMediaType
     -> MimeType
+    -> String
     -> ByteString
     -> m UploadResult
-wxppUploadMediaBS atk mtype mime bs = do
+wxppUploadMediaBS atk mtype mime filename bs = do
     wxppUploadMediaInternal atk mtype $
-        partBS "media" bs & partFileName .~ Just "memory"
+        partBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
 wxppUploadMediaLBS ::
@@ -88,11 +89,12 @@ wxppUploadMediaLBS ::
     AccessToken
     -> WxppMediaType
     -> MimeType
+    -> String
     -> LB.ByteString
     -> m UploadResult
-wxppUploadMediaLBS atk mtype mime bs = do
+wxppUploadMediaLBS atk mtype mime filename bs = do
     wxppUploadMediaInternal atk mtype $
-        partLBS "media" bs & partFileName .~ Just "memory"
+        partLBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
 wxppUploadMediaCached ::
@@ -126,13 +128,14 @@ wxppUploadMediaCachedBS ::
     -> AccessToken
     -> WxppMediaType
     -> MimeType
+    -> String
     -> ByteString
     -> m UploadResult
-wxppUploadMediaCachedBS cache atk mtype mime bs = do
+wxppUploadMediaCachedBS cache atk mtype mime filename bs = do
     let h = md5HashBS bs
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
-    u_res <- maybe (wxppUploadMediaBS atk mtype mime bs) return $
+    u_res <- maybe (wxppUploadMediaBS atk mtype mime filename bs) return $
         join $ flip fmap m_res $
                 \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
                             then Just x
