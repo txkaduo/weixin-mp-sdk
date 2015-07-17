@@ -1197,7 +1197,13 @@ wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
 
 md5HashFile :: FilePath -> IO MD5Hash
-md5HashFile = fmap (MD5Hash . MD5.hashlazy) . LB.readFile . encodeString
+md5HashFile = fmap md5HashLBS . LB.readFile . encodeString
+
+md5HashLBS :: LB.ByteString -> MD5Hash
+md5HashLBS = MD5Hash . MD5.hashlazy
+
+md5HashBS :: ByteString -> MD5Hash
+md5HashBS = MD5Hash . MD5.hash
 
 -- | 上传得到的 media id 只能用一段时间
 usableUploadResult :: UTCTime -> NominalDiffTime -> UploadResult -> Bool

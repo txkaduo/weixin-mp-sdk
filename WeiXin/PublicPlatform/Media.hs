@@ -8,6 +8,7 @@ import ClassyPrelude hiding (FilePath, (<.>), (</>), catch)
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
+import Network.Mime                         (MimeType)
 import Filesystem.Path.CurrentOS            (encodeString, FilePath)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
@@ -46,6 +47,18 @@ wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
                     (\(_ :: JSONError) -> return rb)
 
 
+wxppUploadMediaInternal ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaType
+    -> Part
+    -> m UploadResult
+wxppUploadMediaInternal (AccessToken { accessTokenData = atk }) mtype fpart = do
+    let url = wxppRemoteApiBaseUrl <> "/media/upload"
+        opts = defaults & param "access_token" .~ [ atk ]
+                        & param "type" .~ [ wxppMediaTypeString mtype :: Text]
+    (liftIO $ postWith opts url $ fpart & partName .~ "media")
+        >>= asWxppWsResponseNormal'
 
 -- | 上传本地一个文件
 wxppUploadMedia ::
@@ -54,13 +67,33 @@ wxppUploadMedia ::
     -> WxppMediaType
     -> FilePath
     -> m UploadResult
-wxppUploadMedia (AccessToken { accessTokenData = atk }) mtype fp = do
-    let url = wxppRemoteApiBaseUrl <> "/media/upload"
-        opts = defaults & param "access_token" .~ [ atk ]
-                        & param "type" .~ [ wxppMediaTypeString mtype :: Text]
-    (liftIO $ postWith opts url $ partFileSource "media" $ encodeString fp)
-            >>= asWxppWsResponseNormal'
+wxppUploadMedia atk mtype fp = do
+    wxppUploadMediaInternal atk mtype $ partFileSource "media" $ encodeString fp
 
+-- | 上传已在内存中的 ByteString
+wxppUploadMediaBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaType
+    -> MimeType
+    -> ByteString
+    -> m UploadResult
+wxppUploadMediaBS atk mtype mime bs = do
+    wxppUploadMediaInternal atk mtype $
+        partBS "media" bs & partFileName .~ Just "memory"
+                            & partContentType .~ Just mime
+
+wxppUploadMediaLBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaType
+    -> MimeType
+    -> LB.ByteString
+    -> m UploadResult
+wxppUploadMediaLBS atk mtype mime bs = do
+    wxppUploadMediaInternal atk mtype $
+        partLBS "media" bs & partFileName .~ Just "memory"
+                            & partContentType .~ Just mime
 
 wxppUploadMediaCached ::
     ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
@@ -74,6 +107,32 @@ wxppUploadMediaCached cache atk mtype fp = do
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
     u_res <- maybe (wxppUploadMedia atk mtype fp) return $
+        join $ flip fmap m_res $
+                \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
+                            then Just x
+                            else Nothing
+
+    liftIO $ wxppCacheSaveUploadedMediaID cache app_id h u_res
+    return u_res
+    where
+        dt = fromIntegral (60 * 60 * 24 :: Int)
+        app_id = accessTokenApp atk
+
+
+-- | 这里有个问题：如果之前上传过的文件的 mime 发生变化，可能会使用旧的文件 media id
+wxppUploadMediaCachedBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    c
+    -> AccessToken
+    -> WxppMediaType
+    -> MimeType
+    -> ByteString
+    -> m UploadResult
+wxppUploadMediaCachedBS cache atk mtype mime bs = do
+    let h = md5HashBS bs
+    m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
+    now <- liftIO getCurrentTime
+    u_res <- maybe (wxppUploadMediaBS atk mtype mime bs) return $
         join $ flip fmap m_res $
                 \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
                             then Just x
