@@ -296,12 +296,6 @@ preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) cache bs m_ime =
             MaybeT $ preProcessInMsgByMiddlewares xs cache bs' m_ime'
 
 
-tryWxppWsResultE :: MonadCatch m =>
-    String -> ExceptT String m b -> ExceptT String m b
-tryWxppWsResultE op f =
-    tryWxppWsResult f
-        >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
-
 tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b
 tryYamlExcE f =
     f `catch` (\e -> throwE $ show (e :: ParseException))

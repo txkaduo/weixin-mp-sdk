@@ -2,6 +2,7 @@ module WeiXin.PublicPlatform.WS where
 
 import ClassyPrelude hiding (catch)
 import Network.Wreq
+import Control.Monad.Trans.Except
 import Control.Lens hiding ((.=))
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  ( Handler(..), catches )
@@ -98,6 +99,12 @@ wxppWsExcHandlers = [ Handler h1, Handler h2, Handler h3 ]
 tryWxppWsResult :: MonadCatch m =>
     m a -> m (Either WxppWsCallError a)
 tryWxppWsResult f = liftM Right f `catches` wxppWsExcHandlers
+
+tryWxppWsResultE :: MonadCatch m =>
+    String -> ExceptT String m b -> ExceptT String m b
+tryWxppWsResultE op f =
+    tryWxppWsResult f
+        >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
 
 
 asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
