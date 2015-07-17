@@ -82,6 +82,7 @@ library
                      , base64-bytestring
                      , base16-bytestring
                      , wreq
+                     , mime-types
                      , lens
                      , exceptions
                      , http-client
