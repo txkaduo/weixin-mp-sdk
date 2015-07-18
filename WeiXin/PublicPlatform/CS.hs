@@ -8,7 +8,6 @@ import Data.Aeson
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
-import WeiXin.PublicPlatform.Error
 import qualified Data.HashMap.Strict        as HM
 
 
