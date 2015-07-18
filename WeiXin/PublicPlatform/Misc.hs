@@ -228,10 +228,7 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
                         return . Map.partition ((> now) . fst . snd)
 
             forM_ (Map.toList m2) $ \((open_id, app_id), (_, (_, txt))) -> do
-                let outmsg_e = WxppOutMsgEntity open_id
-                                (error "wxppOutFromUserName forced in loopCleanupTimedOutForwardUrl")
-                                now
-                                (WxppOutMsgText txt)
+                let outmsg = WxppOutMsgText txt
 
                 logWxppWsExcThen "loopCleanupTimedOutForwardUrl" (const $ return ()) (const $ return ()) $ do
                     m_atk <- liftIO $ get_atk app_id
@@ -240,7 +237,7 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
                             $logErrorS wxppLogSource  "no access token available"
 
                         Just atk -> do
-                                (wxppCsSendOutMsg atk Nothing outmsg_e)
+                            wxppCsSendOutMsg2 atk Nothing open_id outmsg
 
             liftIO $ threadDelay $ 1000 * 1000
             go
