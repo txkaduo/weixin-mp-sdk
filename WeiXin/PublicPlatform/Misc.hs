@@ -67,7 +67,7 @@ mkMaybeWxppSub ::
     -> (WxppAppID -> Maybe (IORef (Maybe LoInMsgHandlerList)))
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID
@@ -99,7 +99,7 @@ mkMaybeWxppSub' ::
     -> (WxppAppID -> IO (Maybe WxppAppConfig))
             -- ^ 根据 app id 找到相应配置的函数
     -> (WxppAppID -> IO [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID
@@ -228,10 +228,7 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
                         return . Map.partition ((> now) . fst . snd)
 
             forM_ (Map.toList m2) $ \((open_id, app_id), (_, (_, txt))) -> do
-                let outmsg_e = WxppOutMsgEntity open_id
-                                (error "wxppOutFromUserName forced in loopCleanupTimedOutForwardUrl")
-                                now
-                                (WxppOutMsgText txt)
+                let outmsg = WxppOutMsgText txt
 
                 logWxppWsExcThen "loopCleanupTimedOutForwardUrl" (const $ return ()) (const $ return ()) $ do
                     m_atk <- liftIO $ get_atk app_id
@@ -240,7 +237,7 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
                             $logErrorS wxppLogSource  "no access token available"
 
                         Just atk -> do
-                                (wxppCsSendOutMsg atk Nothing outmsg_e)
+                            wxppCsSendOutMsg2 atk Nothing open_id outmsg
 
             liftIO $ threadDelay $ 1000 * 1000
             go

@@ -189,7 +189,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                                     my_name
                                                     now
                                                     x
-                        liftM (, map mk_out_msg_entity other_out_msgs) $
+                        liftM (, map (user_open_id,) other_out_msgs) $
                             fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
                                 liftM (LT.toStrict . renderText def) $ do
                                     let out_msg_entity = mk_out_msg_entity out_msg
