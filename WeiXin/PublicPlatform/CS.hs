@@ -14,23 +14,24 @@ import qualified Data.HashMap.Strict        as HM
 
 -- | 使用客服接口发送消息给指定用户
 -- 只能用于用户主动发消息给我们之后的一段时间内使用（文档说是48小时）
-wxppCsSendOutMsg ::
+wxppCsSendOutMsg2 ::
     (MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
     -> Maybe WxppKfAccount
-    -> WxppOutMsgEntity
+    -> WxppOpenID
+    -> WxppOutMsg
             -- ^ 其中的 wxppOutFromUserName 字段是没用到的
     -> m ()
-wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_entity = do
+wxppCsSendOutMsg2 (AccessToken { accessTokenData = atk }) m_kf_account to_open_id out_msg = do
     let url = "https://api.weixin.qq.com/cgi-bin/message/custom/send"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ toJSON $ obj_for_out_msg_entity out_msg_entity)
+    (liftIO $ postWith opts url $ toJSON $ mk_out_obj)
         >>= asWxppWsResponseVoid
     where
-        obj_for_out_msg_entity e = do
-            Object hm <- obj_for_out_msg $ wxppOutMessage e
+        mk_out_obj = do
+            Object hm <- obj_for_out_msg out_msg
             return $ Object $
-                HM.insert "touser" (toJSON $ unWxppOpenID $ wxppOutToUserName e) $
+                HM.insert "touser" (toJSON $ unWxppOpenID $ to_open_id) $
                     maybe id (\kf_account -> HM.insert "customservice"
                                                 (object [ "kf_account" .= unWxppKfAccount kf_account ])
                             ) m_kf_account $
@@ -89,3 +90,18 @@ wxppCsSendOutMsg (AccessToken { accessTokenData = atk }) m_kf_account out_msg_en
                         , "url"         .= fmap unUrlText (wxppArticleUrl article)
                         , "picurl"      .= fmap unUrlText (wxppArticlePicUrl article)
                         ]
+
+
+{-# DEPRECATED wxppCsSendOutMsg "use wxppCsSendOutMsg2 instead" #-}
+wxppCsSendOutMsg ::
+    (MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> Maybe WxppKfAccount
+    -> WxppOutMsgEntity
+            -- ^ 其中的 wxppOutFromUserName, wxppOutCreatedTime 字段是没用到的
+    -> m ()
+wxppCsSendOutMsg atk m_kf_account out_msg_entity = do
+    wxppCsSendOutMsg2 atk m_kf_account to_open_id out_msg
+    where
+        to_open_id = wxppOutToUserName out_msg_entity
+        out_msg = wxppOutMessage out_msg_entity
