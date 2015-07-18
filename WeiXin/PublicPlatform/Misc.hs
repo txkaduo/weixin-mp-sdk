@@ -67,7 +67,7 @@ mkMaybeWxppSub ::
     -> (WxppAppID -> Maybe (IORef (Maybe LoInMsgHandlerList)))
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID
@@ -99,7 +99,7 @@ mkMaybeWxppSub' ::
     -> (WxppAppID -> IO (Maybe WxppAppConfig))
             -- ^ 根据 app id 找到相应配置的函数
     -> (WxppAppID -> IO [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
+    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> WxppSubsiteOpts
     -> WxppAppID

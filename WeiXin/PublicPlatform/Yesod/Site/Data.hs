@@ -96,7 +96,7 @@ data WxppSub =
                                         forall a m. (MonadIO m, MonadBaseControl IO m) =>
                                                         SqlPersistT m a -> m a
                     -- ^ execute any DB actions
-                , wxppSubSendOutMsgs    :: [WxppOutMsgEntity] -> IO ()
+                , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
                 , wxppSubMsgMiddlewares :: [SomeWxppInMsgProcMiddleware (LoggingT IO)]
