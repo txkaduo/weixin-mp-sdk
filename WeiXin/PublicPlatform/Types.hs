@@ -36,6 +36,7 @@ import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
                                             , derivePersistFieldS, makeSimpleParserByTable
                                             , deriveJsonS
                                             )
+import Data.Byteable                        (Byteable(..))
 import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
 
@@ -1148,6 +1149,11 @@ instance PersistField MD5Hash where
 
 instance PersistFieldSql MD5Hash where
     sqlType _ = SqlBlob
+
+instance Byteable MD5Hash where
+    toBytes (MD5Hash x) = toBytes x
+    byteableLength (MD5Hash x) = byteableLength x
+    withBytePtr (MD5Hash x) f = withBytePtr x f
 
 -- | 上传媒体文件的结果
 data UploadResult = UploadResult {
