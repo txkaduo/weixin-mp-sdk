@@ -127,6 +127,7 @@ library
                      , diagrams-lib
                      , blaze-svg
                      , haskell-qrencode
+                     , byteable
 
   if flag(parsec3)
       build-depends:   parsec3
