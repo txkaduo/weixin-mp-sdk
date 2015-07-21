@@ -544,10 +544,12 @@ instance FromJSON WxppEvent where
 data WxppInMsg =  WxppInMsgText Text
                     -- ^ 文本消息
                 | WxppInMsgImage WxppBriefMediaID UrlText
-                    -- ^ 消息
+                    -- ^ 图片消息 media_id url
                 | WxppInMsgVoice WxppBriefMediaID Text (Maybe Text)
                     -- ^ format recognition
                 | WxppInMsgVideo WxppBriefMediaID WxppBriefMediaID
+                    -- ^ media_id, thumb_media_id
+                | WxppInMsgShortVideo WxppBriefMediaID WxppBriefMediaID
                     -- ^ media_id, thumb_media_id
                 | WxppInMsgLocation (Double, Double) Double Text
                     -- ^ (latitude, longitude) scale label
@@ -561,6 +563,7 @@ wxppInMsgTypeString (WxppInMsgText {})      = "text"
 wxppInMsgTypeString (WxppInMsgImage {})     = "image"
 wxppInMsgTypeString (WxppInMsgVoice {})     = "voice"
 wxppInMsgTypeString (WxppInMsgVideo {})     = "video"
+wxppInMsgTypeString (WxppInMsgShortVideo {}) = "shortvideo"
 wxppInMsgTypeString (WxppInMsgLocation {})  = "location"
 wxppInMsgTypeString (WxppInMsgLink {})      = "link"
 wxppInMsgTypeString (WxppInMsgEvent {})     = "event"
@@ -581,6 +584,11 @@ instance ToJSON WxppInMsg where
                                                     ]
 
         get_others (WxppInMsgVideo media_id thumb_media_id) =
+                                                    [ "media_id"        .= media_id
+                                                    , "thumb_media_id"  .= thumb_media_id
+                                                    ]
+
+        get_others (WxppInMsgShortVideo media_id thumb_media_id) =
                                                     [ "media_id"        .= media_id
                                                     , "thumb_media_id"  .= thumb_media_id
                                                     ]
@@ -618,6 +626,10 @@ instance FromJSON WxppInMsg where
         "video" -> liftM2 WxppInMsgVideo
                     (obj .: "media_id")
                     (obj .: "thumb_media_id")
+
+        "shortvideo" -> liftM2 WxppInMsgShortVideo
+                            (obj .: "media_id")
+                            (obj .: "thumb_media_id")
 
         "location" -> liftM3 WxppInMsgLocation
                         (liftM2 (,) (obj .: "latitude") (obj .: "longitude"))
