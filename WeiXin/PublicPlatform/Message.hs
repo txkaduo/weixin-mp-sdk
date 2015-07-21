@@ -187,6 +187,11 @@ wxppInMsgFromDocument doc = do
                     thumb_media_id <- fmap WxppBriefMediaID $ get_ele_s "ThumbMediaId"
                     return $ WxppInMsgVideo media_id thumb_media_id
 
+        "shortvideo" -> do
+                    media_id <- fmap WxppBriefMediaID $ get_ele_s "MediaId"
+                    thumb_media_id <- fmap WxppBriefMediaID $ get_ele_s "ThumbMediaId"
+                    return $ WxppInMsgShortVideo media_id thumb_media_id
+
         "location" -> do
                     x <- get_ele_s "Location_X"
                             >>= maybe (Left $ "Failed to parse Location_X") return
