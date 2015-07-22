@@ -45,13 +45,13 @@ class WxppCacheBackend a where
     wxppCacheLookupUploadedMediaIDByHash ::
         a
         -> WxppAppID
-        -> MD5Hash
+        -> SHA256Hash
         -> IO (Maybe UploadResult)
 
     wxppCacheSaveUploadedMediaID ::
         a
         -> WxppAppID
-        -> MD5Hash
+        -> SHA256Hash
         -> UploadResult
         -> IO ()
 

@@ -23,6 +23,7 @@ import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
 import Filesystem.Path.CurrentOS            (encodeString, fromText, FilePath)
 import qualified Crypto.Hash.MD5            as MD5
+import qualified Crypto.Hash.SHA256         as SHA256
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(..))
 import Database.Persist                     (PersistValue)
@@ -1167,6 +1168,26 @@ instance Byteable MD5Hash where
     byteableLength (MD5Hash x) = byteableLength x
     withBytePtr (MD5Hash x) f = withBytePtr x f
 
+
+newtype SHA256Hash = SHA256Hash { unSHA256Hash :: ByteString }
+                deriving (Show, Eq, Ord)
+
+instance SafeCopy SHA256Hash where
+    getCopy             = contain $ safeGet
+    putCopy (SHA256Hash x) = contain $ safePut x
+
+instance PersistField SHA256Hash where
+    toPersistValue      = toPersistValue . unSHA256Hash
+    fromPersistValue    = fmap SHA256Hash . fromPersistValue
+
+instance PersistFieldSql SHA256Hash where
+    sqlType _ = SqlBlob
+
+instance Byteable SHA256Hash where
+    toBytes (SHA256Hash x) = toBytes x
+    byteableLength (SHA256Hash x) = byteableLength x
+    withBytePtr (SHA256Hash x) f = withBytePtr x f
+
 -- | 上传媒体文件的结果
 data UploadResult = UploadResult {
                         urMediaType     :: WxppMediaType
@@ -1222,6 +1243,15 @@ md5HashLBS = MD5Hash . MD5.hashlazy
 
 md5HashBS :: ByteString -> MD5Hash
 md5HashBS = MD5Hash . MD5.hash
+
+sha256HashFile :: FilePath -> IO SHA256Hash
+sha256HashFile = fmap sha256HashLBS . LB.readFile . encodeString
+
+sha256HashLBS :: LB.ByteString -> SHA256Hash
+sha256HashLBS = SHA256Hash . SHA256.hashlazy
+
+sha256HashBS :: ByteString -> SHA256Hash
+sha256HashBS = SHA256Hash . SHA256.hash
 
 -- | 上传得到的 media id 只能用一段时间
 usableUploadResult :: UTCTime -> NominalDiffTime -> UploadResult -> Bool

@@ -86,11 +86,11 @@ WxppCachedUserInfoExt
 
 WxppCachedUploadedMedia
     app                 WxppAppID maxlen=200
-    md5                 MD5Hash maxlen=200
+    sha256              SHA256Hash maxlen=200
     mediaType           WxppMediaType maxlen=200
     mediaId             WxppBriefMediaID maxlen=200
     createdTime         UTCTime
 
     UniqueWxppCachedUploadedMedia mediaId app
-    UniqueWxppCachedUploadedMediaHash md5 app
+    UniqueWxppCachedUploadedMediaHash sha256 app
 

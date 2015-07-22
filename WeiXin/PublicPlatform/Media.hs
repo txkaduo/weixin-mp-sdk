@@ -105,7 +105,7 @@ wxppUploadMediaCached ::
     -> FilePath
     -> m UploadResult
 wxppUploadMediaCached cache atk mtype fp = do
-    h <- liftIO $ md5HashFile fp
+    h <- liftIO $ sha256HashFile fp
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
     u_res <- maybe (wxppUploadMedia atk mtype fp) return $
@@ -132,7 +132,7 @@ wxppUploadMediaCachedBS ::
     -> ByteString
     -> m UploadResult
 wxppUploadMediaCachedBS cache atk mtype mime filename bs = do
-    let h = md5HashBS bs
+    let h = sha256HashBS bs
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
     u_res <- maybe (wxppUploadMediaBS atk mtype mime filename bs) return $
