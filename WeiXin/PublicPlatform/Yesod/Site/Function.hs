@@ -218,7 +218,8 @@ downloadSaveMediaToDB ::
     , PersistMonadBackend m ~ PersistEntityBackend WxppStoredMedia
 #endif
     ) =>
-    AccessToken
+    Bool
+    -> AccessToken
     -> WxppInMsgRecordId
     -> WxppBriefMediaID
 #if MIN_VERSION_persistent(2, 0, 0)
@@ -226,8 +227,8 @@ downloadSaveMediaToDB ::
 #else
     -> m ()
 #endif
-downloadSaveMediaToDB atk msg_id media_id = do
-    err_or_rb <- tryWxppWsResult $ wxppDownloadMedia atk media_id
+downloadSaveMediaToDB if_ssl atk msg_id media_id = do
+    err_or_rb <- tryWxppWsResult $ wxppDownloadMedia if_ssl atk media_id
     case err_or_rb of
         Left err -> do
                     $(logErrorS) wxppLogSource $ "Failed to download media '" <> unWxppBriefMediaID media_id
