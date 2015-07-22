@@ -21,11 +21,12 @@ import WeiXin.PublicPlatform.Utils
 -- | 下载一个多媒体文件
 wxppDownloadMedia ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    AccessToken
+    Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
+    -> AccessToken
     -> WxppBriefMediaID
     -> m (Response LB.ByteString)
-wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
-    let url = wxppRemoteApiBaseUrl <> "/media/get"
+wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
+    let url = if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppBriefMediaID mid ]
     rb <- liftIO $ getWith opts url

@@ -156,5 +156,8 @@ asWxppWsResponseNormal2' =
 wxppRemoteApiBaseUrl :: IsString a => a
 wxppRemoteApiBaseUrl = "https://api.weixin.qq.com/cgi-bin"
 
+wxppRemoteApiBaseUrlNoSsl :: IsString a => a
+wxppRemoteApiBaseUrlNoSsl = "http://api.weixin.qq.com/cgi-bin"
+
 wxppRemoteFileApiBaseUrl :: IsString a => a
 wxppRemoteFileApiBaseUrl = "https://file.api.weixin.qq.com/cgi-bin"
