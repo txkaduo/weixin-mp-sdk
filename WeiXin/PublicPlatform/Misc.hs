@@ -65,10 +65,10 @@ mkMaybeWxppSub ::
     ) =>
     app
     -> c
-    -> (WxppAppID -> Maybe (IORef (Maybe LoInMsgHandlerList)))
+    -> Maybe (IORef (Maybe LoInMsgHandlerList))
     -> Map WxppAppID WxppAppConfig
-    -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -> [WxppInMsgHandlerPrototype (LoggingT IO)]
+    -> ([(WxppOpenID, WxppOutMsg)] -> IO ())
     -> [SomeWxppInMsgProcMiddleware (LoggingT IO)]
     -> WxppSubsiteOpts
     -> WxppAppID
@@ -77,13 +77,12 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
     mkMaybeWxppSub'
         foundation
         cache
-        (return . get_last_handlers_ref)
-        (\x -> return $ Map.lookup x wxpp_config_map)
-        (return . get_protos)
+        (return $ get_last_handlers_ref)
+        (return $ Map.lookup app_id wxpp_config_map)
+        (return $ get_protos)
         send_msg
         middlewares
         opts
-        app_id
 
 
 mkMaybeWxppSub' ::
@@ -95,25 +94,24 @@ mkMaybeWxppSub' ::
     ) =>
     app
     -> c
-    -> (WxppAppID -> IO (Maybe hvar))
+    -> IO (Maybe hvar)
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
-    -> (WxppAppID -> IO (Maybe WxppAppConfig))
+    -> IO (Maybe WxppAppConfig)
             -- ^ 根据 app id 找到相应配置的函数
-    -> (WxppAppID -> IO [WxppInMsgHandlerPrototype (LoggingT IO)])
-    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -> IO [WxppInMsgHandlerPrototype (LoggingT IO)]
+    -> ([(WxppOpenID, WxppOutMsg)] -> IO ())
     -> [SomeWxppInMsgProcMiddleware (LoggingT IO)]
     -> WxppSubsiteOpts
-    -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts app_id =
+mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts =
     MaybeWxppSub $ runMaybeT $ do
-        wac <- MaybeT $ get_wxpp_config app_id
+        wac <- MaybeT $ get_wxpp_config
         let data_dir    = wxppAppConfigDataDir wac
         return $ WxppSub
                     wac
                     (SomeWxppCacheBackend cache)
                     (runDBWith foundation)
-                    (send_msg app_id)
+                    send_msg
                     (handle_msg data_dir)
                     middlewares
                     (runLoggingTWith foundation)
@@ -121,12 +119,12 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
     where
         handle_msg data_dir bs ime = do
             err_or_in_msg_handlers <- liftIO $ do
-                    protos <- get_protos app_id
+                    protos <- get_protos
                     readWxppInMsgHandlers
                         protos
                         (encodeString $ data_dir </> fromText "msg-handlers.yml")
 
-            m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_id
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref
             m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $
