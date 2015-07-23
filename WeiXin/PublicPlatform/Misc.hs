@@ -163,14 +163,14 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
 defaultInMsgProcMiddlewares :: forall m. (MonadIO m, MonadLogger m, MonadCatch m, Functor m) =>
     WxppSubDBActionRunner m
     -> WxppAppID
-    -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
+    -> (WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> [SomeWxppInMsgProcMiddleware m]
 defaultInMsgProcMiddlewares db_runner app_id down_media =
     [
     SomeWxppInMsgProcMiddleware $
         (StoreInMsgToDB app_id
             db_runner
-            (\x y -> liftIO $ down_media app_id x y)
+            (\x y -> liftIO $ down_media x y)
         :: StoreInMsgToDB m
         )
 
