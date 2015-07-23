@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Misc where
 
 import ClassyPrelude hiding (try, FilePath, (<.>), (</>))
@@ -68,11 +69,11 @@ mkMaybeWxppSub ::
     -> Map WxppAppID WxppAppConfig
     -> (WxppAppID -> [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
-    -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
+    -> [SomeWxppInMsgProcMiddleware (LoggingT IO)]
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg down_media opts app_id =
+mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg middlewares opts app_id =
     mkMaybeWxppSub'
         foundation
         cache
@@ -80,7 +81,7 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
         (\x -> return $ Map.lookup x wxpp_config_map)
         (return . get_protos)
         send_msg
-        down_media
+        middlewares
         opts
         app_id
 
@@ -100,11 +101,11 @@ mkMaybeWxppSub' ::
             -- ^ 根据 app id 找到相应配置的函数
     -> (WxppAppID -> IO [WxppInMsgHandlerPrototype (LoggingT IO)])
     -> (WxppAppID -> [WxppOutMsgEntity] -> IO ())
-    -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
+    -> [SomeWxppInMsgProcMiddleware (LoggingT IO)]
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
-mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg down_media opts app_id =
+mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts app_id =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config app_id
         let data_dir    = wxppAppConfigDataDir wac
@@ -118,25 +119,6 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                     (runLoggingTWith foundation)
                     opts
     where
-        db_runner = WxppSubDBActionRunner $ runDBWith foundation
-
-        -- middlewares :: [SomeWxppInMsgProcMiddleware (LoggingT IO)]
-        middlewares =
-                [
-                SomeWxppInMsgProcMiddleware $
-                    (StoreInMsgToDB app_id
-                        db_runner
-                        (\x y -> liftIO $ down_media app_id x y)
-                    :: StoreInMsgToDB (LoggingT IO)
-                    )
-
-                , SomeWxppInMsgProcMiddleware $
-                    (CacheAppOpenIdToUnionId
-                        app_id
-                        db_runner
-                    )
-                ]
-
         handle_msg data_dir bs ime = do
             err_or_in_msg_handlers <- liftIO $ do
                     protos <- get_protos app_id
@@ -178,6 +160,29 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                             cache
                             in_msg_handlers
                             bs ime
+
+
+defaultInMsgProcMiddlewares :: forall m. (MonadIO m, MonadLogger m, MonadCatch m, Functor m) =>
+    WxppSubDBActionRunner m
+    -> WxppAppID
+    -> (WxppAppID -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
+    -> [SomeWxppInMsgProcMiddleware m]
+defaultInMsgProcMiddlewares db_runner app_id down_media =
+    [
+    SomeWxppInMsgProcMiddleware $
+        (StoreInMsgToDB app_id
+            db_runner
+            (\x y -> liftIO $ down_media app_id x y)
+        :: StoreInMsgToDB m
+        )
+
+    , SomeWxppInMsgProcMiddleware $
+        (CacheAppOpenIdToUnionId
+            app_id
+            db_runner
+        )
+    ]
+    -- where db_runner = WxppSubDBActionRunner $ runDBWith foundation
 
 
 -- | 如果要计算的操作有异常，记日志并重试
