@@ -22,7 +22,7 @@ import Data.Time                            (NominalDiffTime)
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
-import Filesystem.Path.CurrentOS            (fromText, FilePath, (</>))
+import Filesystem.Path.CurrentOS            (fromText, FilePath, (</>), encodeString)
 import qualified Filesystem.Path.CurrentOS  as FP
 import Control.Monad.Catch                  (catch)
 
@@ -193,11 +193,12 @@ parseWxppInMsgProcessor known_hs obj = do
 
 readWxppInMsgHandlers ::
     [WxppInMsgHandlerPrototype m]
-    -> String
-    -> IO (Either ParseException [SomeWxppInMsgHandler m])
-readWxppInMsgHandlers tmps fp = runExceptT $ do
-    (ExceptT $ decodeFileEither fp)
-        >>= either (throwE . AesonException) return
+    -> NonEmpty FilePath
+    -> FilePath
+    -> IO (Either YamlFileParseException [SomeWxppInMsgHandler m])
+readWxppInMsgHandlers tmps data_dirs fp = runExceptT $ do
+    (ExceptT $ runDelayedYamlLoaderL' data_dirs $ mkDelayedYamlLoader fp)
+        >>= either(throwE . YamlFileParseException (encodeString fp) . AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
 
 

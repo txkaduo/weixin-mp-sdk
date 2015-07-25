@@ -40,6 +40,7 @@ import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
 import Data.Byteable                        (Byteable(..))
 import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
+import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 import WeiXin.PublicPlatform.Utils
 
@@ -372,7 +373,7 @@ data WxppAppConfig = WxppAppConfig {
                         -- ^ 多个 aes key 是为了过渡时使用
                         -- 加密时仅使用第一个
                         -- 解密时则则所有都试一次
-                    , wxppAppConfigDataDir  :: FilePath
+                    , wxppAppConfigDataDir  :: NonEmpty FilePath
                     }
                     deriving (Show, Eq)
 
@@ -381,7 +382,11 @@ instance FromJSON WxppAppConfig where
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     app_token <- fmap Token $ obj .: "token"
-                    data_dir <- fromText <$> obj .: "data-dir"
+                    data_dirs <- map fromText <$> obj .: "data-dirs"
+                    data_dirs' <- case nonEmpty data_dirs of
+                                    Nothing -> fail "data-dirs must not be empty"
+                                    Just x -> return x
+
                     aes_key_lst <- obj .: "aes-key"
                                     >>= return . filter (not . T.null) . map T.strip
                                     >>= mapM parseAesKeyFromText
@@ -393,7 +398,7 @@ instance FromJSON WxppAppConfig where
                     return $ WxppAppConfig app_id secret app_token
                                 ak1
                                 backup_aks
-                                data_dir
+                                data_dirs'
 
 
 -- | 见高级群发接口文档
