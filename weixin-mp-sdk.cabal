@@ -128,6 +128,7 @@ library
                      , blaze-svg
                      , haskell-qrencode
                      , byteable
+                     , semigroups
 
   if flag(parsec3)
       build-depends:   parsec3
