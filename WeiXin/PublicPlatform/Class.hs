@@ -7,6 +7,7 @@ import ClassyPrelude hiding (FilePath, (<.>), (</>), try)
 import Filesystem.Path.CurrentOS            (FilePath)
 
 import WeiXin.PublicPlatform.Types
+import Data.List.NonEmpty                   as LNE
 
 -- | WXPP 服务器所需的一切 cache 接口
 -- 实际cache可以用各种后端，包括acid-state，各种数据库等等
@@ -106,7 +107,10 @@ instance HasSomeWxppCacheBackend SomeWxppCacheBackend where
 
 
 class HasWxppOutMsgDir a where
-    getWxppOutMsgDir :: a -> FilePath
+    getWxppOutMsgDir :: a -> NonEmpty FilePath
+
+instance HasWxppOutMsgDir (NonEmpty FilePath) where
+    getWxppOutMsgDir = id
 
 instance HasWxppOutMsgDir FilePath where
-    getWxppOutMsgDir = id
+    getWxppOutMsgDir x = x :| []
