@@ -10,7 +10,7 @@ import qualified Data.Yaml                  as Y
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import qualified Data.Map.Lazy              as LM
-import Filesystem.Path.CurrentOS            (FilePath)
+import Filesystem.Path.CurrentOS            (FilePath, fromText)
 import Network.Mime                         (defaultMimeMap, MimeType)
 import System.IO                            (hFlush, openTempFile, readLn, hSeek, SeekMode(..))
 import System.Directory                     (getTemporaryDirectory, removeFile)
@@ -18,6 +18,7 @@ import System.Process                       (callProcess)
 import System.Environment                   (lookupEnv)
 import Data.List                            ((!!))
 import Data.Conduit
+import Data.List.NonEmpty                   (NonEmpty(..))
 import qualified Data.Conduit.List          as CL
 -- import Control.Monad.Reader                 (asks)
 
@@ -221,7 +222,7 @@ start = do
 
         LoadMenu fp -> do
             atk <- get_atk
-            result <- wxppCreateMenuWithYaml atk fp
+            result <- wxppCreateMenuWithYaml atk (fromText "." :| []) fp
             case result of
                 Left err -> do
                     $logError $ fromString $
