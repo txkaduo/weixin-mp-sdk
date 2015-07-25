@@ -87,13 +87,19 @@ runDelayedYamlLoader :: (MonadIO m, FromJSON a) =>
 runDelayedYamlLoader base_dir = runDelayedYamlLoaderL (base_dir :| [])
 
 -- | 这是会抛异常的版本
+runDelayedYamlLoaderExcL :: (MonadIO m, FromJSON a, MonadThrow m) =>
+    NonEmpty FilePath        -- ^ 消息文件存放目录
+    -> DelayedYamlLoader a
+    -> m a
+runDelayedYamlLoaderExcL base_dir_list get_ext = liftIO $
+    runReaderT get_ext base_dir_list
+        >>= either throwM return
+
 runDelayedYamlLoaderExc :: (MonadIO m, FromJSON a, MonadThrow m) =>
     FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m a
-runDelayedYamlLoaderExc base_dir get_ext = liftIO $
-    runReaderT get_ext (base_dir :| [])
-        >>= either throwM return
+runDelayedYamlLoaderExc base_dir = runDelayedYamlLoaderExcL (base_dir :| [])
 
 parseMsgErrorToString :: Either ParseException a -> Either String a
 parseMsgErrorToString (Left err)   = Left $ "failed to parse from file: " ++ show err

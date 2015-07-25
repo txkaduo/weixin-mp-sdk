@@ -12,6 +12,7 @@ import Filesystem.Path.CurrentOS            (encodeString, FilePath)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
+import Data.List.NonEmpty                   as LNE
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -94,7 +95,7 @@ wxppUploadMediaCached cache atk mtype fp = do
 -- 下面还有个尽量不抛出异常的版本
 fromWxppOutMsgL ::
     ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
-    FilePath
+    NonEmpty FilePath
     -> c
     -> AccessToken
     -> WxppOutMsgL
@@ -103,7 +104,7 @@ fromWxppOutMsgL _       _   _   (WxppOutMsgTextL x)     = return (WxppOutMsgText
 
 fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
         liftM WxppOutMsgNews $ do
-            sequence $ map (runDelayedYamlLoaderExc msg_dir) loaders
+            sequence $ fmap (runDelayedYamlLoaderExcL msg_dir) loaders
 
 fromWxppOutMsgL _ cache    atk (WxppOutMsgImageL fp)   = do
         liftM (WxppOutMsgImage . fromWxppBriefMediaID . urMediaId) $
@@ -129,13 +130,13 @@ fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
 
 fromWxppOutMsgL' ::
     ( MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
-    FilePath
+    NonEmpty FilePath
     -> c
     -> AccessToken
     -> WxppOutMsgL
     -> m (Either String WxppOutMsg)
 fromWxppOutMsgL' fp cache atk out_msg_l =
     (liftM Right $ fromWxppOutMsgL fp cache atk out_msg_l) `catches`
-        (Handler h_yaml_exc : map unifyExcHandler wxppWsExcHandlers)
+        (Handler h_yaml_exc : fmap unifyExcHandler wxppWsExcHandlers)
     where
         h_yaml_exc e = return $ Left $ show (e :: ParseException)
