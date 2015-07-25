@@ -55,15 +55,20 @@ mkDelayedYamlLoader :: FromJSON a => FilePath -> DelayedYamlLoader a
 mkDelayedYamlLoader fp = do
     base_dir_list <- ask
     liftIO $ do
-        -- 运行时，如果全部都有 IOError，抛出第一个
+        -- 运行时，如果全部都有 IOError，抛出第一个非 DoesNotExistError
         let try_dir x = tryIOError $ decodeFileEither (encodeString $ x </> fp)
         first_try <- try_dir $ LNE.head base_dir_list
         case first_try of
             Right v         -> return v
             Left first_err  -> do
-                let go [] = throwM first_err
-                    go (x:xs) = try_dir x >>= either (const $ go xs) return
-                go $ LNE.tail base_dir_list
+                let go []       last_err    = throwM last_err
+                    go (x:xs)   last_err    = do
+                        try_dir x
+                            >>= either
+                                    (\e -> go xs $ if isDoesNotExistError last_err then e else last_err)
+                                    return
+
+                go (LNE.tail base_dir_list) first_err
 
 runDelayedYamlLoaderL :: (MonadIO m, FromJSON a) =>
     NonEmpty FilePath    -- ^ 消息文件存放目录
