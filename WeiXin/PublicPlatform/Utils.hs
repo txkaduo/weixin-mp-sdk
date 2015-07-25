@@ -9,6 +9,7 @@ import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, decodeFileEither)
 import Control.Monad.Catch                  ( Handler(..) )
+import Data.List.NonEmpty                   as LNE
 
 epochIntToUtcTime :: Int64 -> UTCTime
 epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
@@ -20,7 +21,11 @@ utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 -- 在第一次解释时，结果不再是一个简单的值，而是一个 IO 函数。
 -- 以下类型就是表达这种延期加载的函数
 -- ReaderT 的 r 参数是相对路径相对的目录
-type DelayedYamlLoader a = ReaderT FilePath IO (Either ParseException a)
+type DelayedYamlLoader a = ReaderT
+                                (NonEmpty FilePath)
+                                    -- ^ 运行时要知道一个或更多的消息文件的基础目录
+                                IO
+                                (Either ParseException a)
 
 
 setExtIfNotExist :: Text -> FilePath -> FilePath
@@ -48,18 +53,33 @@ parseDelayedYamlLoader m_direct_field indirect_field obj =
 
 mkDelayedYamlLoader :: FromJSON a => FilePath -> DelayedYamlLoader a
 mkDelayedYamlLoader fp = do
-    base_dir <- ask
-    liftIO $ decodeFileEither (encodeString $ base_dir </> fp)
+    base_dir_list <- ask
+    liftIO $ do
+        -- 运行时，如果全部都有 IOError，抛出第一个
+        let try_dir x = tryIOError $ decodeFileEither (encodeString $ x </> fp)
+        first_try <- try_dir $ LNE.head base_dir_list
+        case first_try of
+            Right v         -> return v
+            Left first_err  -> do
+                let go [] = throwM first_err
+                    go (x:xs) = try_dir x >>= either (const $ go xs) return
+                go $ LNE.tail base_dir_list
+
+runDelayedYamlLoaderL :: (MonadIO m, FromJSON a) =>
+    NonEmpty FilePath    -- ^ 消息文件存放目录
+    -> DelayedYamlLoader a
+    -> m (Either String a)
+runDelayedYamlLoaderL base_dir_list get_ext = liftIO $ do
+    err_or_x <- tryIOError $ runReaderT get_ext base_dir_list
+    case err_or_x of
+        Left err    -> return $ Left $ "failed to load from file: " ++ show err
+        Right x     -> return $ parseMsgErrorToString x
 
 runDelayedYamlLoader :: (MonadIO m, FromJSON a) =>
     FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m (Either String a)
-runDelayedYamlLoader base_dir get_ext = liftIO $ do
-    err_or_x <- tryIOError $ runReaderT get_ext base_dir
-    case err_or_x of
-        Left err    -> return $ Left $ "failed to load from file: " ++ show err
-        Right x     -> return $ parseMsgErrorToString x
+runDelayedYamlLoader base_dir = runDelayedYamlLoaderL (base_dir :| [])
 
 -- | 这是会抛异常的版本
 runDelayedYamlLoaderExc :: (MonadIO m, FromJSON a, MonadThrow m) =>
@@ -67,7 +87,7 @@ runDelayedYamlLoaderExc :: (MonadIO m, FromJSON a, MonadThrow m) =>
     -> DelayedYamlLoader a
     -> m a
 runDelayedYamlLoaderExc base_dir get_ext = liftIO $
-    runReaderT get_ext base_dir
+    runReaderT get_ext (base_dir :| [])
         >>= either throwM return
 
 parseMsgErrorToString :: Either ParseException a -> Either String a
