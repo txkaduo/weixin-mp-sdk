@@ -8,15 +8,17 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Data.Aeson
 import Control.Monad.Trans.Except
-import Data.Yaml                            (decodeFileEither)
-import Filesystem.Path.CurrentOS            (encodeString, toText, FilePath, directory, filename)
+import Filesystem.Path.CurrentOS            (encodeString, toText, FilePath, directory, collapse, (</>))
 import qualified System.FSNotify            as FN
 import Control.Monad.Trans.Control
 import System.Directory                     (doesFileExist)
 import Control.Concurrent                   (threadDelay)
+import Data.List.NonEmpty                   (NonEmpty(..))
+import qualified Data.List.NonEmpty         as LNE
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Utils
 
 
 -- | result in query menu
@@ -84,9 +86,13 @@ wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
 
 -- | 根据指定 YAML 文件配置调用远程接口，修改菜单
 wxppCreateMenuWithYaml :: (MonadIO m, MonadLogger m, MonadCatch m) =>
-    AccessToken -> FilePath -> m (Either String ())
-wxppCreateMenuWithYaml access_token fp = runExceptT $ do
-    err_or_menu <- liftIO $ decodeFileEither $ encodeString fp
+    AccessToken
+    -> NonEmpty FilePath
+    -> FilePath
+    -> m (Either String ())
+wxppCreateMenuWithYaml access_token data_dirs fp = runExceptT $ do
+    err_or_menu <- liftIO $ do
+                    runDelayedYamlLoaderL data_dirs $ mkDelayedYamlLoader fp
     case err_or_menu of
         Left err    -> do
             $(logErrorS) wxppLogSource $
@@ -118,24 +124,26 @@ liftBaseOpDiscard f g = liftBaseWith $ \runInBase -> f $ void . runInBase . g
 wxppWatchMenuYaml :: (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
     m (Maybe AccessToken)
     -> IO ()        -- ^ bloack until exit
+    -> NonEmpty FilePath
     -> FilePath
     -> m ()
-wxppWatchMenuYaml get_atk block_until_exit fp = do
+wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
     -- 主动加载一次菜单配置
-    now <- liftIO getCurrentTime
-    handle_evt $ FN.Added fp now
+    load
 
     bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
-        stop <- (liftBaseOpDiscard $
-                    FN.watchDir
-                        mgr
-                        dir
-                        ((== fn) . filename . FN.eventPath)
-                ) handle_evt
-        liftIO $ block_until_exit >> stop
+        stops <- forM dirs $ \dir -> do
+                    let predi = (`elem` LNE.toList fp') . FN.eventPath
+                    (liftBaseOpDiscard $
+                            FN.watchDir
+                                mgr
+                                dir
+                                predi) handle_evt
+        liftIO $ block_until_exit >> sequence stops >> return ()
     where
-        dir = directory fp
-        fn = filename fp
+        dirs = fmap directory fp
+        fp' = fmap collapse fp
+        fp = fmap (</> fname) data_dirs
 
         watch_cfg = FN.defaultConfig
                         { FN.confDebounce = FN.Debounce (fromIntegral (1 :: Int)) }
@@ -146,21 +154,25 @@ wxppWatchMenuYaml get_atk block_until_exit fp = do
         handle_evt evt = do
             -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
             -- 干脆不理会 event 的类型，直接检查文件是否存在
-            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist (encodeString fp)
+            let evt_fp = FN.eventPath evt
+            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist (encodeString evt_fp)
             if not exists
                 then do
                     $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
                                                 <> (either id id $ toText (FN.eventPath evt))
                     -- 如果打算停用菜单，可直接将配置文件清空
                 else do
-                    m_atk <- get_atk
-                    case m_atk of
-                        Nothing             -> do
-                            $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
-                        Just access_token   ->  do
-                            err_or <- wxppCreateMenuWithYaml access_token (FN.eventPath evt)
-                            case err_or of
-                                Left err    -> $logErrorS  wxppLogSource $ fromString $
-                                                        "Failed to create menu: " <> err
-                                Right _     -> $logInfoS wxppLogSource $ "menu reloaded."
+                    load
+
+        load = do
+            m_atk <- get_atk
+            case m_atk of
+                Nothing             -> do
+                    $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
+                Just access_token   ->  do
+                    err_or <- wxppCreateMenuWithYaml access_token data_dirs fname
+                    case err_or of
+                        Left err    -> $logErrorS  wxppLogSource $ fromString $
+                                                "Failed to create menu: " <> err
+                        Right _     -> $logInfoS wxppLogSource $ "menu reloaded."
 

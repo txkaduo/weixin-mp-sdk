@@ -161,6 +161,7 @@ executable wxpp-manage
                      , system-filepath
                      , directory
                      , process
+                     , semigroups
 
   default-extensions:  NoImplicitPrelude
                        CPP
