@@ -192,10 +192,11 @@ parseWxppInMsgProcessor known_hs obj = do
 
 readWxppInMsgHandlers ::
     [WxppInMsgHandlerPrototype m]
-    -> String
+    -> NonEmpty FilePath
+    -> FilePath
     -> IO (Either ParseException [SomeWxppInMsgHandler m])
-readWxppInMsgHandlers tmps fp = runExceptT $ do
-    (ExceptT $ decodeFileEither fp)
+readWxppInMsgHandlers tmps data_dirs fp = runExceptT $ do
+    (ExceptT $ runDelayedYamlLoaderL' data_dirs $ mkDelayedYamlLoader fp)
         >>= either (throwE . AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
 

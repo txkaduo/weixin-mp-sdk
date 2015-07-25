@@ -9,7 +9,7 @@ import qualified Data.Text                  as T
 import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
-import Filesystem.Path.CurrentOS            (encodeString, fromText, (</>))
+import Filesystem.Path.CurrentOS            (fromText)
 import Control.Concurrent                   (threadDelay)
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
@@ -107,13 +107,13 @@ mkMaybeWxppSub' ::
 mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg down_media opts app_id =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config app_id
-        let data_dir    = wxppAppConfigDataDir wac
+        let data_dirs   = wxppAppConfigDataDir wac
         return $ WxppSub
                     wac
                     (SomeWxppCacheBackend cache)
                     (runDBWith foundation)
                     (send_msg app_id)
-                    (handle_msg data_dir)
+                    (handle_msg data_dirs)
                     middlewares
                     (runLoggingTWith foundation)
                     opts
@@ -137,12 +137,13 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                     )
                 ]
 
-        handle_msg data_dir bs ime = do
+        handle_msg data_dirs bs ime = do
             err_or_in_msg_handlers <- liftIO $ do
                     protos <- get_protos app_id
                     readWxppInMsgHandlers
                         protos
-                        (encodeString $ data_dir </> fromText "msg-handlers.yml")
+                        data_dirs
+                        (fromText "msg-handlers.yml")
 
             m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_id
             m_in_msg_handlers <- case err_or_in_msg_handlers of
