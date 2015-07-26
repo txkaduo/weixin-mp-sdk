@@ -273,9 +273,9 @@ wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' =
 -- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
 wxppBatchGetDurableToSrc ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    (Int     -- ^ offset
+    (Int
         -> m (WxppBatchGetDurableResult a)
-    )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到
+    )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
     -> Source m a
 wxppBatchGetDurableToSrc get_by_offset = go 0
     where

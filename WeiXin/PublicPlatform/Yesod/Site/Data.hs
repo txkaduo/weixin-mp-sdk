@@ -91,8 +91,8 @@ data WxppSub =
                 , wxppSubCacheBackend   :: SomeWxppCacheBackend
                 , wxppSubRunDBAction    ::
                                         -- XXX: 这里写死两个事实
-                                        -- * persistent 版本要 2.0
-                                        -- * 只能是 SQL 类型数据库
+                                        --  persistent 版本要 2.0
+                                        --  只能是 SQL 类型数据库
                                         forall a m. (MonadIO m, MonadBaseControl IO m) =>
                                                         SqlPersistT m a -> m a
                     -- ^ execute any DB actions

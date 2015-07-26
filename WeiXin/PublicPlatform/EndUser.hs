@@ -41,11 +41,11 @@ wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id
 
 
 data GetUserResult = GetUserResult
-                        Int             -- ^ total
-                        Int             -- ^ count
+                        Int             -- total
+                        Int             -- count
                         [WxppOpenID]
                         (Maybe WxppOpenID)
-                                -- ^ next open id
+                                -- next open id
 
 
 instance FromJSON GetUserResult where

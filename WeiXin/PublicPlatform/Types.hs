@@ -1050,13 +1050,13 @@ type CountryName = Text
 data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                         | EndUserQueryResult
                             WxppOpenID
-                            NickName    -- ^ nickname
+                            NickName    -- nickname
                             (Maybe Gender)
                             SimpleLocaleName
                             CityName
                             ProvinceName
                             CountryName
-                            UrlText     -- ^ head image url
+                            UrlText     -- head image url
                             UTCTime
                             (Maybe WxppUnionID)
                         deriving (Show, Eq, Ord, Typeable)

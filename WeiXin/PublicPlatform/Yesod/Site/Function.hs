@@ -50,9 +50,9 @@ newtype WxppSubDBActionRunner m = WxppSubDBActionRunner
 data StoreInMsgToDB m = StoreInMsgToDB
                             WxppAppID
                             (WxppSubDBActionRunner m)
-                                -- ^ function to run DB actions
+                                -- function to run DB actions
                             (WxppInMsgRecordId -> WxppBriefMediaID -> m ())
-                                -- ^ function to download media file
+                                -- function to download media file
                                 -- 推荐使用异步方式下载
 
 type instance WxppInMsgProcessResult (StoreInMsgToDB m) = WxppInMsgHandlerResult

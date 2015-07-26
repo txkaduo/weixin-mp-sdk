@@ -126,7 +126,7 @@ wxppEncryptInternal2 ::
 wxppEncryptInternal2 app_id ak salt msg = do
     case makeIV iv_bs of
         Nothing -> do
-                -- $(logErrorS) wxppLogSource $ "cannot make IV"
+                --   $(logErrorS) wxppLogSource $ "cannot make IV"
                 Left $ "cannot make IV"
         Just iv -> do
                 return $ wxppEncryptInternal app_id ak iv salt msg

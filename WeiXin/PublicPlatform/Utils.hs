@@ -19,8 +19,8 @@ utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
 
 
 data YamlFileParseException = YamlFileParseException
-                                    String      -- ^ file path
-                                    ParseException
+                                    String          -- file path
+                                    ParseException  -- the real exception
                                 deriving (Typeable)
 
 instance Show YamlFileParseException where
@@ -34,7 +34,7 @@ instance Exception YamlFileParseException
 -- ReaderT 的 r 参数是相对路径相对的目录
 type DelayedYamlLoader a = ReaderT
                                 (NonEmpty FilePath)
-                                    -- ^ 运行时要知道一个或更多的消息文件的基础目录
+                                    -- 运行时要知道一个或更多的消息文件的基础目录
                                 IO
                                 (Either YamlFileParseException a)
 

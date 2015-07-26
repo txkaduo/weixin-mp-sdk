@@ -322,9 +322,9 @@ parseWxppOutMsgLoader obj = do
 -- | Handler: 处理收到的信息的算法例子：用户订阅公众号时发送欢迎信息
 data WelcomeSubscribe = WelcomeSubscribe
                             WxppAppID
-                            (NonEmpty FilePath) -- ^ 所有消息文件存放的目录
-                            Bool                -- ^ if primary
-                            WxppOutMsgLoader    -- ^ 打算回复用户的消息
+                            (NonEmpty FilePath) -- 所有消息文件存放的目录
+                            Bool                -- if primary
+                            WxppOutMsgLoader    -- 打算回复用户的消息
                         deriving (Typeable)
 
 instance JsonConfigable WelcomeSubscribe where
@@ -704,9 +704,9 @@ instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHa
 -- | Handler: 根据一个 YAML 的定义的表，找出可能配置的 article，打包是一个 news 消息返回
 -- 用户输入的字串作为查找关键字，以完全匹配的方式匹配
 data WxppMatchedKeywordArticles = WxppMatchedKeywordArticles
-                                    (NonEmpty FilePath) -- ^ msg dir
-                                    Bool        -- ^ if primary
-                                    FilePath    -- ^ the YAML
+                                    (NonEmpty FilePath) -- msg dir
+                                    Bool        -- if primary
+                                    FilePath    -- the YAML
 
 newtype ArtcileToKeywordsMap = ArtcileToKeywordsMap { unArtcileToKeywordsMap :: Map FilePath [Text] }
 
@@ -969,13 +969,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 -- | Handler: 解释菜单扫描的二维码事件, 对应菜单事件的 scancode_msg
 data WxppInMsgParseScanCodePush m a = WxppInMsgParseScanCodePush
                                         (Text -> m (Either String a))
-                                            -- ^ parser for command
-                                        (Text       -- ^ event key
+                                            -- parser for command
+                                        (Text       -- event key
                                             -> WxppInMsgEntity
                                             -> a
                                             -> m (Either String WxppInMsgHandlerResult)
                                         )
-                                        -- ^ handle the command
+                                        -- handle the command
 
 instance JsonConfigable (WxppInMsgParseScanCodePush m a) where
     type JsonConfigableUnconfigData (WxppInMsgParseScanCodePush m a) =
@@ -1015,13 +1015,13 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 -- | Handler: 解释菜单扫描的二维码事件, 对应菜单事件的 scancode_waitmsg
 data WxppInMsgParseScanCodeWaitMsg m a = WxppInMsgParseScanCodeWaitMsg
                                         (Text -> m (Either String a))
-                                            -- ^ parser for command
-                                        (Text       -- ^ event key
+                                            -- parser for command
+                                        (Text       -- event key
                                             -> WxppInMsgEntity
                                             -> a
                                             -> m (Either String WxppInMsgHandlerResult)
                                         )
-                                        -- ^ handle the command
+                                        -- handle the command
 
 instance JsonConfigable (WxppInMsgParseScanCodeWaitMsg m a) where
     type JsonConfigableUnconfigData (WxppInMsgParseScanCodeWaitMsg m a) =
