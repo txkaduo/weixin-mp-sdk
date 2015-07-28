@@ -14,6 +14,8 @@ data WxppError = WxppServerBusy
                 | WxppInvalidOpenID
                 | WxppInvalidMediaFileType
                 | WxppInvalidAppID
+                | WxppSubscriberRequired
+                | WxppReplyIsTooLate
                 | WxppSystemError
                 deriving (Show, Typeable, Eq, Ord, Enum, Bounded)
 
@@ -26,6 +28,8 @@ wxppToErrorCode WxppInvalidOpenID           = 40003
 wxppToErrorCode WxppInvalidMediaFileType    = 40004
 wxppToErrorCode WxppInvalidAppID            = 40013
 wxppToErrorCode WxppInvalidAccessToken      = 40014
+wxppToErrorCode WxppSubscriberRequired      = 43005
+wxppToErrorCode WxppReplyIsTooLate          = 45015
 wxppToErrorCode WxppSystemError             = 61450
 
 
