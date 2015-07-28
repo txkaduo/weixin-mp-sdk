@@ -14,6 +14,9 @@ import Network.Wreq
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.Conduit.List          as CL
+import Data.Conduit
+import Database.Persist.Sql
 
 import Yesod.Helpers.Persist
 
@@ -365,3 +368,36 @@ toWxppCachedUserInfoExt app_id created_time
         head_img
         subs_time
         created_time
+
+
+-- | 找出最近一段时间内有消息发給系统的用户
+wxppUserLatestActiveTime :: (MonadIO m, MonadResource m) =>
+    UTCTime         -- ^ 只检查过去一段时间内的消息历史
+    -> WxppAppID
+    -> Source (SqlPersistT m) (WxppOpenID, UTCTime)
+wxppUserLatestActiveTime start_time app_id = do
+    open_id_fn <- lift $ getFieldName WxppInMsgRecordFrom
+    created_time_fn <- lift $ getFieldName WxppInMsgRecordCreatedTime
+    app_fn <- lift $ getFieldName WxppInMsgRecordApp
+    table_name <- lift $ getTableName (error "WxppInMsgRecord forced" :: WxppInMsgRecord)
+    let query = "SELECT "
+                    <> open_id_fn
+                    <> ",MAX(" <> created_time_fn <> ")"
+                    <> " FROM "
+                    <> table_name
+                    <> " WHERE "
+                    <> app_fn <> "= ?"
+                    <> " AND "
+                    <> created_time_fn <> ">= ?"
+                    <> " GROUP BY " <> open_id_fn
+    rawQuery query [ toPersistValue app_id, toPersistValue start_time]
+        $= CL.mapM (\x -> case x of
+                        [v1, v2]    -> return $
+                                            (,) <$> fromPersistValue v1
+                                                <*> fromPersistValue v2
+
+                        _       -> throwM $ PersistMarshalError $
+                                            "Expecting 2 columns, but got "
+                                                <> (fromString $ show $ length x)
+                    )
+        =$= CL.mapM (either (throwM . PersistMarshalError) return)
