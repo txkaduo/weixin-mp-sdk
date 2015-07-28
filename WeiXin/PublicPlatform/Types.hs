@@ -55,6 +55,10 @@ newtype WxppUserGroupID = WxppUserGroupID { unWxppUserGroupID :: Int }
                         deriving (Show, Eq, Ord, ToJSON, FromJSON)
 
 
+-- | 卡券ID
+newtype WxCardID = WxCardID { unWxCardID :: Text }
+                    deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
 -- | 客服帐号
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
                         deriving (Show, Eq, Ord)
