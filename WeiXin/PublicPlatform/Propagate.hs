@@ -1,7 +1,11 @@
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.Propagate
     ( wxppPropagateUploadNews
     , PropagateMsgID(..)
     , WxppPropagateMsg(..)
+    , WxppPropagateVideoMediaID(..)
+    , wxppPropagateNewVideoID
     , wxppPropagateMsg
     , wxppPreviewPropagateMsg
     , wxppDropPropagateMsg
@@ -32,6 +36,12 @@ instance FromJSON PUploadNewsResult where
                                         <*> o .: "media_id"
                                         <*> (fmap epochIntToUtcTime $ o .: "created_at")
 
+-- | 群发接口中的 video 的 media id
+-- 虽然文档叫这 media id，但又跟其它地方用的 media_id 不一样
+-- 因此这里为它定义一个新的类型
+newtype WxppPropagateVideoMediaID = WxppPropagateVideoMediaID { unWxppPropagateVideoMediaID :: Text }
+                    deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+
 -- | 可以直接群发的消息
 data WxppPropagateMsg = WxppPropagateMsgNews WxppMediaID
                             -- ^ 按文档，这个 media_id 须使用 wxppPropagateUploadNews 取得
@@ -39,7 +49,7 @@ data WxppPropagateMsg = WxppPropagateMsgNews WxppMediaID
                         | WxppPropagateMsgText Text
                         | WxppPropagateMsgVoice WxppMediaID
                         | WxppPropagateMsgImage WxppMediaID
-                        | WxppPropagateMsgVideo WxppMediaID
+                        | WxppPropagateMsgVideo WxppPropagateVideoMediaID
                         | WxppPropagateMsgCard WxCardID
                         deriving (Eq)
 
@@ -95,6 +105,44 @@ wxppPropagateUploadNews (AccessToken { accessTokenData = atk }) news = do
         (liftIO $ postWith opts url $ toJSON news)
             >>= asWxppWsResponseNormal'
     return media_id
+
+
+-- | wxppPropagateNewVideoID 内部用
+data CreateVideoMediaIDResult = CreateVideoMediaIDResult
+                                    Text
+                                    WxppPropagateVideoMediaID
+                                    UTCTime
+
+instance FromJSON CreateVideoMediaIDResult where
+    parseJSON = withObject "CreateVideoMediaIDResult" $ \o -> do
+                    CreateVideoMediaIDResult <$> o .: "type"
+                        <*> o .: "media_id"
+                        <*> (epochIntToUtcTime <$> o .: "created_at")
+
+
+-- | 文档说：群发视频之前，先上传多媒体文件，得到一个media_id
+--           然后还要再调用一个特别接口，得到一个新的 media_id
+--           即这里的 WxppPropagateVideoMediaID
+wxppPropagateNewVideoID ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaID
+        -- ^ 通过基础支持中的上传下载多媒体文件得到的id
+    -> Text     -- ^ title
+    -> Text     -- ^ description
+    -> m WxppPropagateVideoMediaID
+wxppPropagateNewVideoID (AccessToken { accessTokenData = atk }) media_id title desc = do
+    let url = "https://file.api.weixin.qq.com/cgi-bin/media/uploadvideo"
+        opts = defaults & param "access_token" .~ [ atk ]
+    CreateVideoMediaIDResult _typ v_media_id _created_at
+        <- (liftIO $ postWith opts url $ object
+                    [ "type" .= ("video" :: Text)
+                    , "media_id" .= media_id
+                    , "title" .= title
+                    , "description" .= desc
+                    ])
+            >>= asWxppWsResponseNormal'
+    return v_media_id
 
 
 newtype PropagateMsgID = PropagateMsgID { unPropagateMsgID :: Word64 }
