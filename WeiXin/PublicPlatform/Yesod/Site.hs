@@ -41,12 +41,6 @@ import qualified Data.Aeson                 as A
 
 import Database.Persist.Sql
 
-import Text.Blaze.Svg.Renderer.Utf8 (renderSvg)   -- blaze-svg
-import qualified Data.QRCode as QR                -- haskell-qrencode
-import qualified Diagrams.Backend.SVG as D        -- diagrams-svg
-import qualified Diagrams.Prelude as D            -- diagrams-lib
-import qualified Diagrams.QRCode as QR            -- diagrams-qrcode
-
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
@@ -55,6 +49,7 @@ import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.InMsgHandler
+import WeiXin.PublicPlatform.Utils
 
 
 withWxppSubHandler ::
@@ -354,9 +349,7 @@ getShowSimulatedQRCodeR = do
 
     let scene = fst ticket
     let input = C8.unpack $ LB.toStrict $ A.encode scene
-    qrcode <- liftIO $ QR.encodeString input Nothing QR.QR_ECLEVEL_M QR.QR_MODE_EIGHT True
-    let dia = D.scale 6 $ QR.stroke $ QR.pathMatrix $ QR.toMatrix qrcode
-        bs = renderSvg $ D.renderDia D.SVG (D.SVGOptions D.Absolute Nothing) dia
+    bs <- encodeStringQRCodeJpeg 5 input
     return $ toTypedContent (typeSvg, toContent bs)
 
 

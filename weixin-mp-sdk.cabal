@@ -120,11 +120,9 @@ library
                      , blaze-builder
                      , network
                      , StateVar
-                     , diagrams-qrcode
-                     , diagrams-svg
-                     , diagrams-lib
-                     , blaze-svg
                      , haskell-qrencode
+                     , JuicyPixels
+                     , array
 
   if flag(parsec3)
       build-depends:   parsec3
