@@ -1,6 +1,13 @@
 module  WeiXin.PublicPlatform.Utils where
 
 import ClassyPrelude hiding (FilePath, (<.>), (</>))
+import qualified Data.QRCode                as QR   -- haskell-qrencode
+import qualified Data.ByteString.Lazy       as LB
+import qualified Codec.Picture              as P -- from `JuicyPixel' package
+import qualified Codec.Picture.Saving       as P -- from `JuicyPixel' package
+
+import Data.Array                           (bounds,(!), array)
+import Data.List                            ((!!))
 import Data.Time                            (NominalDiffTime)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
@@ -9,7 +16,7 @@ import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, decodeFileEither, prettyPrintParseException)
 import Control.Monad.Catch                  ( Handler(..) )
-import Data.List.NonEmpty                   as LNE
+import Data.List.NonEmpty                   as LNE hiding (length, (!!))
 
 epochIntToUtcTime :: Int64 -> UTCTime
 epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
@@ -132,3 +139,36 @@ parseMsgErrorToString (Right x)     = Right x
 
 unifyExcHandler :: (Show e, Monad m) => Handler m (Either e a) -> Handler m (Either String a)
 unifyExcHandler = fmap $ either (Left . show) Right
+
+
+-- | 生成 JuicyPixels Image 对象
+-- copied and modified from: https://gist.github.com/minoki/7d6a610fe03fd84122d5
+encodeStringQRCodeImage :: MonadIO m =>
+                           Int
+                           -> String
+                           -> m (P.Image P.Pixel8)
+encodeStringQRCodeImage pixelPerCell input = do
+    qrcode <- liftIO $ QR.encodeString input Nothing QR.QR_ECLEVEL_M QR.QR_MODE_EIGHT True
+    let matrix = QR.toMatrix qrcode
+        dim1 = length matrix
+        dim2 = fromMaybe 0 $ fmap length $ listToMaybe matrix
+        to_on_off x = if x /= 0 then minBound else maxBound
+        arr = array ((0, 0), (dim1-1, dim2-1)) $ do
+                    y <- [0..dim1-1]
+                    x <- [0..dim2-1]
+                    return $ ((y, x), to_on_off $ (matrix !! y) !! x)
+    let ((y0,x0),(y1,x1)) = bounds arr
+        pixelAt x y = let x' = x `div` pixelPerCell
+                          y' = y `div` pixelPerCell
+                          i = y'+y0
+                          j = x'+x0
+                      in arr !(i,j)
+        image = P.generateImage pixelAt ((x1-x0+1)*pixelPerCell) ((y1-y0+1)*pixelPerCell)
+    return image
+
+encodeStringQRCodeJpeg :: MonadIO m =>
+                        Int
+                        -> String
+                        -> m LB.ByteString
+encodeStringQRCodeJpeg pixelPerCell input =
+    liftM (P.imageToJpg 100 . P.ImageY8) $ encodeStringQRCodeImage pixelPerCell input
