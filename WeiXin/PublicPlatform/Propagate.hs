@@ -2,6 +2,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.Propagate
     ( wxppPropagateUploadNews
+    , WxppPropagateArticle(..)
+    , WxppPropagateNews(..)
     , PropagateMsgID(..)
     , WxppPropagateMsg(..)
     , WxppPropagateVideoMediaID(..)
@@ -23,6 +25,59 @@ import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(.
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
+
+
+-- | 准备群发的图文素材结构中的一个文章
+-- 这个结构基本上与 WxppDurableArticle 一样，区别是
+-- - content_source_url 这里是可选的
+-- - media id 换成了 WxppMediaID
+data WxppPropagateArticle = WxppPropagateArticle {
+                                wxppPropagateArticleTitle            :: Text
+                                , wxppPropagateArticleThumb          :: WxppMediaID
+                                , wxppPropagateArticleAuthor         :: Maybe Text
+                                , wxppPropagateArticleDigest         :: Maybe Text
+                                , wxppPropagateArticleShowCoverPic   :: Bool
+                                , wxppPropagateArticleContent        :: Text
+                                , wxppPropagateArticleContentSrcUrl  :: Maybe UrlText
+                            }
+                            deriving (Eq)
+
+instance FromJSON WxppPropagateArticle where
+    parseJSON = withObject "WxppPropagateArticle" $ \obj -> do
+                    WxppPropagateArticle
+                        <$> ( obj .: "title" )
+                        <*> ( obj .: "thumb_media_id" )
+                        <*> ( obj .:? "author" )
+                        <*> ( obj .:? "digest" )
+                        <*> ( int_to_bool <$> obj .: "show_cover_pic" )
+                        <*> ( obj .: "content" )
+                        <*> ( fmap UrlText <$> obj .:? "content_source_url" )
+            where
+                int_to_bool x = (x :: Int) /= 0
+
+
+instance ToJSON WxppPropagateArticle where
+    toJSON x = object   [ "title"           .= wxppPropagateArticleTitle x
+                        , "thumb_media_id"  .= wxppPropagateArticleThumb x
+                        , "author"          .= (fromMaybe "" $ wxppPropagateArticleAuthor x)
+                        , "digest"          .= (fromMaybe "" $ wxppPropagateArticleDigest x)
+                        , "show_cover_pic"  .= bool_to_int (wxppPropagateArticleShowCoverPic x)
+                        , "content"         .= wxppPropagateArticleContent x
+                        , "content_source_url" .= (unUrlText <$> wxppPropagateArticleContentSrcUrl x)
+                        ]
+            where
+                bool_to_int b = if b then 1 :: Int else 0
+
+
+-- | 可以群发的图文消息
+newtype WxppPropagateNews = WxppPropagateNews [WxppPropagateArticle]
+
+instance FromJSON WxppPropagateNews where
+    parseJSON = withObject "WxppPropagateNews" $ \obj -> do
+                    WxppPropagateNews <$> obj .: "articles"
+
+instance ToJSON WxppPropagateNews where
+    toJSON (WxppPropagateNews articles) = object [ "articles" .= articles ]
 
 
 data PUploadNewsResult = PUploadNewsResult
@@ -94,7 +149,7 @@ wxppPropagateMsgTypeS (WxppPropagateMsgCard {})     = "card"
 wxppPropagateUploadNews ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
-    -> WxppDurableNews
+    -> WxppPropagateNews
         -- ^ XXX: 这里只是用了与永久图文素材相同的数据类型
         --        真正上传的结果只是一个临时的素材
     -> m WxppBriefMediaID
