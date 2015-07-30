@@ -35,15 +35,31 @@ wxppUploadDurableMediaInternal ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
     -> WxppMediaType
-    -> FilePath
     -> Maybe (Text, Text)
         -- ^ 上传视频素材所需的额外信息：标题，简介
+    -> FilePath         -- ^ the file to upload
     -> m DurableUploadResult
-wxppUploadDurableMediaInternal (AccessToken { accessTokenData = atk }) mtype fp m_title_intro = do
+wxppUploadDurableMediaInternal atk mtype m_title_intro fp = do
+    wxppUploadDurableMediaInternalLBS atk mtype
+        m_title_intro
+        (partFileSource "media" $ encodeString fp)
+
+
+-- | 上传本地一个媒体文件，成为永久素材
+wxppUploadDurableMediaInternalLBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaType
+    -> Maybe (Text, Text)
+        -- ^ 上传视频素材所需的额外信息：标题，简介
+    -> Part                 -- ^ the @Part@ of uploaded file
+    -> m DurableUploadResult
+wxppUploadDurableMediaInternalLBS (AccessToken { accessTokenData = atk }) mtype m_title_intro fpart = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
+
     (liftIO $ postWith opts url $
-                [ partFileSource "media" $ encodeString fp
+                [ fpart & partName .~ "media"
                 , partText "type" (wxppMediaTypeString mtype)
                 ]
                 ++ (case m_title_intro of
@@ -61,12 +77,25 @@ wxppUploadDurableMediaInternal (AccessToken { accessTokenData = atk }) mtype fp 
 wxppUploadDurableMediaVideo ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
-    -> FilePath
     -> Text     -- ^ 标题
     -> Text     -- ^ 简介
+    -> FilePath
     -> m DurableUploadResult
-wxppUploadDurableMediaVideo atk fp title intro = do
-    wxppUploadDurableMediaInternal atk WxppMediaTypeVideo fp (Just (title, intro))
+wxppUploadDurableMediaVideo atk title intro fp = do
+    wxppUploadDurableMediaInternal atk WxppMediaTypeVideo (Just (title, intro)) fp
+
+
+wxppUploadDurableMediaVideoLBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> Text     -- ^ 标题
+    -> Text     -- ^ 简介
+    -> FilePath -- ^ a dummy file name
+    -> LB.ByteString
+    -> m DurableUploadResult
+wxppUploadDurableMediaVideoLBS atk title intro fp lbs = do
+    wxppUploadDurableMediaInternalLBS atk WxppMediaTypeVideo (Just (title, intro))
+        (partLBS "media" lbs & partFileName .~ Just (encodeString fp))
 
 
 -- | 上传本地非视频媒体成为永久素材
@@ -82,7 +111,25 @@ wxppUploadDurableMediaNonVideo atk mtype fp = do
             throwM $ userError
                 "wxppUploadDurableMediaNonVideo cannot be used to upload video."
         _   -> return ()
-    wxppUploadDurableMediaInternal atk mtype fp Nothing
+    wxppUploadDurableMediaInternal atk mtype Nothing fp
+
+
+-- | 上传本地非视频媒体成为永久素材
+wxppUploadDurableMediaNonVideoLBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> WxppMediaType
+    -> FilePath
+    -> LB.ByteString
+    -> m DurableUploadResult
+wxppUploadDurableMediaNonVideoLBS atk mtype fp lbs = do
+    case mtype of
+        WxppMediaTypeVideo ->
+            throwM $ userError
+                "wxppUploadDurableMediaNonVideo cannot be used to upload video."
+        _   -> return ()
+    wxppUploadDurableMediaInternalLBS atk mtype Nothing
+        (partLBS "media" lbs & partFileName .~ Just (encodeString fp))
 
 
 -- | 上传一个图文素材成为永久素材
