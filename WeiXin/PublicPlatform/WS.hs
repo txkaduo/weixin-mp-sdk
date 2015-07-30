@@ -102,9 +102,9 @@ tryWxppWsResult f = liftM Right f `catches` wxppWsExcHandlers
 
 tryWxppWsResultE :: MonadCatch m =>
     String -> ExceptT String m b -> ExceptT String m b
-tryWxppWsResultE op f =
+tryWxppWsResultE op_name f =
     tryWxppWsResult f
-        >>= either (\e -> throwE $ "Got Exception when " <> op <> ": " <> show e) return
+        >>= either (\e -> throwE $ "Got Exception when " <> op_name <> ": " <> show e) return
 
 
 asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
