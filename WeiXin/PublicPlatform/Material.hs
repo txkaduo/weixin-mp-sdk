@@ -22,6 +22,27 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 
+-- | 查询永久素材中的图文消息中的文章，出现在从服务器返回的数据中
+-- 与 WxppDurableArticle 几乎一样，区别只是
+-- 多了 url 字段
+data WxppDurableArticleS = WxppDurableArticleS {
+                                wxppDurableArticleSA        :: WxppDurableArticle
+                                , wxppDurableArticleSUrl    :: UrlText
+                                }
+                            deriving (Eq)
+
+
+instance FromJSON WxppDurableArticleS where
+    parseJSON = withObject "WxppDurableArticleS" $ \o -> do
+                    WxppDurableArticleS
+                        <$> parseJSON (Object o)
+                        <*> (UrlText <$> o .: "url")
+
+
+instance ToJSON WxppDurableArticleS where
+    toJSON x = object $
+                ("url" .= unUrlText (wxppDurableArticleSUrl x))
+                    : wppDurableArticleToJsonPairs (wxppDurableArticleSA x)
 
 newtype DurableUploadResult = DurableUploadResult WxppDurableMediaID
 
@@ -100,7 +121,7 @@ wxppUploadDurableNews (AccessToken { accessTokenData = atk }) news = do
 
 -- | 查询永久素材的结果内容完全只能通过尝试的方式决定
 -- 混合了多种情况
-data WxppGetDurableResult =    WxppGetDurableNews [WxppDurableArticle]
+data WxppGetDurableResult =    WxppGetDurableNews [WxppDurableArticleS]
                             |   WxppGetDurableVideo Text Text UrlText
                                 -- ^ title description download_url
                             |   WxppGetDurableRaw ByteString LB.ByteString
@@ -231,7 +252,7 @@ wxppBatchGetDurableMedia (AccessToken { accessTokenData = atk }) mtype limit' of
 -- | 批量取图文类型的永久素材，返回报文中的项目
 data WxppBatchGetDurableNewsItem = WxppBatchGetDurableNewsItem {
                                         wxppBatchGetDurableNewsItemID          :: WxppDurableMediaID
-                                        , wxppBatchGetDurableNewsItemContent   :: [WxppDurableArticle]
+                                        , wxppBatchGetDurableNewsItemContent   :: [WxppDurableArticleS]
                                         , wxppBatchGetDurableNewsItemTime      :: UTCTime
                                     }
                                     deriving (Eq)

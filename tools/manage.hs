@@ -314,7 +314,7 @@ start = do
             atk <- get_atk
             let has_keyword item =
                     let articles = wxppBatchGetDurableNewsItemContent item
-                    in any (T.isInfixOf keyword . wxppDurableArticleTitle) articles
+                    in any (T.isInfixOf keyword . wxppDurableArticleTitle . wxppDurableArticleSA) articles
 
             results <- wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $= (awaitForever $ \x -> do
@@ -339,7 +339,7 @@ start = do
 
 
 editNewsDurable :: (MonadIO m, MonadLogger m, MonadCatch m) =>
-    AccessToken -> WxppDurableMediaID -> [WxppDurableArticle] -> m ()
+    AccessToken -> WxppDurableMediaID -> [WxppDurableArticleS] -> m ()
 editNewsDurable atk mid articles = do
     let go bs = do
             bs' <- liftIO $ editWithEditor bs
@@ -354,9 +354,11 @@ editNewsDurable atk mid articles = do
                         then go bs'
                         else return ()
 
-                Right new_articles -> do
+                Right new_articles0 -> do
+                    let new_articles = map wxppDurableArticleSA new_articles0
+                        old_articles = map wxppDurableArticleSA articles
                     let old_len = length articles
-                    forM_ (zip [0..old_len] $ zip articles new_articles) $ \(idx, (old_a, article)) -> do
+                    forM_ (zip [0..old_len] $ zip old_articles new_articles) $ \(idx, (old_a, article)) -> do
                         when (old_a /= article) $ do
                             wxppReplaceArticleOfDurableNews atk mid idx article
 
