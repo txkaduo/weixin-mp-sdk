@@ -872,7 +872,12 @@ instance FromJSON WxppDurableArticle where
 
 
 instance ToJSON WxppDurableArticle where
-    toJSON x = object   [ "title"           .= wxppDurableArticleTitle x
+    toJSON = object . wppDurableArticleToJsonPairs
+
+
+wppDurableArticleToJsonPairs :: WxppDurableArticle -> [Pair]
+wppDurableArticleToJsonPairs x =
+                        [ "title"           .= wxppDurableArticleTitle x
                         , "thumb_media_id"  .= wxppDurableArticleThumb x
                         , "author"          .= (fromMaybe "" $ wxppDurableArticleAuthor x)
                         , "digest"          .= (fromMaybe "" $ wxppDurableArticleDigest x)
@@ -882,6 +887,7 @@ instance ToJSON WxppDurableArticle where
                         ]
             where
                 bool_to_int b = if b then 1 :: Int else 0
+
 
 -- | 永久图文素材结构
 newtype WxppDurableNews = WxppDurableNews [WxppDurableArticle]
