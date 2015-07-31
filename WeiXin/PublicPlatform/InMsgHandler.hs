@@ -2,7 +2,7 @@
 {-# LANGUAGE RankNTypes #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
-import ClassyPrelude hiding (catch, FilePath, (<.>), (</>))
+import ClassyPrelude hiding (catch)
 import Network.Wreq hiding (Proxy)
 import Control.Lens hiding ((<.>), op)
 import Data.Proxy
@@ -22,9 +22,9 @@ import Data.Time                            (NominalDiffTime)
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
-import Filesystem.Path.CurrentOS            (fromText, FilePath, (</>), encodeString)
-import qualified Filesystem.Path.CurrentOS  as FP
 import Control.Monad.Catch                  (catch)
+import System.Directory                     (canonicalizePath)
+import System.FilePath                      (splitDirectories)
 
 import Yesod.Helpers.Aeson                  (parseArray)
 
@@ -198,7 +198,7 @@ readWxppInMsgHandlers ::
     -> IO (Either YamlFileParseException [SomeWxppInMsgHandler m])
 readWxppInMsgHandlers tmps data_dirs fp = runExceptT $ do
     (ExceptT $ runDelayedYamlLoaderL' data_dirs $ mkDelayedYamlLoader fp)
-        >>= either(throwE . YamlFileParseException (encodeString fp) . AesonException) return
+        >>= either(throwE . YamlFileParseException fp . AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
 
 
@@ -314,8 +314,8 @@ parseWxppOutMsgLoader obj = do
         <|> (fmap (fmap $ \x -> WxppOutMsgNewsL [ return (Right x) ] ) <$> parse_indirect1)
         <|> parse_indirect2
     where
-        parse_indirect1 = mkDelayedYamlLoader . setExtIfNotExist "yml" . fromText <$> obj .: "article-file"
-        parse_indirect2 = mkDelayedYamlLoader . setExtIfNotExist "yml" . fromText <$> obj .: "file"
+        parse_indirect1 = mkDelayedYamlLoader . setExtIfNotExist "yml" . T.unpack <$> obj .: "article-file"
+        parse_indirect2 = mkDelayedYamlLoader . setExtIfNotExist "yml" . T.unpack <$> obj .: "file"
         parse_direct    = return . Right <$> obj .: "msg"
 
 
@@ -396,7 +396,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
                                     wxppCacheGetAccessToken cache app_id)
                                 >>= maybe (throwE $ "no access token available") (return . fst)
-                let fp = setExtIfNotExist "yml" $ fromText fp'
+                let fp = setExtIfNotExist "yml" $ T.unpack fp'
                 outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg
@@ -423,17 +423,19 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     where
 
     processInMsg (WxppInMsgSendAsRequested app_id msg_dirs magic_word) cache _bs m_ime = runExceptT $ do
-        let m_fp = do
-                in_msg <- fmap wxppInMessage m_ime
+        m_fp <- runMaybeT $ do
+                in_msg <- MaybeT $ return $ fmap wxppInMessage m_ime
                 case in_msg of
                     WxppInMsgText content -> do
-                        fp <- fromText . T.strip <$> T.stripPrefix (magic_word <> " ") content
+                        fp <- MaybeT $ return $
+                                T.unpack . T.strip <$> T.stripPrefix (magic_word <> " ") content
                         let msg_dir = LNE.head msg_dirs
-                        fp2 <- FP.stripPrefix msg_dir (FP.collapse (msg_dir </> fp))
-                        guard $ fp /= fp2
+                        fp' <- liftIO $ canonicalizePath (msg_dir </> fp)
+                        msg_dir' <- liftIO $ canonicalizePath msg_dir
+                        guard $ splitDirectories msg_dir' `isPrefixOf` splitDirectories fp'
                         return fp
 
-                    _ -> Nothing
+                    _ -> mzero
 
         case m_fp of
             Nothing -> return []
@@ -713,12 +715,12 @@ newtype ArtcileToKeywordsMap = ArtcileToKeywordsMap { unArtcileToKeywordsMap :: 
 instance FromJSON ArtcileToKeywordsMap where
     parseJSON = withObject "ArtcileToKeywordsMap" $
         \obj -> fmap ArtcileToKeywordsMap $ do
-                base_dir <- fromText <$> obj .:? "base" .!= "."
+                base_dir <- T.unpack <$> obj .:? "base" .!= "."
                 pairs <- obj .: "articles" >>= parseArray "[artcile-info]" parse_item
                 return $ Map.fromList $ map (\(x, y) -> (base_dir </> x, y)) pairs
             where
                 parse_item = withObject "article-info" $ \o -> do
-                    (,) <$> (fromText <$> o .: "file")
+                    (,) <$> (T.unpack <$> o .: "file")
                         <*> (o .: "keywords")
 
 instance JsonConfigable WxppMatchedKeywordArticles where
@@ -729,7 +731,7 @@ instance JsonConfigable WxppMatchedKeywordArticles where
 
     parseWithExtraData _ msg_dirs obj = WxppMatchedKeywordArticles msg_dirs
                                     <$> ( obj .:? "primary" .!= False )
-                                    <*> ( fromText <$> obj .: "map-file" )
+                                    <*> ( T.unpack <$> obj .: "map-file" )
 
 type instance WxppInMsgProcessResult WxppMatchedKeywordArticles = WxppInMsgHandlerResult
 

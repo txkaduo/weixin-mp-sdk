@@ -1,17 +1,18 @@
 module  WeiXin.PublicPlatform.Utils where
 
-import ClassyPrelude hiding (FilePath, (<.>), (</>))
+import ClassyPrelude
 import qualified Data.QRCode                as QR   -- haskell-qrencode
 import qualified Data.ByteString.Lazy       as LB
 import qualified Codec.Picture              as P -- from `JuicyPixel' package
 import qualified Codec.Picture.Saving       as P -- from `JuicyPixel' package
+import qualified Data.Text                  as T
 
 import Data.Array                           (bounds,(!), array)
 import Data.List                            ((!!))
 import Data.Time                            (NominalDiffTime)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
-import Filesystem.Path.CurrentOS            (encodeString, fromText, extension, FilePath, (<.>), (</>))
+import System.FilePath                      (hasExtension)
 import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, decodeFileEither, prettyPrintParseException)
@@ -46,9 +47,11 @@ type DelayedYamlLoader a = ReaderT
                                 (Either YamlFileParseException a)
 
 
-setExtIfNotExist :: Text -> FilePath -> FilePath
+setExtIfNotExist :: String -> FilePath -> FilePath
 setExtIfNotExist def_ext fp =
-    maybe (fp <.> def_ext) (const fp) $ extension fp
+    if hasExtension fp
+       then fp
+       else fp <.> def_ext
 
 -- | 从一个字典对象中解释出某种值
 -- 这个字典里约定两个字段
@@ -67,7 +70,7 @@ parseDelayedYamlLoader m_direct_field indirect_field obj =
         Just direct_field ->
             (return . Right <$> obj .: direct_field) <|> parse_indirect
     where
-        parse_indirect = mkDelayedYamlLoader . setExtIfNotExist "yml" . fromText <$> obj .: indirect_field
+        parse_indirect = mkDelayedYamlLoader . setExtIfNotExist "yml" . T.unpack <$> obj .: indirect_field
 
 mkDelayedYamlLoader :: FromJSON a => FilePath -> DelayedYamlLoader a
 mkDelayedYamlLoader fp = do
@@ -75,7 +78,7 @@ mkDelayedYamlLoader fp = do
     liftIO $ do
         -- 运行时，如果全部都有 IOError，抛出第一个非 DoesNotExistError
         let try_dir bp = do
-                let full_path = encodeString $ bp </> fp
+                let full_path = bp </> fp
                 ioerr_or_v <- tryIOError $ decodeFileEither full_path
                 return $ flip fmap ioerr_or_v $ \err_or_x ->
                     case err_or_x of

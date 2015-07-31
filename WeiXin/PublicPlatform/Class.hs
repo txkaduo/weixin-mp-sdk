@@ -3,8 +3,7 @@ module WeiXin.PublicPlatform.Class
     , module WeiXin.PublicPlatform.Types
     ) where
 
-import ClassyPrelude hiding (FilePath, (<.>), (</>), try)
-import Filesystem.Path.CurrentOS            (FilePath)
+import ClassyPrelude
 
 import WeiXin.PublicPlatform.Types
 import Data.List.NonEmpty                   as LNE

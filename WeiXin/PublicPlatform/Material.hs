@@ -4,12 +4,11 @@ module WeiXin.PublicPlatform.Material
     , module WeiXin.PublicPlatform.Types
     ) where
 
-import ClassyPrelude hiding (catch, FilePath, (<.>), (</>))
+import ClassyPrelude hiding (catch)
 import Network.Wreq
 import Control.Lens hiding ((.=))
 import Data.Aeson
 import Control.Monad.Logger
-import Filesystem.Path.CurrentOS            (encodeString, FilePath)
 -- import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch)
@@ -70,7 +69,7 @@ wxppUploadDurableMediaInternal ::
 wxppUploadDurableMediaInternal atk mtype m_title_intro fp = do
     wxppUploadDurableMediaInternalLBS atk mtype
         m_title_intro
-        (partFileSource "media" $ encodeString fp)
+        (partFileSource "media" fp)
 
 
 -- | 上传本地一个媒体文件，成为永久素材
@@ -123,7 +122,7 @@ wxppUploadDurableMediaVideoLBS ::
     -> m DurableUploadResult
 wxppUploadDurableMediaVideoLBS atk title intro fp lbs = do
     wxppUploadDurableMediaInternalLBS atk WxppMediaTypeVideo (Just (title, intro))
-        (partLBS "media" lbs & partFileName .~ Just (encodeString fp))
+        (partLBS "media" lbs & partFileName .~ Just fp)
 
 
 -- | 上传本地非视频媒体成为永久素材
@@ -157,7 +156,7 @@ wxppUploadDurableMediaNonVideoLBS atk mtype fp lbs = do
                 "wxppUploadDurableMediaNonVideo cannot be used to upload video."
         _   -> return ()
     wxppUploadDurableMediaInternalLBS atk mtype Nothing
-        (partLBS "media" lbs & partFileName .~ Just (encodeString fp))
+        (partLBS "media" lbs & partFileName .~ Just fp)
 
 
 -- | 上传一个图文素材成为永久素材

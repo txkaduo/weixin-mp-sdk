@@ -7,7 +7,7 @@ module WeiXin.PublicPlatform.Types
     , UrlText(..)
     ) where
 
-import ClassyPrelude hiding (FilePath, (<.>), (</>), try)
+import ClassyPrelude hiding (try)
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
@@ -21,7 +21,6 @@ import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
 import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
-import Filesystem.Path.CurrentOS            (encodeString, fromText, FilePath)
 import qualified Crypto.Hash.MD5            as MD5
 import qualified Crypto.Hash.SHA256         as SHA256
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
@@ -386,7 +385,7 @@ instance FromJSON WxppAppConfig where
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     app_token <- fmap Token $ obj .: "token"
-                    data_dirs <- map fromText <$> obj .: "data-dirs"
+                    data_dirs <- map T.unpack <$> obj .: "data-dirs"
                     data_dirs' <- case nonEmpty data_dirs of
                                     Nothing -> fail "data-dirs must not be empty"
                                     Just x -> return x
@@ -815,16 +814,16 @@ instance FromJSON WxppOutMsgL where
                     type_s <- obj .:? "type" .!= "text"
                     case type_s of
                         "text" -> WxppOutMsgTextL <$> obj .: "text"
-                        "image" -> WxppOutMsgImageL . fromText <$> obj .: "path"
-                        "voice" -> WxppOutMsgVoiceL . fromText <$> obj .: "path"
+                        "image" -> WxppOutMsgImageL . T.unpack <$> obj .: "path"
+                        "voice" -> WxppOutMsgVoiceL . T.unpack <$> obj .: "path"
                         "video" -> do
-                                    path <- fromText <$> obj .: "path"
-                                    path2 <- fmap fromText <$> obj .:? "thumb-image"
+                                    path <- T.unpack <$> obj .: "path"
+                                    path2 <- fmap T.unpack <$> obj .:? "thumb-image"
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
                                     return $ WxppOutMsgVideoL path path2 title desc
                         "music" -> do
-                                    path <- fromText <$> obj .: "thumb-image"
+                                    path <- T.unpack <$> obj .: "thumb-image"
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
                                     url <- fmap UrlText <$> obj .:? "url"
@@ -1251,7 +1250,7 @@ wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
 
 md5HashFile :: FilePath -> IO MD5Hash
-md5HashFile = fmap md5HashLBS . LB.readFile . encodeString
+md5HashFile = fmap md5HashLBS . LB.readFile
 
 md5HashLBS :: LB.ByteString -> MD5Hash
 md5HashLBS = MD5Hash . MD5.hashlazy
@@ -1260,7 +1259,7 @@ md5HashBS :: ByteString -> MD5Hash
 md5HashBS = MD5Hash . MD5.hash
 
 sha256HashFile :: FilePath -> IO SHA256Hash
-sha256HashFile = fmap sha256HashLBS . LB.readFile . encodeString
+sha256HashFile = fmap sha256HashLBS . LB.readFile
 
 sha256HashLBS :: LB.ByteString -> SHA256Hash
 sha256HashLBS = SHA256Hash . SHA256.hashlazy

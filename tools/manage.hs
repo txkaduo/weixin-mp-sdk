@@ -1,6 +1,6 @@
 module Main where
 
-import ClassyPrelude hiding ((<>), FilePath, (</>), (<.>))
+import ClassyPrelude hiding ((<>))
 import Control.Monad.Logger
 import Options.Applicative
 import Data.Aeson
@@ -10,7 +10,6 @@ import qualified Data.Yaml                  as Y
 import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import qualified Data.Map.Lazy              as LM
-import Filesystem.Path.CurrentOS            (FilePath, fromText)
 import Network.Mime                         (defaultMimeMap, MimeType)
 import System.IO                            (hFlush, openTempFile, readLn, hSeek, SeekMode(..))
 import System.Directory                     (getTemporaryDirectory, removeFile)
@@ -222,7 +221,7 @@ start = do
 
         LoadMenu fp -> do
             atk <- get_atk
-            result <- wxppCreateMenuWithYaml atk (fromText "." :| []) fp
+            result <- wxppCreateMenuWithYaml atk ("." :| []) fp
             case result of
                 Left err -> do
                     $logError $ fromString $

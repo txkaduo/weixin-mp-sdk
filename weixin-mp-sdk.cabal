@@ -109,13 +109,13 @@ library
                      , conduit-combinators
                      , scientific
                      , yaml >= 0.8.11
-                     , system-filepath
+                     , filepath
                      , cryptohash
                      , containers
                      , resourcet
                      , regex-tdfa
                      , unordered-containers
-                     , fsnotify
+                     , fsnotify >= 0.2
                      , directory
                      , monad-control
                      , http-types
@@ -159,7 +159,7 @@ executable wxpp-manage
                      , text
                      , containers
                      , conduit
-                     , system-filepath
+                     , filepath
                      , directory
                      , process
                      , semigroups

@@ -2,13 +2,13 @@
 {-#LANGUAGE FlexibleContexts #-}
 module WeiXin.PublicPlatform.Menu where
 
-import ClassyPrelude hiding (FilePath, (</>), (<.>))
+import ClassyPrelude
 import Network.Wreq
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Data.Aeson
 import Control.Monad.Trans.Except
-import Filesystem.Path.CurrentOS            (encodeString, toText, FilePath, directory, collapse, (</>))
+import System.FilePath                      (takeDirectory, normalise)
 import qualified System.FSNotify            as FN
 import Control.Monad.Trans.Control
 import System.Directory                     (doesFileExist)
@@ -141,8 +141,8 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
                                 predi) handle_evt
         liftIO $ block_until_exit >> sequence stops >> return ()
     where
-        dirs = fmap directory fp
-        fp' = fmap collapse fp
+        dirs = fmap takeDirectory fp
+        fp' = fmap normalise fp
         fp = fmap (</> fname) data_dirs
 
         watch_cfg = FN.defaultConfig
@@ -155,11 +155,11 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
             -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
             -- 干脆不理会 event 的类型，直接检查文件是否存在
             let evt_fp = FN.eventPath evt
-            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist (encodeString evt_fp)
+            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
             if not exists
                 then do
                     $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
-                                                <> (either id id $ toText (FN.eventPath evt))
+                                                <> (fromString $ FN.eventPath evt)
                     -- 如果打算停用菜单，可直接将配置文件清空
                 else do
                     load

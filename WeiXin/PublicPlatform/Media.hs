@@ -4,12 +4,11 @@ module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Class
     ) where
 
-import ClassyPrelude hiding (FilePath, (<.>), (</>), catch)
+import ClassyPrelude hiding (catch)
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
 import Network.Mime                         (MimeType)
-import Filesystem.Path.CurrentOS            (encodeString, FilePath)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
@@ -70,7 +69,7 @@ wxppUploadMedia ::
     -> FilePath
     -> m UploadResult
 wxppUploadMedia atk mtype fp = do
-    wxppUploadMediaInternal atk mtype $ partFileSource "media" $ encodeString fp
+    wxppUploadMediaInternal atk mtype $ partFileSource "media" fp
 
 -- | 上传已在内存中的 ByteString
 wxppUploadMediaBS ::

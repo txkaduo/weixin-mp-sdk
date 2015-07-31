@@ -3,14 +3,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Misc where
 
-import ClassyPrelude hiding (try, FilePath, (<.>), (</>))
+import ClassyPrelude hiding (try)
 import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
 import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
-import Filesystem.Path.CurrentOS            (fromText)
 import Control.Concurrent                   (threadDelay)
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
@@ -123,7 +122,7 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                     readWxppInMsgHandlers
                         protos
                         data_dirs
-                        (fromText "msg-handlers.yml")
+                        (T.unpack "msg-handlers.yml")
 
             m_last_handlers_ref <- liftIO $ get_last_handlers_ref
             m_in_msg_handlers <- case err_or_in_msg_handlers of
