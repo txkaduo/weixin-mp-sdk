@@ -44,11 +44,18 @@ instance ToJSON WxppDurableArticleS where
                 ("url" .= unUrlText (wxppDurableArticleSUrl x))
                     : wppDurableArticleToJsonPairs (wxppDurableArticleSA x)
 
-newtype DurableUploadResult = DurableUploadResult WxppDurableMediaID
+data DurableUploadResult = DurableUploadResult {
+                                durableUploadResultMediaID  :: WxppDurableMediaID
+                                , durableUploadResultUrl    :: Maybe UrlText
+                                    -- ^ 只有图片素材才会返回 url，但这url只能用于腾讯系的应用
+                                    -- （不知道是何时更新的功能）
+                                }
 
 instance FromJSON DurableUploadResult where
     parseJSON = withObject "DurableUploadResult" $ \obj ->
-                    DurableUploadResult <$> obj .: "media_id"
+                    DurableUploadResult
+                        <$> obj .: "media_id"
+                        <*> (fmap UrlText <$> obj .:? "url")
 
 
 -- | 上传本地一个媒体文件，成为永久素材
