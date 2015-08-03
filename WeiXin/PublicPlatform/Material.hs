@@ -15,7 +15,7 @@ import Control.Monad.Catch                  (catch)
 -- import Data.Yaml                            (ParseException)
 import Data.Conduit
 import qualified Data.Conduit.List          as CL
-import Data.Conduit.Combinators hiding (null)
+-- import Data.Conduit.Combinators hiding (null)
 
 import WeiXin.PublicPlatform.Types
 -- import WeiXin.PublicPlatform.Acid
