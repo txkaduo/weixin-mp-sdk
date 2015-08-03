@@ -68,8 +68,9 @@ newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
                         deriving (Show, Eq, Ord)
 
 instance SafeCopy WxppBriefMediaID where
-    getCopy                         = contain $ safeGet
+    getCopy                         = contain $ WxppBriefMediaID <$> safeGet
     putCopy (WxppBriefMediaID x)    = contain $ safePut x
+    errorTypeName _                 = "WxppBriefMediaID"
 
 instance PersistField WxppBriefMediaID where
     toPersistValue      = toPersistValue . unWxppBriefMediaID
@@ -91,8 +92,9 @@ newtype WxppDurableMediaID = WxppDurableMediaID { unWxppDurableMediaID :: Text }
                         deriving (Show, Eq, Ord)
 
 instance SafeCopy WxppDurableMediaID where
-    getCopy                         = contain $ safeGet
+    getCopy                         = contain $ WxppDurableMediaID <$> safeGet
     putCopy (WxppDurableMediaID x)  = contain $ safePut x
+    errorTypeName _                 = "WxppDurableMediaID"
 
 instance PersistField WxppDurableMediaID where
     toPersistValue      = toPersistValue . unWxppDurableMediaID
@@ -131,6 +133,7 @@ newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
 instance SafeCopy WxppOpenID where
     getCopy                 = contain $ WxppOpenID <$> safeGet
     putCopy (WxppOpenID x)  = contain $ safePut x
+    errorTypeName _         = "WxppOpenID"
 
 instance PersistField WxppOpenID where
     toPersistValue      = toPersistValue . unWxppOpenID
@@ -161,6 +164,7 @@ instance ToJSON WxppUnionID where
 instance SafeCopy WxppUnionID where
     getCopy                 = contain $ WxppUnionID <$> safeGet
     putCopy (WxppUnionID x) = contain $ safePut x
+    errorTypeName _         = "WxppUnionID"
 
 instance PersistField WxppUnionID where
     toPersistValue      = toPersistValue . unWxppUnionID
@@ -320,6 +324,7 @@ newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
 instance SafeCopy WxppAppID where
     getCopy                 = contain $ WxppAppID <$> safeGet
     putCopy (WxppAppID x)   = contain $ safePut x
+    errorTypeName _         = "WxppAppID"
 
 instance PersistField WxppAppID where
     toPersistValue      = toPersistValue . unWxppAppID
@@ -1044,6 +1049,7 @@ data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
 instance SafeCopy SimpleLocaleName where
     getCopy                         = contain $ SimpleLocaleName <$> safeGet
     putCopy (SimpleLocaleName x)    = contain $ safePut x
+    errorTypeName _                 = "SimpleLocaleName"
 
 instance PersistField SimpleLocaleName where
     toPersistValue      = toPersistValue . unSimpleLocaleName
@@ -1169,8 +1175,9 @@ newtype MD5Hash = MD5Hash { unMD5Hash :: ByteString }
                 deriving (Show, Eq, Ord)
 
 instance SafeCopy MD5Hash where
-    getCopy             = contain $ safeGet
+    getCopy             = contain $ MD5Hash <$> safeGet
     putCopy (MD5Hash x) = contain $ safePut x
+    errorTypeName _     = "MD5Hash"
 
 instance PersistField MD5Hash where
     toPersistValue      = toPersistValue . unMD5Hash
@@ -1189,8 +1196,9 @@ newtype SHA256Hash = SHA256Hash { unSHA256Hash :: ByteString }
                 deriving (Show, Eq, Ord)
 
 instance SafeCopy SHA256Hash where
-    getCopy             = contain $ safeGet
+    getCopy             = contain $ SHA256Hash <$> safeGet
     putCopy (SHA256Hash x) = contain $ safePut x
+    errorTypeName _     = "SHA256Hash"
 
 instance PersistField SHA256Hash where
     toPersistValue      = toPersistValue . unSHA256Hash
