@@ -14,6 +14,7 @@ import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch)
 -- import Data.Yaml                            (ParseException)
 import Data.Conduit
+import qualified Data.Conduit.List          as CL
 import Data.Conduit.Combinators hiding (null)
 
 import WeiXin.PublicPlatform.Types
@@ -345,13 +346,13 @@ wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' =
         offset = max 1 $ offset'
 
 -- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
-wxppBatchGetDurableToSrc ::
+wxppBatchGetDurableToSrc' ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
     (Int
         -> m (WxppBatchGetDurableResult a)
     )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
-    -> Source m a
-wxppBatchGetDurableToSrc get_by_offset = go 0
+    -> Source m (WxppBatchGetDurableResult a)
+wxppBatchGetDurableToSrc' get_by_offset = go 0
     where
         go offset = do
             result <- lift $ get_by_offset offset
@@ -359,10 +360,16 @@ wxppBatchGetDurableToSrc get_by_offset = go 0
             if null items
                 then return ()
                 else do
-                    yieldMany items
-                    let batch_count = wxppBatchGetDurableResultCount result
-                    go $ offset + batch_count
+                    yield result
 
+wxppBatchGetDurableToSrc ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    (Int
+        -> m (WxppBatchGetDurableResult a)
+    )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
+    -> Source m a
+wxppBatchGetDurableToSrc get_by_offset =
+    wxppBatchGetDurableToSrc' get_by_offset =$ CL.concatMap wxppBatchGetDurableResultItems
 
 -- | 修改一个图文类型的永久素材: 只能修改其中一个文章
 wxppReplaceArticleOfDurableNews ::
