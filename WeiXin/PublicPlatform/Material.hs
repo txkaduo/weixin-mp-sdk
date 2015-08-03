@@ -264,6 +264,7 @@ instance FromJSON a => FromJSON (WxppBatchGetDurableResult a) where
 data WxppBatchGetDurableMediaItem = WxppBatchGetDurableMediaItem {
                                         wxppBatchGetDurableMediaItemID     :: WxppDurableMediaID
                                         , wxppBatchGetDurableMediaItemName :: Text
+                                        , wxppBatchGetDurableMediaItemUrl  :: Maybe UrlText
                                         , wxppBatchGetDurableMediaItemTime :: UTCTime
                                     }
 
@@ -272,6 +273,7 @@ instance FromJSON WxppBatchGetDurableMediaItem where
                     WxppBatchGetDurableMediaItem
                         <$> ( obj .: "media_id" )
                         <*> ( obj .: "name")
+                        <*> (fmap UrlText <$> obj .:? "url")
                         <*> ( epochIntToUtcTime <$> obj .: "update_time")
 
 instance ToJSON WxppBatchGetDurableMediaItem where
