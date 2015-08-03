@@ -225,7 +225,7 @@ wxppBatchGetDurableMedia (AccessToken { accessTokenData = atk }) mtype limit' of
             >>= asWxppWsResponseNormal'
     where
         limit = max 1 $ min 20 $ limit'
-        offset = max 1 $ offset'
+        offset = max 0 $ offset'
 
 
 -- | 批量取图文类型的永久素材，返回报文中的项目
@@ -268,7 +268,7 @@ wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' =
             >>= asWxppWsResponseNormal'
     where
         limit = max 1 $ min 20 $ limit'
-        offset = max 1 $ offset'
+        offset = max 0 $ offset'
 
 -- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
 wxppBatchGetDurableToSrc ::
