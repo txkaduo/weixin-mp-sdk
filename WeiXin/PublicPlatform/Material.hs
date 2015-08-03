@@ -9,6 +9,7 @@ import Network.Wreq
 import Control.Lens hiding ((.=))
 import Data.Aeson
 import Control.Monad.Logger
+import Data.SafeCopy
 -- import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch)
@@ -31,6 +32,7 @@ data WxppDurableArticleS = WxppDurableArticleS {
                                 }
                             deriving (Eq)
 
+$(deriveSafeCopy 0 'base ''WxppDurableArticleS)
 
 instance FromJSON WxppDurableArticleS where
     parseJSON = withObject "WxppDurableArticleS" $ \o -> do
@@ -312,6 +314,8 @@ data WxppBatchGetDurableNewsItem = WxppBatchGetDurableNewsItem {
                                         , wxppBatchGetDurableNewsItemTime      :: UTCTime
                                     }
                                     deriving (Eq)
+
+$(deriveSafeCopy 0 'base ''WxppBatchGetDurableNewsItem)
 
 instance FromJSON WxppBatchGetDurableNewsItem where
     parseJSON = withObject "WxppBatchGetDurableNewsItem" $ \obj -> do

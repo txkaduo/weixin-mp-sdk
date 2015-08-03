@@ -856,6 +856,8 @@ data WxppDurableArticle = WxppDurableArticle {
                             }
                             deriving (Eq)
 
+$(deriveSafeCopy 0 'base ''WxppDurableArticle)
+
 instance FromJSON WxppDurableArticle where
     parseJSON = withObject "WxppDurableArticle" $ \obj -> do
                     WxppDurableArticle
