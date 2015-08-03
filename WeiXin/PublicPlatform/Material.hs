@@ -361,6 +361,8 @@ wxppBatchGetDurableToSrc' get_by_offset = go 0
                 then return ()
                 else do
                     yield result
+                    let batch_count = wxppBatchGetDurableResultCount result
+                    go $ offset + batch_count
 
 wxppBatchGetDurableToSrc ::
     ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
