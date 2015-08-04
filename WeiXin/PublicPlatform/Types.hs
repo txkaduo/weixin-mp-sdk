@@ -89,7 +89,7 @@ instance FromJSON WxppBriefMediaID where
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
 -- 虽然文档叫这种值 media id，但接口用的词是 material
 newtype WxppDurableMediaID = WxppDurableMediaID { unWxppDurableMediaID :: Text }
-                        deriving (Show, Eq, Ord)
+                        deriving (Show, Eq, Ord, Read)
 
 instance SafeCopy WxppDurableMediaID where
     getCopy                         = contain $ WxppDurableMediaID <$> safeGet
@@ -109,6 +109,9 @@ instance ToJSON WxppDurableMediaID where
 instance FromJSON WxppDurableMediaID where
     parseJSON = fmap WxppDurableMediaID . parseJSON
 
+instance PathPiece WxppDurableMediaID where
+    fromPathPiece = fmap WxppDurableMediaID . fromPathPiece
+    toPathPiece = toPathPiece . unWxppDurableMediaID
 
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
