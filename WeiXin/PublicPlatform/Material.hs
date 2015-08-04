@@ -270,6 +270,8 @@ data WxppBatchGetDurableMediaItem = WxppBatchGetDurableMediaItem {
                                         , wxppBatchGetDurableMediaItemTime :: UTCTime
                                     }
 
+$(deriveSafeCopy 0 'base ''WxppBatchGetDurableMediaItem)
+
 instance FromJSON WxppBatchGetDurableMediaItem where
     parseJSON = withObject "WxppBatchGetDurableMediaItem" $ \obj -> do
                     WxppBatchGetDurableMediaItem
