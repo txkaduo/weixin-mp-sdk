@@ -21,6 +21,7 @@ import qualified Data.Conduit.List          as CL
 import WeiXin.PublicPlatform.Types
 -- import WeiXin.PublicPlatform.Acid
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Utils
 
 -- | 查询永久素材中的图文消息中的文章，出现在从服务器返回的数据中
@@ -211,6 +212,19 @@ wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID 
                         (r ^. responseBody)
             )
 
+wxppGetDurableMediaMaybe ::
+    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
+    AccessToken
+    -> WxppDurableMediaID
+    -> m (Maybe WxppGetDurableResult)
+wxppGetDurableMediaMaybe atk mid = do
+    (liftM Just $ wxppGetDurableMedia atk mid)
+        `catch` \e -> do
+            case e of
+                WxppAppError xerr _
+                    | wxppToErrorCodeX xerr == wxppToErrorCode WxppInvalidMediaId
+                        -> return Nothing
+                _ -> throwM e
 
 -- | 永久素材统计数
 data WxppDurableCount = WxppDurableCount {
