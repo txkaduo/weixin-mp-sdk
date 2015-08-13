@@ -52,7 +52,7 @@ parseMultWxppAppConfig obj = do
                 else return Nothing
 
 
-type LoInMsgHandlerList = [SomeWxppInMsgHandler (LoggingT IO)]
+type LoInMsgHandlerList = [SomeWxppInMsgHandler WxppHandlerMonad]
 
 -- | 用于生成 yesod 的 subsite 类型的辅助工具
 -- 它就是为了辅助制造一个 App -> WxppAppID -> MaybeWxppSub 这样的函数
@@ -66,9 +66,9 @@ mkMaybeWxppSub ::
     -> c
     -> Maybe (IORef (Maybe LoInMsgHandlerList))
     -> Map WxppAppID WxppAppConfig
-    -> [WxppInMsgHandlerPrototype (LoggingT IO)]
+    -> [WxppInMsgHandlerPrototype WxppHandlerMonad]
     -> ([(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> [SomeWxppInMsgProcMiddleware (LoggingT IO)]
+    -> [SomeWxppInMsgProcMiddleware WxppHandlerMonad]
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
@@ -97,9 +97,9 @@ mkMaybeWxppSub' ::
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
     -> IO (Maybe WxppAppConfig)
             -- ^ 根据 app id 找到相应配置的函数
-    -> IO [WxppInMsgHandlerPrototype (LoggingT IO)]
+    -> IO [WxppInMsgHandlerPrototype WxppHandlerMonad]
     -> ([(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> [SomeWxppInMsgProcMiddleware (LoggingT IO)]
+    -> [SomeWxppInMsgProcMiddleware WxppHandlerMonad]
     -> WxppSubsiteOpts
     -> MaybeWxppSub
 mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts =

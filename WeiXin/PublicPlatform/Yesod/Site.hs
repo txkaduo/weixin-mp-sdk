@@ -25,6 +25,7 @@ import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             )
 import Yesod.Helpers.Logger
 import Control.Monad.Logger
+import Control.Monad.Trans.Resource
 
 import Network.Wai                          (lazyRequestBody)
 import Text.XML                             (renderText, parseLBS)
@@ -137,7 +138,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                         return Nothing
                     Right x -> return $ Just x
 
-        pre_result <- liftIO $ wxppSubRunLoggingT foundation $
+        pre_result <- liftIO $ wxppSubRunLoggingT foundation $ runResourceT $
                         preProcessInMsgByMiddlewares
                             (wxppSubMsgMiddlewares foundation)
                             (wxppSubCacheBackend foundation)
@@ -150,7 +151,8 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
             Just (decrypted_xml, m_ime) -> do
                 let handle_msg      = wxppSubMsgHandler foundation
                 out_res <- ExceptT $
-                        (try $ liftIO $ wxppSubRunLoggingT foundation $ handle_msg decrypted_xml m_ime)
+                        (try $ liftIO $ wxppSubRunLoggingT foundation $ runResourceT $
+                                        handle_msg decrypted_xml m_ime)
                             >>= return
                                     . either
                                         (Left . (show :: SomeException -> String))

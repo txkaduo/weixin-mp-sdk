@@ -9,6 +9,7 @@ import ClassyPrelude
 import Yesod
 import Database.Persist.Quasi
 import Control.Monad.Logger
+import Control.Monad.Trans.Resource
 import Network.Wai                          (Request)
 import Data.Bits                            ((.&.))
 import Network.Socket                       (SockAddr(..))
@@ -83,6 +84,8 @@ instance FromJSON WxppSubsiteOpts where
                              _ -> fail $ "unknown auth-mode: " ++ mode
 
 
+type WxppHandlerMonad = ResourceT (LoggingT IO)
+
 -- | 为每个运行的 App 对应一个 subsite
 data WxppSub =
         WxppSub {
@@ -98,8 +101,8 @@ data WxppSub =
                     -- ^ execute any DB actions
                 , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
                     -- ^ a computation to send outgoing messages
-                , wxppSubMsgHandler     :: WxppInMsgHandler (LoggingT IO)
-                , wxppSubMsgMiddlewares :: [SomeWxppInMsgProcMiddleware (LoggingT IO)]
+                , wxppSubMsgHandler     :: WxppInMsgHandler WxppHandlerMonad
+                , wxppSubMsgMiddlewares :: [SomeWxppInMsgProcMiddleware WxppHandlerMonad]
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 }
