@@ -13,6 +13,7 @@ data WxppError = WxppServerBusy
                 | WxppInvalidTokenType
                 | WxppInvalidOpenID
                 | WxppInvalidMediaFileType
+                | WxppInvalidMediaId
                 | WxppInvalidAppID
                 | WxppSubscriberRequired
                 | WxppApiCallQuotaExceeded
@@ -27,6 +28,7 @@ wxppToErrorCode WxppInvalidAppSecret        = 40001
 wxppToErrorCode WxppInvalidTokenType        = 40002
 wxppToErrorCode WxppInvalidOpenID           = 40003
 wxppToErrorCode WxppInvalidMediaFileType    = 40004
+wxppToErrorCode WxppInvalidMediaId          = 40007
 wxppToErrorCode WxppInvalidAppID            = 40013
 wxppToErrorCode WxppInvalidAccessToken      = 40014
 wxppToErrorCode WxppSubscriberRequired      = 43005
