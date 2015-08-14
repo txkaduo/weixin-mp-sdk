@@ -3,7 +3,9 @@
 module WeiXin.PublicPlatform.Propagate
     ( wxppPropagateUploadNews
     , WxppPropagateArticle(..)
+    , wxppDurableToPropagateArticle
     , WxppPropagateNews(..)
+    , wxppDurableToPropagateNews
     , PropagateMsgID(..)
     , WxppPropagateMsg(..)
     , WxppPropagateVideoMediaID(..)
@@ -29,7 +31,6 @@ import WeiXin.PublicPlatform.Utils
 
 -- | 准备群发的图文素材结构中的一个文章
 -- 这个结构基本上与 WxppDurableArticle 一样，区别是
--- - content_source_url 这里是可选的
 -- - media id 换成了 WxppMediaID
 data WxppPropagateArticle = WxppPropagateArticle {
                                 wxppPropagateArticleTitle            :: Text
@@ -41,6 +42,16 @@ data WxppPropagateArticle = WxppPropagateArticle {
                                 , wxppPropagateArticleContentSrcUrl  :: Maybe UrlText
                             }
                             deriving (Eq)
+
+wxppDurableToPropagateArticle :: WxppDurableArticle -> WxppPropagateArticle
+wxppDurableToPropagateArticle x = WxppPropagateArticle
+                                    (wxppDurableArticleTitle x)
+                                    (fromWxppDurableMediaID $ wxppDurableArticleThumb x)
+                                    (wxppDurableArticleAuthor x)
+                                    (wxppDurableArticleDigest x)
+                                    (wxppDurableArticleShowCoverPic x)
+                                    (wxppDurableArticleContent x)
+                                    (wxppDurableArticleContentSrcUrl x)
 
 instance FromJSON WxppPropagateArticle where
     parseJSON = withObject "WxppPropagateArticle" $ \obj -> do
@@ -71,6 +82,10 @@ instance ToJSON WxppPropagateArticle where
 
 -- | 可以群发的图文消息
 newtype WxppPropagateNews = WxppPropagateNews [WxppPropagateArticle]
+
+wxppDurableToPropagateNews :: WxppDurableNews -> WxppPropagateNews
+wxppDurableToPropagateNews (WxppDurableNews articles) =
+                        WxppPropagateNews $ map wxppDurableToPropagateArticle articles
 
 instance FromJSON WxppPropagateNews where
     parseJSON = withObject "WxppPropagateNews" $ \obj -> do
