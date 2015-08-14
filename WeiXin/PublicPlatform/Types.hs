@@ -865,7 +865,7 @@ data WxppDurableArticle = WxppDurableArticle {
                                 , wxppDurableArticleContent        :: Text
                                 , wxppDurableArticleContentSrcUrl  :: Maybe UrlText
                             }
-                            deriving (Eq)
+                            deriving (Eq, Ord)
 
 $(deriveSafeCopy 0 'base ''WxppDurableArticle)
 
@@ -903,6 +903,7 @@ wppDurableArticleToJsonPairs x =
 
 -- | 永久图文素材结构
 newtype WxppDurableNews = WxppDurableNews [WxppDurableArticle]
+                        deriving (Eq, Ord)
 
 instance FromJSON WxppDurableNews where
     parseJSON = withObject "WxppDurableNews" $ \obj -> do
