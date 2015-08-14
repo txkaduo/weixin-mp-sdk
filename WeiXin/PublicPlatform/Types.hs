@@ -31,6 +31,7 @@ import Text.Read                            (Read(..))
 import Data.Proxy                           (Proxy(..))
 
 import Yesod.Helpers.Aeson                  (parseArray)
+import Yesod.Helpers.Utils                  (emptyTextToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
                                             , derivePersistFieldS, makeSimpleParserByTable
@@ -860,7 +861,7 @@ data WxppDurableArticle = WxppDurableArticle {
                                 , wxppDurableArticleDigest         :: Maybe Text
                                 , wxppDurableArticleShowCoverPic   :: Bool
                                 , wxppDurableArticleContent        :: Text
-                                , wxppDurableArticleContentSrcUrl  :: UrlText
+                                , wxppDurableArticleContentSrcUrl  :: Maybe UrlText
                             }
                             deriving (Eq)
 
@@ -871,11 +872,11 @@ instance FromJSON WxppDurableArticle where
                     WxppDurableArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
-                        <*> ( obj .:? "author" )
-                        <*> ( obj .:? "digest" )
+                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
+                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
                         <*> ( int_to_bool <$> obj .: "show_cover_pic" )
                         <*> ( obj .: "content" )
-                        <*> ( UrlText <$> obj .: "content_source_url" )
+                        <*> ( fmap UrlText . join . fmap emptyTextToNothing <$> obj .: "content_source_url" )
             where
                 int_to_bool x = (x :: Int) /= 0
 
@@ -892,7 +893,7 @@ wppDurableArticleToJsonPairs x =
                         , "digest"          .= (fromMaybe "" $ wxppDurableArticleDigest x)
                         , "show_cover_pic"  .= bool_to_int (wxppDurableArticleShowCoverPic x)
                         , "content"         .= wxppDurableArticleContent x
-                        , "content_source_url" .= unUrlText (wxppDurableArticleContentSrcUrl x)
+                        , "content_source_url" .= (fromMaybe "" $ fmap unUrlText $ wxppDurableArticleContentSrcUrl x)
                         ]
             where
                 bool_to_int b = if b then 1 :: Int else 0
