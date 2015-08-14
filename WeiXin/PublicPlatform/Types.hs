@@ -640,7 +640,7 @@ instance FromJSON WxppInMsg where
         "voice" -> liftM3 WxppInMsgVoice
                     (obj .: "media_id")
                     (obj .: "format")
-                    (obj .:? "recognition")
+                    (join . fmap emptyTextToNothing <$> obj .:? "recognition")
 
         "video" -> liftM2 WxppInMsgVideo
                     (obj .: "media_id")
@@ -714,10 +714,10 @@ type WxppArticleLoader = DelayedYamlLoader WxppArticle
 
 instance FromJSON WxppArticle where
     parseJSON = withObject "WxppArticle" $ \obj -> do
-                title <- obj .:? "title"
-                desc <- obj .:? "desc"
-                pic_url <- fmap UrlText <$> obj .:? "pic-url"
-                url <- fmap UrlText <$> obj .:? "url"
+                title <- join . fmap emptyTextToNothing <$> obj .:? "title"
+                desc <- join . fmap emptyTextToNothing <$> obj .:? "desc"
+                pic_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "pic-url"
+                url <- fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "url"
                 return $ WxppArticle title desc pic_url url
 
 -- | 外发的信息
@@ -782,15 +782,15 @@ instance FromJSON WxppOutMsg where
           "video" -> liftM4 WxppOutMsgVideo
                         (obj .: "media_id")
                         (obj .: "thumb_media_id")
-                        (obj .:? "title")
-                        (obj .:? "desc")
+                        (join . fmap emptyTextToNothing <$> obj .:? "title")
+                        (join . fmap emptyTextToNothing <$> obj .:? "desc")
 
           "music" -> liftM5 WxppOutMsgMusic
                         (obj .: "thumb_media_id")
-                        (obj .:? "title")
-                        (obj .:? "desc")
-                        (fmap UrlText <$> obj .:? "url")
-                        (fmap UrlText <$> obj .:? "hq_url")
+                        (join . fmap emptyTextToNothing <$> obj .:? "title")
+                        (join . fmap emptyTextToNothing <$> obj .:? "desc")
+                        (fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "url")
+                        (fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "hq_url")
 
           "news" -> WxppOutMsgNews <$> obj .: "articles"
 
@@ -835,8 +835,10 @@ instance FromJSON WxppOutMsgL where
                                     path <- T.unpack <$> obj .: "thumb-image"
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
-                                    url <- fmap UrlText <$> obj .:? "url"
-                                    hq_url <- fmap UrlText <$> obj .:? "hq-url"
+                                    url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
+                                                obj .:? "url"
+                                    hq_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
+                                                obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL path title desc url hq_url
 
                         "news" -> WxppOutMsgNewsL <$>

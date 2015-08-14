@@ -24,6 +24,8 @@ import Data.Aeson.Types                     (Pair)
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(..))
 
+import Yesod.Helpers.Utils                  (emptyTextToNothing)
+
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
@@ -58,11 +60,12 @@ instance FromJSON WxppPropagateArticle where
                     WxppPropagateArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
-                        <*> ( obj .:? "author" )
-                        <*> ( obj .:? "digest" )
+                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
+                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
                         <*> ( int_to_bool <$> obj .: "show_cover_pic" )
                         <*> ( obj .: "content" )
-                        <*> ( fmap UrlText <$> obj .:? "content_source_url" )
+                        <*> ( fmap UrlText . join . fmap emptyTextToNothing <$>
+                                obj .:? "content_source_url" )
             where
                 int_to_bool x = (x :: Int) /= 0
 
