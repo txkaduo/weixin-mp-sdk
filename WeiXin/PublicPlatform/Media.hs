@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
+import Data.Aeson                           (FromJSON(..), withObject, (.:))
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
@@ -60,6 +61,7 @@ wxppUploadMediaInternal (AccessToken { accessTokenData = atk }) mtype fpart = do
                         & param "type" .~ [ wxppMediaTypeString mtype :: Text]
     (liftIO $ postWith opts url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
+
 
 -- | 上传本地一个文件
 wxppUploadMedia ::
@@ -147,6 +149,48 @@ wxppUploadMediaCachedBS cache atk mtype mime filename bs = do
     where
         dt = fromIntegral (60 * 60 * 24 :: Int)
         app_id = accessTokenApp atk
+
+
+newtype UploadImgResult = UploadImgResult UrlText
+
+instance FromJSON UploadImgResult where
+    parseJSON = withObject "UploadImgResult" $ \o ->
+                    UploadImgResult <$> o .: "url"
+
+-- | 这是在群发文档中描述的特别接口，只用于上传图片，jpg/png格式
+-- 不占用永久素材限额
+-- 回复得到一个 URL，用于图文消息中
+wxppUploadImageGetUrlInternal ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> Part
+    -> m UrlText
+wxppUploadImageGetUrlInternal (AccessToken { accessTokenData = atk }) fpart = do
+    let url = wxppRemoteApiBaseUrl <> "/media/uploadimg"
+        opts = defaults & param "access_token" .~ [ atk ]
+    UploadImgResult url <- (liftIO $ postWith opts url $ fpart & partName .~ "media")
+        >>= asWxppWsResponseNormal'
+    return url
+
+wxppUploadImageGetUrl ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> FilePath
+    -> m UrlText
+wxppUploadImageGetUrl atk fp = do
+    wxppUploadImageGetUrlInternal atk $ partFileSource "media" fp
+
+wxppUploadImageGetUrlBS ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> MimeType
+    -> FilePath
+    -> ByteString
+    -> m UrlText
+wxppUploadImageGetUrlBS atk mime filename bs = do
+    wxppUploadImageGetUrlInternal atk $
+        partBS "media" bs & partFileName .~ Just filename
+                            & partContentType .~ Just mime
 
 
 -- | 从 WxppOutMsgL 计算出 WxppOutMsg
