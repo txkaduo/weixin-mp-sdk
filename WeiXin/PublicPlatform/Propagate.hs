@@ -155,7 +155,7 @@ wxppPropagateMsgJsonData x =
 
 -- | 这个字段值会重复多个地方使用
 wxppPropagateMsgTypeS :: WxppPropagateMsg -> Text
-wxppPropagateMsgTypeS (WxppPropagateMsgNews {})     = "mp_news"
+wxppPropagateMsgTypeS (WxppPropagateMsgNews {})     = "mpnews"
 wxppPropagateMsgTypeS (WxppPropagateMsgText {})     = "text"
 wxppPropagateMsgTypeS (WxppPropagateMsgVoice {})    = "voice"
 wxppPropagateMsgTypeS (WxppPropagateMsgImage {})    = "image"
