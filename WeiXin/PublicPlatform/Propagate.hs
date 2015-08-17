@@ -25,6 +25,8 @@ import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(.
                                             , SqlType(..))
 
 import Yesod.Helpers.Utils                  (emptyTextToNothing)
+import Yesod.Helpers.Aeson                  (parseIntWithTextparsec)
+import Yesod.Helpers.Parsec                 (natural)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -62,12 +64,13 @@ instance FromJSON WxppPropagateArticle where
                         <*> ( obj .: "thumb_media_id" )
                         <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
                         <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
-                        <*> ( int_to_bool <$> obj .: "show_cover_pic" )
+                        <*> ( fmap int_to_bool $ obj .: "show_cover_pic"
+                                                    >>= parseIntWithTextparsec natural )
                         <*> ( obj .: "content" )
                         <*> ( fmap UrlText . join . fmap emptyTextToNothing <$>
                                 obj .:? "content_source_url" )
             where
-                int_to_bool x = (x :: Int) /= 0
+                int_to_bool x = x /= 0
 
 
 instance ToJSON WxppPropagateArticle where
@@ -75,7 +78,7 @@ instance ToJSON WxppPropagateArticle where
                         , "thumb_media_id"  .= wxppPropagateArticleThumb x
                         , "author"          .= (fromMaybe "" $ wxppPropagateArticleAuthor x)
                         , "digest"          .= (fromMaybe "" $ wxppPropagateArticleDigest x)
-                        , "show_cover_pic"  .= bool_to_int (wxppPropagateArticleShowCoverPic x)
+                        , "show_cover_pic"  .= (show $ bool_to_int $ wxppPropagateArticleShowCoverPic x)
                         , "content"         .= wxppPropagateArticleContent x
                         , "content_source_url" .= (unUrlText <$> wxppPropagateArticleContentSrcUrl x)
                         ]
@@ -241,7 +244,7 @@ newtype PropagateFilter = PropagateFilter (Maybe WxppUserGroupID)
 instance ToJSON PropagateFilter where
     toJSON (PropagateFilter Nothing)        = object [ "is_to_all" .= True ]
     toJSON (PropagateFilter (Just grp_id))  = object [ "is_to_all" .= False
-                                                     , "group_id"  .= grp_id
+                                                     , "group_id"  .= show grp_id
                                                      ]
 
 newtype PropagateCallResult = PropagateCallResult PropagateMsgID

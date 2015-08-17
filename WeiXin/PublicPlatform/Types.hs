@@ -30,10 +30,10 @@ import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
 import Data.Proxy                           (Proxy(..))
 
-import Yesod.Helpers.Aeson                  (parseArray)
+import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec)
 import Yesod.Helpers.Utils                  (emptyTextToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
-import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
+import Yesod.Helpers.Parsec                 ( SimpleStringRep(..), natural
                                             , derivePersistFieldS, makeSimpleParserByTable
                                             , deriveJsonS, derivePathPieceS
                                             )
@@ -876,11 +876,12 @@ instance FromJSON WxppDurableArticle where
                         <*> ( obj .: "thumb_media_id" )
                         <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
                         <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
-                        <*> ( int_to_bool <$> obj .: "show_cover_pic" )
+                        <*> ( fmap int_to_bool $ obj .: "show_cover_pic"
+                                                    >>= parseIntWithTextparsec natural )
                         <*> ( obj .: "content" )
                         <*> ( fmap UrlText . join . fmap emptyTextToNothing <$> obj .: "content_source_url" )
             where
-                int_to_bool x = (x :: Int) /= 0
+                int_to_bool x = x /= 0
 
 
 instance ToJSON WxppDurableArticle where
@@ -893,7 +894,7 @@ wppDurableArticleToJsonPairs x =
                         , "thumb_media_id"  .= wxppDurableArticleThumb x
                         , "author"          .= (fromMaybe "" $ wxppDurableArticleAuthor x)
                         , "digest"          .= (fromMaybe "" $ wxppDurableArticleDigest x)
-                        , "show_cover_pic"  .= bool_to_int (wxppDurableArticleShowCoverPic x)
+                        , "show_cover_pic"  .= (show $ bool_to_int $ wxppDurableArticleShowCoverPic x)
                         , "content"         .= wxppDurableArticleContent x
                         , "content_source_url" .= (fromMaybe "" $ fmap unUrlText $ wxppDurableArticleContentSrcUrl x)
                         ]
