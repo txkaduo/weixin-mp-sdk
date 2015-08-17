@@ -35,7 +35,7 @@ import Yesod.Helpers.Utils                  (emptyTextToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Yesod.Helpers.Parsec                 ( SimpleStringRep(..)
                                             , derivePersistFieldS, makeSimpleParserByTable
-                                            , deriveJsonS
+                                            , deriveJsonS, derivePathPieceS
                                             )
 import Data.Byteable                        (Byteable(..))
 import Text.Parsec
@@ -923,6 +923,8 @@ data WxppMediaType = WxppMediaTypeImage
 deriveSafeCopy 0 'base ''WxppMediaType
 
 $(derivePersistFieldS "WxppMediaType")
+$(derivePathPieceS "WxppMediaType")
+$(deriveJsonS "WxppMediaType")
 
 instance SimpleStringRep WxppMediaType where
     simpleEncode mtype =
