@@ -12,7 +12,11 @@ import Control.Monad.Logger
 import Data.SafeCopy
 -- import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.ByteString.Char8      as C8
+import qualified Data.CaseInsensitive       as CI
+import qualified Data.Text                  as T
 import Control.Monad.Catch                  (catch)
+import Network.Mime                         (MimeType)
 -- import Data.Yaml                            (ParseException)
 import Data.Conduit
 import qualified Data.Conduit.List          as CL
@@ -181,7 +185,7 @@ wxppUploadDurableNews (AccessToken { accessTokenData = atk }) news = do
 data WxppGetDurableResult =    WxppGetDurableNews [WxppDurableArticleS]
                             |   WxppGetDurableVideo Text Text UrlText
                                 -- ^ title description download_url
-                            |   WxppGetDurableRaw ByteString LB.ByteString
+                            |   WxppGetDurableRaw (Maybe MimeType) LB.ByteString
 
 instance FromJSON WxppGetDurableResult where
     -- 这个函数不用处理 WxppGetDurableRaw，因为这种情况并非用 JSON 表示
@@ -207,8 +211,20 @@ wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID 
     asWxppWsResponseNormal' r
         `catch`
         (\(_ :: JSONError) -> do
+            let resp_headers = r ^. responseHeaders
+            $logDebugS wxppLogSource $ T.append "get_material api response headers:\n" $
+                T.unlines $
+                    flip map resp_headers $
+                    \(ci_name, val) ->
+                        fromString $ C8.unpack $ mconcat [ CI.original ci_name, ": ", val ]
+            -- XXX: 微信平台返回的 Content-Type 总是 text/plain
+            -- 要自己找 mime 内容
+            let mime0   = r ^. responseHeader "Content-Type"
+                m_mime  = if null mime0 || mime0 == "text/plain"
+                           then Nothing
+                           else Just mime0
             return $ WxppGetDurableRaw
-                        (r ^. responseHeader "Content-Type")
+                        m_mime
                         (r ^. responseBody)
             )
 

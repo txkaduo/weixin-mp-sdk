@@ -250,12 +250,12 @@ start = do
                         , "download_url"    .= unUrlText down_url
                         ]
 
-                WxppGetDurableRaw mime bs -> do
-                    let ext = fromMaybe "dat" $ extByMime mime
+                WxppGetDurableRaw m_mime bs -> do
+                    let ext = fromMaybe "dat" $ join $ fmap extByMime m_mime
                         fn  = unWxppDurableMediaID mid <> "." <> ext
                     liftIO $ do
                         putStr "Content-Type: "
-                        B.putStr mime
+                        B.putStr $ fromMaybe "" m_mime
                         putStrLn ""
                         LB.writeFile (T.unpack fn) bs
                         putStrLn $ "Saved to file: " <> fn

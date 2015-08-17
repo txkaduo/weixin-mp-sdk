@@ -127,6 +127,7 @@ library
                      , semigroups
                      , JuicyPixels
                      , array
+                     , case-insensitive
 
   if flag(parsec3)
       build-depends:   parsec3
