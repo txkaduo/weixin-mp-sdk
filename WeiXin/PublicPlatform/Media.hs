@@ -168,9 +168,9 @@ wxppUploadImageGetUrlInternal ::
 wxppUploadImageGetUrlInternal (AccessToken { accessTokenData = atk }) fpart = do
     let url = wxppRemoteApiBaseUrl <> "/media/uploadimg"
         opts = defaults & param "access_token" .~ [ atk ]
-    UploadImgResult url <- (liftIO $ postWith opts url $ fpart & partName .~ "media")
+    UploadImgResult media_url <- (liftIO $ postWith opts url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
-    return url
+    return media_url
 
 wxppUploadImageGetUrl ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
