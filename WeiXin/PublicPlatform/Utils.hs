@@ -1,8 +1,10 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module  WeiXin.PublicPlatform.Utils where
 
 import ClassyPrelude
 import qualified Data.QRCode                as QR   -- haskell-qrencode
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.ByteString            as B
 import qualified Codec.Picture              as P -- from `JuicyPixel' package
 import qualified Codec.Picture.Saving       as P -- from `JuicyPixel' package
 import qualified Data.Text                  as T
@@ -15,7 +17,8 @@ import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
 import System.FilePath                      (hasExtension)
 import Data.Aeson.Types                     (Parser)
 import Data.Aeson
-import Data.Yaml                            (ParseException, decodeFileEither, prettyPrintParseException)
+import Data.Yaml                            (ParseException, prettyPrintParseException)
+import qualified Data.Yaml                  as Yaml
 import Control.Monad.Catch                  ( Handler(..) )
 import Data.List.NonEmpty                   as LNE hiding (length, (!!))
 
@@ -72,29 +75,36 @@ parseDelayedYamlLoader m_direct_field indirect_field obj =
     where
         parse_indirect = mkDelayedYamlLoader . setExtIfNotExist "yml" . T.unpack <$> obj .: indirect_field
 
-mkDelayedYamlLoader :: FromJSON a => FilePath -> DelayedYamlLoader a
+mkDelayedYamlLoader :: forall a. FromJSON a => FilePath -> DelayedYamlLoader a
 mkDelayedYamlLoader fp = do
     base_dir_list <- ask
     liftIO $ do
         -- 运行时，如果全部都有 IOError，抛出第一个非 DoesNotExistError
-        let try_dir bp = do
+        let try_dir :: FilePath -> IO (Either (Either IOError YamlFileParseException) a)
+            try_dir bp = do
                 let full_path = bp </> fp
-                ioerr_or_v <- tryIOError $ decodeFileEither full_path
-                return $ flip fmap ioerr_or_v $ \err_or_x ->
-                    case err_or_x of
-                        Left err -> Left $ YamlFileParseException full_path err
-                        Right v -> Right v
+                ioerr_or_v <- tryIOError $ do
+                                -- we need to catch IOError, so don't use decodeFileEither
+                                -- decodeFileEither full_path
+                                (liftM Yaml.decodeEither' $ B.readFile full_path)
+
+                return $ case ioerr_or_v of
+                            Left ioe          -> Left $ Left ioe
+                            Right (Left perr) -> Left $ Right $ YamlFileParseException full_path perr
+                            Right (Right x)   -> Right x
 
         first_try <- try_dir $ LNE.head base_dir_list
         case first_try of
-            Right v         -> return v
+            Right v         -> return $ Right v
             Left first_err  -> do
-                let go []       last_err    = throwM last_err
+                let is_does_not_exist_err (Left ioe) = isDoesNotExistError ioe
+                    is_does_not_exist_err (Right _)  = False
+                let go []       last_err    = either throwM (return . Left) last_err
                     go (x:xs)   last_err    = do
                         try_dir x
                             >>= either
-                                    (\e -> go xs $ if isDoesNotExistError last_err then e else last_err)
-                                    return
+                                    (\e -> go xs $ if is_does_not_exist_err last_err then e else last_err)
+                                    (return . Right)
 
                 go (LNE.tail base_dir_list) first_err
 
