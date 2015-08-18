@@ -27,6 +27,7 @@ import WeiXin.PublicPlatform.AutoReplyRules
 import WeiXin.PublicPlatform.Menu
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Material
+import WeiXin.PublicPlatform.Propagate
 -- import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
 
@@ -50,6 +51,7 @@ data ManageCmd = QueryAutoReplyRules
                 | RenameGroup WxppUserGroupID Text
                 | GroupOfUser WxppOpenID
                 | SetUserGroup WxppUserGroupID [WxppOpenID]
+                | GetPropagateMsgStatus PropagateMsgID
                 deriving (Show, Eq, Ord)
 
 
@@ -130,6 +132,12 @@ manageCmdParser = subparser $
                             )
                 )
             (progDesc "移动用户至指定分组"))
+    <> command "get-propagate-msg-status"
+        (info (helper <*> ( GetPropagateMsgStatus
+                                <$> (fmap PropagateMsgID $ argument auto (metavar "MSG_ID"))
+                            )
+            )
+            (progDesc "查询群发消息的发送状态"))
 
 
 mediaTypeReader ::
@@ -337,6 +345,10 @@ start = do
                 else do
                     mapM_ (liftIO . B.putStr . Y.encode) results
 
+        GetPropagateMsgStatus msg_id -> do
+            atk <- get_atk
+            PropagateMsgStatus status <- wxppGetPropagateMsgStatus atk msg_id
+            putStrLn status
 
 editNewsDurable :: (MonadIO m, MonadLogger m, MonadCatch m) =>
     AccessToken -> WxppDurableMediaID -> [WxppDurableArticleS] -> m ()

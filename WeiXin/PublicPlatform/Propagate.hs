@@ -13,9 +13,12 @@ module WeiXin.PublicPlatform.Propagate
     , wxppPropagateMsg
     , wxppPreviewPropagateMsg
     , wxppDropPropagateMsg
+    , wxppGetPropagateMsgStatus
+    , PropagateMsgStatus(..)
     ) where
 
 import ClassyPrelude
+-- import qualified Data.Text.Lazy             as LT
 import Network.Wreq
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
@@ -312,3 +315,25 @@ wxppDropPropagateMsg (AccessToken { accessTokenData = atk }) msg_id = do
         opts = defaults & param "access_token" .~ [ atk ]
     (liftIO $ postWith opts url $ object [ "msg_id" .= msg_id ])
             >>= asWxppWsResponseVoid
+
+
+data PropagateMsgStatus = PropagateMsgStatus Text
+
+instance FromJSON PropagateMsgStatus where
+    parseJSON = withObject "PropagateMsgStatus" $ \o ->
+                    PropagateMsgStatus <$> o .: "msg_status"
+
+
+-- | 查询群发消息的发送状态
+wxppGetPropagateMsgStatus ::
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
+    AccessToken
+    -> PropagateMsgID
+    -> m PropagateMsgStatus
+wxppGetPropagateMsgStatus (AccessToken { accessTokenData = atk }) msg_id = do
+    let url = wxppRemoteApiBaseUrl <> "/message/mass/get"
+        opts = defaults & param "access_token" .~ [ atk ]
+
+    r <- liftIO $ postWith opts url $ object [ "msg_id" .= msg_id ]
+    -- $logDebugS wxppLogSource $ LT.toStrict $ decodeUtf8 $ r ^. responseBody
+    asWxppWsResponseNormal' r
