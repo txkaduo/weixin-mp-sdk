@@ -11,10 +11,9 @@ import Control.Monad.Trans.Except
 import System.FilePath                      (takeDirectory, normalise)
 import qualified System.FSNotify            as FN
 import Control.Monad.Trans.Control
-import System.Directory                     (doesFileExist)
+import System.Directory                     (doesFileExist, doesDirectoryExist, canonicalizePath)
 import Control.Concurrent                   (threadDelay)
 import Data.List.NonEmpty                   (NonEmpty(..))
-import qualified Data.List.NonEmpty         as LNE
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -132,17 +131,37 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
     load
 
     bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
-        stops <- forM dirs $ \dir -> do
-                    let predi = (`elem` LNE.toList fp') . FN.eventPath
-                    (liftBaseOpDiscard $
-                            FN.watchDir
-                                mgr
-                                dir
-                                predi) handle_evt
+        fp' <- liftM catMaybes $ forM (toList fp) $ \p -> do
+            err_or <- liftIO $ tryIOError $ canonicalizePath p
+            case err_or of
+                Left err
+                    | isDoesNotExistError err -> return Nothing
+                    | otherwise               -> do
+                                                $logWarnS wxppLogSource $ fromString $
+                                                    "canonicalizePath failed on path: " <> p
+                                                    <> ", error was: " <> show err
+                                                return Nothing
+                Right x -> return $ Just x
+
+        -- XXX: can only watch existing dir
+        stops <- liftM (catMaybes . toList) $ forM dirs $ \dir -> do
+                    let predi = const True
+                    b <- liftIO $ doesDirectoryExist dir
+                    if b
+                        then do
+                            $logDebugS wxppLogSource $ fromString $ "watching for dir: " <> dir
+                            liftM Just $
+                                (liftBaseOpDiscard $
+                                    FN.watchDir
+                                        mgr
+                                        dir
+                                        predi) (handle_evt fp')
+                        else return Nothing
+
         liftIO $ block_until_exit >> sequence stops >> return ()
     where
         dirs = fmap takeDirectory fp
-        fp' = fmap normalise fp
+        -- fp' = fmap normalise fp
         fp = fmap (</> fname) data_dirs
 
         watch_cfg = FN.defaultConfig
@@ -151,18 +170,23 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
                         -- 很多对文件操作的工具保存时都可能由多个文件系统操作完成
                         -- 比如 vim
 
-        handle_evt evt = do
-            -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
-            -- 干脆不理会 event 的类型，直接检查文件是否存在
-            let evt_fp = FN.eventPath evt
-            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
-            if not exists
+        handle_evt fp' evt = do
+            let evt_fp = normalise $ FN.eventPath evt
+            if evt_fp `elem` fp'
                 then do
-                    $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
-                                                <> (fromString $ FN.eventPath evt)
-                    -- 如果打算停用菜单，可直接将配置文件清空
+                    -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
+                    -- 干脆不理会 event 的类型，直接检查文件是否存在
+                    exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
+                    if not exists
+                        then do
+                            $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
+                                                        <> (fromString $ FN.eventPath evt)
+                            -- 如果打算停用菜单，可直接将配置文件清空
+                        else do
+                            load
                 else do
-                    load
+                    -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+                    return ()
 
         load = do
             m_atk <- get_atk
