@@ -58,6 +58,20 @@ loopRefreshAccessToken ::
 loopRefreshAccessToken chk_abort intv wac cache dt = do
     loopRunBgJob chk_abort intv $ refreshAccessTokenIfNeeded wac cache dt
 
+-- | like loopRefreshAccessToken, but for a list of Weixin App
+loopRefreshAccessTokens ::
+    (MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
+    IO Bool     -- ^ This function should be a blocking op,
+                -- return True if the infinite should be aborted.
+    -> Int      -- ^ interval between successive checking (in seconds)
+    -> [WxppAppConfig]
+    -> c
+    -> NominalDiffTime
+    -> m ()
+loopRefreshAccessTokens chk_abort intv wac_list cache dt = do
+    loopRunBgJob chk_abort intv $ do
+        forM_ wac_list $ \wac -> refreshAccessTokenIfNeeded wac cache dt
+
 
 loopRunBgJob :: (MonadIO m, MonadCatch m) =>
     IO Bool     -- ^ This function should be a blocking op,
