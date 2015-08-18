@@ -30,11 +30,15 @@ refreshAccessTokenIfNeeded wac cache dt = do
         case ws_res of
             Left err -> do
                 $(logErrorS) wxppLogSource $
-                    "Failed to refresh access token: "
+                    "Failed to refresh access token for app: "
+                        <> unWxppAppID app_id
+                        <> ", error was: "
                         <> fromString (show err)
             Right (AccessTokenResp atk_p ttl) -> do
-                $(logDebugS) wxppLogSource $ fromString $
-                    "New access token acquired, expired in: " <> show ttl
+                $(logDebugS) wxppLogSource $
+                    "New access token acquired for app: "
+                        <> unWxppAppID app_id
+                        <> ", expired in: " <> (fromString $ show ttl)
                 now' <- liftIO getCurrentTime
                 let expiry = addUTCTime (fromIntegral ttl) now'
                 liftIO $ do
