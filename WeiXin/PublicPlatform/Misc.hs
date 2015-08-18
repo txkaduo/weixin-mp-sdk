@@ -186,13 +186,13 @@ defaultInMsgProcMiddlewares db_runner app_id down_media =
 -- | 如果要计算的操作有异常，记日志并重试
 -- 注意：重试如果失败，还会不断重试
 -- 所以只适合用于 f 本身就是一个大循环的情况
-logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m) =>
+logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m) =>
     String      -- ^ 仅用作日志标识
     -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
     -> m ()
 logWxppWsExcAndRetryLoop op_name f = go
     where
-        go = logWxppWsExcThen op_name (const go) (const $ return ()) f
+        go = logWxppWsExcThen op_name (const $ liftIO (threadDelay 5000000) >> go) (const $ return ()) f
 
 
 logWxppWsExcThen :: (MonadLogger m, MonadCatch m) =>
