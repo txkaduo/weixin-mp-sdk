@@ -83,7 +83,8 @@ instance ToJSON WxppPropagateArticle where
                         , "digest"          .= (fromMaybe "" $ wxppPropagateArticleDigest x)
                         , "show_cover_pic"  .= (show $ bool_to_int $ wxppPropagateArticleShowCoverPic x)
                         , "content"         .= wxppPropagateArticleContent x
-                        , "content_source_url" .= (unUrlText <$> wxppPropagateArticleContentSrcUrl x)
+                        , "content_source_url" .= (fromMaybe "" $
+                                                    unUrlText <$> wxppPropagateArticleContentSrcUrl x)
                         ]
             where
                 bool_to_int b = if b then 1 :: Int else 0
@@ -245,7 +246,9 @@ instance FromJSON PropagateMsgID where
 newtype PropagateFilter = PropagateFilter (Maybe WxppUserGroupID)
 
 instance ToJSON PropagateFilter where
-    toJSON (PropagateFilter Nothing)        = object [ "is_to_all" .= True ]
+    toJSON (PropagateFilter Nothing)        = object [ "is_to_all" .= True
+                                                     , "group_id"  .= ("" :: Text)
+                                                     ]
     toJSON (PropagateFilter (Just grp_id))  = object [ "is_to_all" .= False
                                                      , "group_id"  .= show grp_id
                                                      ]
