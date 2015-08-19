@@ -52,6 +52,7 @@ data ManageCmd = QueryAutoReplyRules
                 | GroupOfUser WxppOpenID
                 | SetUserGroup WxppUserGroupID [WxppOpenID]
                 | GetPropagateMsgStatus PropagateMsgID
+                | PropagateDurableNews WxppDurableMediaID
                 deriving (Show, Eq, Ord)
 
 
@@ -138,6 +139,13 @@ manageCmdParser = subparser $
                             )
             )
             (progDesc "查询群发消息的发送状态"))
+    <> command "propagate-durable-news"
+        (info (helper <*> ( PropagateDurableNews
+                                <$> (fmap (WxppDurableMediaID . fromString) $
+                                        argument str (metavar "MEDIA_ID"))
+                            )
+            )
+            (progDesc "群发永久图文素材"))
 
 
 mediaTypeReader ::
@@ -349,6 +357,11 @@ start = do
             atk <- get_atk
             PropagateMsgStatus status <- wxppGetPropagateMsgStatus atk msg_id
             putStrLn status
+
+        PropagateDurableNews media_id -> do
+            atk <- get_atk
+            msg_id <- wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
+            putStrLn $ fromString $ show msg_id
 
 editNewsDurable :: (MonadIO m, MonadLogger m, MonadCatch m) =>
     AccessToken -> WxppDurableMediaID -> [WxppDurableArticleS] -> m ()
