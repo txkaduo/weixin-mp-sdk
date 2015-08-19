@@ -12,12 +12,15 @@ import Data.Default                         (def)
 import Text.XML                             (renderText)
 import qualified Data.Text.Lazy             as LT
 import qualified Data.Text                  as T
+import qualified Data.Aeson                 as A
+import Data.Aeson                           (ToJSON(..))
 
 import Text.Parsec
 import Yesod.Helpers.Parsec
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Message
+import WeiXin.PublicPlatform.Propagate
 
 
 testLikeJava :: IO ()
@@ -121,8 +124,22 @@ testParseScene = do
     let test = testCharParser simpleParser
     test "qrscene_online2015 bind 123" (WxppSceneStr $ WxppStrSceneID "online2015 bind 123")
 
+showJson :: ToJSON a => a -> IO ()
+showJson a = do
+    LB.putStr $ A.encode a
+    putStrLn ""
+
 main :: IO ()
 main = do
     testMsgToXml
     -- testLikeJava
     testParseScene
+    showJson $ WxppPropagateNews $ return $  WxppPropagateArticle
+                                                "标题"
+                                                (WxppMediaID "xxx-media-id")
+                                                Nothing
+                                                Nothing
+                                                True
+                                                "<h1>xxx</h1>"
+                                                Nothing
+    showJson $ PropagateFilter Nothing

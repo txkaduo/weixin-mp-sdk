@@ -13,6 +13,7 @@ module WeiXin.PublicPlatform.Propagate
     , wxppPropagateMsg
     , wxppPreviewPropagateMsg
     , wxppDropPropagateMsg
+    , PropagateFilter(..)
     , wxppGetPropagateMsgStatus
     , PropagateMsgStatus(..)
     ) where

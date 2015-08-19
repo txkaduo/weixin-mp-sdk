@@ -186,6 +186,7 @@ test-suite test
                      , data-default
                      , xml-conduit
                      , text
+                     , aeson
                      , yesod-helpers
 
   if flag(parsec3)
