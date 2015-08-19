@@ -2,10 +2,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.Propagate
     ( wxppPropagateUploadNews
-    , WxppPropagateArticle(..)
-    , wxppDurableToPropagateArticle
-    , WxppPropagateNews(..)
-    , wxppDurableToPropagateNews
+    , WxppBriefArticle(..)
+    , WxppBriefNews(..)
     , PropagateMsgID(..)
     , WxppPropagateMsg(..)
     , WxppPropagateVideoMediaID(..)
@@ -38,32 +36,26 @@ import WeiXin.PublicPlatform.Utils
 
 
 -- | 准备群发的图文素材结构中的一个文章
--- 这个结构基本上与 WxppDurableArticle 一样，区别是
--- - media id 换成了 WxppMediaID
-data WxppPropagateArticle = WxppPropagateArticle {
-                                wxppPropagateArticleTitle            :: Text
-                                , wxppPropagateArticleThumb          :: WxppMediaID
-                                , wxppPropagateArticleAuthor         :: Maybe Text
-                                , wxppPropagateArticleDigest         :: Maybe Text
-                                , wxppPropagateArticleShowCoverPic   :: Bool
-                                , wxppPropagateArticleContent        :: Text
-                                , wxppPropagateArticleContentSrcUrl  :: Maybe UrlText
+-- 从接口的URL及网上文章的讨论看，所谓群发上传图文消息接口估计
+-- 本来是“上传临时图文素材”（注意url的media单词）
+-- 所上传的每个article内容与 WxppDurableArticle 实质上是一样的
+-- 只有一个区别：封面图片必须是临时素材media_id
+-- （有传闻说永久素材与临时素材id不能混用）
+data WxppBriefArticle = WxppBriefArticle {
+                                wxppBriefArticleTitle           :: Text
+                                , wxppBriefArticleThumb         :: WxppBriefMediaID
+                                , wxppBriefArticleAuthor        :: Maybe Text
+                                , wxppBriefArticleDigest        :: Maybe Text
+                                , wxppBriefArticleShowCoverPic  :: Bool
+                                , wxppBriefArticleContent       :: Text
+                                , wxppBriefArticleContentSrcUrl :: Maybe UrlText
                             }
-                            deriving (Eq)
+                            deriving (Eq, Show)
 
-wxppDurableToPropagateArticle :: WxppDurableArticle -> WxppPropagateArticle
-wxppDurableToPropagateArticle x = WxppPropagateArticle
-                                    (wxppDurableArticleTitle x)
-                                    (fromWxppDurableMediaID $ wxppDurableArticleThumb x)
-                                    (wxppDurableArticleAuthor x)
-                                    (wxppDurableArticleDigest x)
-                                    (wxppDurableArticleShowCoverPic x)
-                                    (wxppDurableArticleContent x)
-                                    (wxppDurableArticleContentSrcUrl x)
 
-instance FromJSON WxppPropagateArticle where
-    parseJSON = withObject "WxppPropagateArticle" $ \obj -> do
-                    WxppPropagateArticle
+instance FromJSON WxppBriefArticle where
+    parseJSON = withObject "WxppBriefArticle" $ \obj -> do
+                    WxppBriefArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
                         <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
@@ -77,33 +69,31 @@ instance FromJSON WxppPropagateArticle where
                 int_to_bool x = x /= 0
 
 
-instance ToJSON WxppPropagateArticle where
-    toJSON x = object   [ "title"           .= wxppPropagateArticleTitle x
-                        , "thumb_media_id"  .= wxppPropagateArticleThumb x
-                        , "author"          .= (fromMaybe "" $ wxppPropagateArticleAuthor x)
-                        , "digest"          .= (fromMaybe "" $ wxppPropagateArticleDigest x)
-                        , "show_cover_pic"  .= (show $ bool_to_int $ wxppPropagateArticleShowCoverPic x)
-                        , "content"         .= wxppPropagateArticleContent x
+instance ToJSON WxppBriefArticle where
+    toJSON x = object   [ "title"           .= wxppBriefArticleTitle x
+                        , "thumb_media_id"  .= wxppBriefArticleThumb x
+                        , "author"          .= (fromMaybe "" $ wxppBriefArticleAuthor x)
+                        , "digest"          .= (fromMaybe "" $ wxppBriefArticleDigest x)
+                        , "show_cover_pic"  .= (show $ bool_to_int $ wxppBriefArticleShowCoverPic x)
+                        , "content"         .= wxppBriefArticleContent x
                         , "content_source_url" .= (fromMaybe "" $
-                                                    unUrlText <$> wxppPropagateArticleContentSrcUrl x)
+                                                    unUrlText <$> wxppBriefArticleContentSrcUrl x)
                         ]
             where
                 bool_to_int b = if b then 1 :: Int else 0
 
 
 -- | 可以群发的图文消息
-newtype WxppPropagateNews = WxppPropagateNews [WxppPropagateArticle]
+-- 见前面的注释：这个很可能其实是“临时图文素材”
+newtype WxppBriefNews = WxppBriefNews [WxppBriefArticle]
+                        deriving (Eq, Show)
 
-wxppDurableToPropagateNews :: WxppDurableNews -> WxppPropagateNews
-wxppDurableToPropagateNews (WxppDurableNews articles) =
-                        WxppPropagateNews $ map wxppDurableToPropagateArticle articles
+instance FromJSON WxppBriefNews where
+    parseJSON = withObject "WxppBriefNews" $ \obj -> do
+                    WxppBriefNews <$> obj .: "articles"
 
-instance FromJSON WxppPropagateNews where
-    parseJSON = withObject "WxppPropagateNews" $ \obj -> do
-                    WxppPropagateNews <$> obj .: "articles"
-
-instance ToJSON WxppPropagateNews where
-    toJSON (WxppPropagateNews articles) = object [ "articles" .= articles ]
+instance ToJSON WxppBriefNews where
+    toJSON (WxppBriefNews articles) = object [ "articles" .= articles ]
 
 
 data PUploadNewsResult = PUploadNewsResult
@@ -175,7 +165,7 @@ wxppPropagateMsgTypeS (WxppPropagateMsgCard {})     = "card"
 wxppPropagateUploadNews ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     AccessToken
-    -> WxppPropagateNews
+    -> WxppBriefNews
         -- ^ XXX: 这里只是用了与永久图文素材相同的数据类型
         --        真正上传的结果只是一个临时的素材
     -> m WxppBriefMediaID

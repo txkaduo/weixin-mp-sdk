@@ -134,9 +134,9 @@ main = do
     testMsgToXml
     -- testLikeJava
     testParseScene
-    showJson $ WxppPropagateNews $ return $  WxppPropagateArticle
+    showJson $ WxppBriefNews $ return $  WxppBriefArticle
                                                 "标题"
-                                                (WxppMediaID "xxx-media-id")
+                                                (WxppBriefMediaID "xxx-media-id")
                                                 Nothing
                                                 Nothing
                                                 True
