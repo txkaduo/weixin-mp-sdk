@@ -175,22 +175,31 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
                         -- 比如 vim
 
         handle_evt fp' evt = do
-            let evt_fp = normalise $ FN.eventPath evt
-            if evt_fp `elem` fp'
-                then do
-                    -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
-                    -- 干脆不理会 event 的类型，直接检查文件是否存在
-                    exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
-                    if not exists
-                        then do
-                            $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
-                                                        <> (fromString $ FN.eventPath evt)
-                            -- 如果打算停用菜单，可直接将配置文件清空
-                        else do
-                            load
-                else do
-                    -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+            case evt of
+                FN.Removed {} -> do
+                    -- do not handle remove event
+                    -- when modify file with editor like vim, file maybe removed then save again
+                    -- To remove a menu, modify the menu to be empty list
                     return ()
+
+                _ -> do
+                    let evt_fp = normalise $ FN.eventPath evt
+                    if evt_fp `elem` fp'
+                        then do
+                            -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
+                            -- 干脆不理会 event 的类型，直接检查文件是否存在
+                            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
+                            if not exists
+                                then do
+                                    $logWarnS wxppLogSource $
+                                        "menu config file has been removed or inaccessible: "
+                                            <> (fromString $ FN.eventPath evt)
+                                    -- 如果打算停用菜单，可直接将配置文件清空
+                                else do
+                                    load
+                        else do
+                            -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+                            return ()
 
         load = do
             m_atk <- get_atk
@@ -296,22 +305,32 @@ wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event
                         -- 比如 vim
 
         handle_evt get_atk' fp' evt = do
-            let evt_fp = normalise $ FN.eventPath evt
-            if evt_fp `elem` fp'
-                then do
-                    -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
-                    -- 干脆不理会 event 的类型，直接检查文件是否存在
-                    exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
-                    if not exists
-                        then do
-                            $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
-                                                        <> (fromString $ FN.eventPath evt)
-                            -- 如果打算停用菜单，可直接将配置文件清空
-                        else do
-                            load get_atk' fp'
-                else do
-                    -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+            case evt of
+                FN.Removed {} -> do
+                    -- do not handle remove event
+                    -- when modify file with editor like vim, file maybe removed then save again
+                    -- To remove a menu, modify the menu to be empty list
                     return ()
+
+                _ -> do
+                    let evt_fp = normalise $ FN.eventPath evt
+                    if evt_fp `elem` fp'
+                        then do
+                            -- $logDebugS wxppLogSource $ fromString (show evt)
+                            -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
+                            -- 干脆不理会 event 的类型，直接检查文件是否存在
+                            exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
+                            if not exists
+                                then do
+                                    $logWarnS wxppLogSource $
+                                        "menu config file has been removed or inaccessible: "
+                                            <> (fromString $ FN.eventPath evt)
+                                    -- 如果打算停用菜单，可直接将配置文件清空
+                                else do
+                                    load get_atk' fp'
+                        else do
+                            -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+                            return ()
 
         load :: IO (Maybe AccessToken) -> [FilePath] -> m ()
         load get_atk' normalized_fp = do
