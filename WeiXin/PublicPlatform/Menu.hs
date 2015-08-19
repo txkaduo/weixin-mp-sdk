@@ -1,5 +1,6 @@
 {-#LANGUAGE CPP #-}
 {-#LANGUAGE FlexibleContexts #-}
+{-#LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Menu where
 
 import ClassyPrelude
@@ -10,10 +11,13 @@ import Data.Aeson
 import Control.Monad.Trans.Except
 import System.FilePath                      (takeDirectory, normalise)
 import qualified System.FSNotify            as FN
+import qualified Control.Concurrent.Async   as Async
+import qualified Data.Map.Strict            as Map
 import Control.Monad.Trans.Control
 import System.Directory                     (doesFileExist, doesDirectoryExist, canonicalizePath)
 import Control.Concurrent                   (threadDelay)
 import Data.List.NonEmpty                   (NonEmpty(..))
+import qualified Data.List.NonEmpty         as LNE
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -193,10 +197,137 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
             case m_atk of
                 Nothing             -> do
                     $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
+
                 Just access_token   ->  do
+                    let app_id = accessTokenApp access_token
                     err_or <- wxppCreateMenuWithYaml access_token data_dirs fname
                     case err_or of
-                        Left err    -> $logErrorS  wxppLogSource $ fromString $
-                                                "Failed to create menu: " <> err
-                        Right _     -> $logInfoS wxppLogSource $ "menu reloaded."
+                        Left err    -> $logErrorS  wxppLogSource $
+                                                "Failed to create menu for app: "
+                                                <> unWxppAppID app_id
+                                                <> ", error was: " <> fromString err
+                        Right _     -> $logInfoS wxppLogSource $
+                                            "menu reloaded for app: " <> unWxppAppID app_id
 
+
+-- | like wxppWatchMenuYaml, but watch for many weixin app all at once
+wxppWatchMenuYamlOnSignal :: forall m. (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
+                        IO ()        -- ^ bloack until exit
+                        -> FilePath
+                        -> (WxppAppID -> IO (Maybe AccessToken))
+                        -> (WxppAppID -> IO (NonEmpty FilePath))
+                        -> IO WxppSignal
+                            -- ^ should be a blocking op
+                        -> m ()
+wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event = do
+    watch_data <- liftIO $ newIORef Map.empty
+
+    let add_app mgr app_id = do
+            data_dirs <- liftIO $ get_data_dirs app_id
+            let fp = fmap (</> fname) data_dirs
+            normalized_fp <- liftM catMaybes $ forM (toList fp) $ \p -> do
+                err_or <- liftIO $ tryIOError $ canonicalizePath p
+                case err_or of
+                    Left err
+                        | isDoesNotExistError err -> return Nothing
+                        | otherwise               -> do
+                                                    $logWarnS wxppLogSource $ fromString $
+                                                        "canonicalizePath failed on path: " <> p
+                                                        <> ", error was: " <> show err
+                                                    return Nothing
+                    Right x -> return $ Just x
+
+            let dirs = fmap takeDirectory normalized_fp
+
+            -- load menu before watching for changes
+            load (get_atk app_id) normalized_fp
+
+            -- XXX: can only watch existing dir
+            stops <- liftM catMaybes $ forM dirs $ \dir -> do
+                        let predi = const True
+                        b <- liftIO $ doesDirectoryExist dir
+                        if b
+                            then do
+                                $logDebugS wxppLogSource $ fromString $ "watching for dir: " <> dir
+                                liftM Just $
+                                    (liftBaseOpDiscard $
+                                        FN.watchDir
+                                            mgr
+                                            dir
+                                            predi)
+                                            (handle_evt (get_atk app_id) normalized_fp)
+                            else return Nothing
+
+            liftIO $ atomicModifyIORef' watch_data $ \the_map -> (Map.insert app_id stops the_map, ())
+
+    let remove_app app_id = do
+            stops <- liftIO $ atomicModifyIORef' watch_data $ \the_map ->
+                                let stops = Map.lookup app_id the_map
+                                    new_map = Map.delete app_id the_map
+                                in (new_map, stops)
+            void $ liftIO $ sequence $ fromMaybe [] stops
+
+    let loop mgr = do
+            exit_or_evt <- liftIO $ Async.race block_until_exit get_event
+            case exit_or_evt of
+                Left _ -> do
+                    stops <- liftM (join . Map.elems) $ liftIO $ readIORef watch_data
+                    void $ liftIO $ sequence stops
+                    return ()
+
+                Right evt -> do
+                    case evt of
+                        WxppSignalNewApp app_id -> add_app mgr app_id
+                        WxppSignalRemoveApp app_id -> remove_app app_id
+                    loop mgr
+
+    bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
+        loop mgr
+
+    where
+        -- dirs = fmap takeDirectory fp
+        -- fp' = fmap normalise fp
+        -- fp = fmap (</> fname) data_dirs
+
+        watch_cfg = FN.defaultConfig
+                        { FN.confDebounce = FN.Debounce (fromIntegral (1 :: Int)) }
+                        -- 把时间相近(1秒内)的事件合并
+                        -- 很多对文件操作的工具保存时都可能由多个文件系统操作完成
+                        -- 比如 vim
+
+        handle_evt get_atk' fp' evt = do
+            let evt_fp = normalise $ FN.eventPath evt
+            if evt_fp `elem` fp'
+                then do
+                    -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
+                    -- 干脆不理会 event 的类型，直接检查文件是否存在
+                    exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
+                    if not exists
+                        then do
+                            $logWarnS wxppLogSource $ "menu config file has been removed or inaccessible: "
+                                                        <> (fromString $ FN.eventPath evt)
+                            -- 如果打算停用菜单，可直接将配置文件清空
+                        else do
+                            load get_atk' fp'
+                else do
+                    -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+                    return ()
+
+        load :: IO (Maybe AccessToken) -> [FilePath] -> m ()
+        load get_atk' normalized_fp = do
+            m_atk <- liftIO get_atk'
+            case m_atk of
+                Nothing             -> do
+                    $logErrorS  wxppLogSource $ "Failed to create menu: no access token available."
+
+                Just access_token   ->  do
+                    let app_id = accessTokenApp access_token
+                        data_dirs = fmap takeDirectory normalized_fp
+                    err_or <- wxppCreateMenuWithYaml access_token (LNE.fromList data_dirs) fname
+                    case err_or of
+                        Left err    -> $logErrorS  wxppLogSource $
+                                                "Failed to create menu for app: "
+                                                <> unWxppAppID app_id
+                                                <> ", error was: " <> fromString err
+                        Right _     -> $logInfoS wxppLogSource $
+                                            "menu reloaded for app: " <> unWxppAppID app_id

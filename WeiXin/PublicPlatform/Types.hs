@@ -1264,6 +1264,11 @@ instance FromJSON WxppForwardedEnv where
                                         <*> ( obj .: "access_token" )
 
 
+-- | 程序内部因公众号的变化而产生的事件
+data WxppSignal = WxppSignalNewApp WxppAppID
+                | WxppSignalRemoveApp WxppAppID
+                deriving (Eq, Show)
+
 --------------------------------------------------------------------------------
 
 wxppLogSource :: IsString a => a
