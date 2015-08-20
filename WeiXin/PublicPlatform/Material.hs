@@ -51,6 +51,26 @@ instance ToJSON WxppDurableArticleS where
                 ("url" .= unUrlText (wxppDurableArticleSUrl x))
                     : wppDurableArticleToJsonPairs (wxppDurableArticleSA x)
 
+
+-- | 根据已保存至素材库的图文消息，生成可回复用的图文消息
+-- 比较麻烦的是封面图的URL
+-- 这个URL可以比较曲折地取得：根据图文消息里的封面图media_id，遍历一次所有图片素材
+-- 在media_id相同的项目内，找到其URL
+-- (微信目前不提供根据media_id找到图片URL的直接接口）
+wxppMakeArticleByDurableArticleS :: Maybe UrlText     -- ^ 封面图的URL
+                                    -> WxppDurableArticleS
+                                    -> WxppArticle
+wxppMakeArticleByDurableArticleS m_pic_url s =
+    WxppArticle
+        (Just $ wxppDurableArticleTitle a)
+        (wxppDurableArticleDigest a)
+        m_pic_url
+        (Just $ wxppDurableArticleSUrl s)
+    where
+        a = wxppDurableArticleSA s
+
+
+
 data DurableUploadResult = DurableUploadResult {
                                 durableUploadResultMediaID  :: WxppDurableMediaID
                                 , durableUploadResultUrl    :: Maybe UrlText
@@ -242,6 +262,32 @@ wxppGetDurableMediaMaybe atk mid = do
                     | wxppToErrorCodeX xerr == wxppToErrorCode WxppInvalidMediaId
                         -> return Nothing
                 _ -> throwM e
+
+
+-- | 组合了 wxppUploadDurableNews 与 wxppGetDurableMedia
+-- 把 WxppDurableNews 保存至素材库后，再取出来，从而知道每个图文的URL
+-- 再生成一个 WxppOutMsg
+wxppUploadDurableNewsThenMakeOutMsg ::
+    ( MonadIO m, MonadLogger m, MonadCatch m) =>
+    AccessToken
+    -> [(WxppDurableArticle, Maybe UrlText)]
+    -> m (WxppDurableMediaID, WxppOutMsg)
+wxppUploadDurableNewsThenMakeOutMsg atk article_and_url = do
+    durable_media_id <- liftM durableUploadResultMediaID $
+                            wxppUploadDurableNews atk $ WxppDurableNews $ map fst article_and_url
+    get_result <- wxppGetDurableMedia atk durable_media_id
+    case get_result of
+        WxppGetDurableNews article_s_list -> do
+            return $ (durable_media_id,) $ WxppOutMsgNews $
+                flip map (zip article_s_list $ map snd article_and_url) $
+                            \(article_s, m_pic_url) ->
+                                wxppMakeArticleByDurableArticleS m_pic_url article_s
+
+        _ -> do
+            throwM $ userError $
+                "wxppGetDurableMedia return unexpected result, should be a WxppGetDurableNews"
+                <> ", but got " <> show get_result
+
 
 -- | 永久素材统计数
 data WxppDurableCount = WxppDurableCount {
