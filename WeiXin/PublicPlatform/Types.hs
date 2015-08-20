@@ -865,7 +865,7 @@ data WxppDurableArticle = WxppDurableArticle {
                                 , wxppDurableArticleContent        :: Text
                                 , wxppDurableArticleContentSrcUrl  :: Maybe UrlText
                             }
-                            deriving (Eq, Ord)
+                            deriving (Eq, Ord, Show)
 
 $(deriveSafeCopy 0 'base ''WxppDurableArticle)
 

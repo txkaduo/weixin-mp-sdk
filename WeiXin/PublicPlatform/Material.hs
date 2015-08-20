@@ -35,7 +35,7 @@ data WxppDurableArticleS = WxppDurableArticleS {
                                 wxppDurableArticleSA        :: WxppDurableArticle
                                 , wxppDurableArticleSUrl    :: UrlText
                                 }
-                            deriving (Eq)
+                            deriving (Eq, Show)
 
 $(deriveSafeCopy 0 'base ''WxppDurableArticleS)
 
@@ -186,6 +186,7 @@ data WxppGetDurableResult =    WxppGetDurableNews [WxppDurableArticleS]
                             |   WxppGetDurableVideo Text Text UrlText
                                 -- ^ title description download_url
                             |   WxppGetDurableRaw (Maybe MimeType) LB.ByteString
+                            deriving (Show)
 
 instance FromJSON WxppGetDurableResult where
     -- 这个函数不用处理 WxppGetDurableRaw，因为这种情况并非用 JSON 表示
