@@ -25,7 +25,6 @@ import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             )
 import Yesod.Helpers.Logger
 import Control.Monad.Logger
-import Control.Monad.Trans.Resource
 
 import Network.Wai                          (lazyRequestBody)
 import Text.XML                             (renderText, parseLBS)
@@ -50,7 +49,6 @@ import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.QRCode
-import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Utils
 
 
@@ -138,21 +136,20 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                         return Nothing
                     Right x -> return $ Just x
 
-        pre_result <- liftIO $ wxppSubRunLoggingT foundation $ runResourceT $
-                        preProcessInMsgByMiddlewares
-                            (wxppSubMsgMiddlewares foundation)
-                            (wxppSubCacheBackend foundation)
-                            decrypted_xml0 m_ime0
+        pre_result <- liftIO $ wxppPreProcessInMsg foundation decrypted_xml0 m_ime0
         case pre_result of
-            Nothing -> do
+            Left err -> do
+                $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
+                return ("程序内部错误，请稍后重试", [])
+
+            Right Nothing -> do
                 $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
                 return ("", [])
 
-            Just (decrypted_xml, m_ime) -> do
+            Right (Just (decrypted_xml, m_ime)) -> do
                 let handle_msg      = wxppSubMsgHandler foundation
                 out_res <- ExceptT $
-                        (try $ liftIO $ wxppSubRunLoggingT foundation $ runResourceT $
-                                        handle_msg decrypted_xml m_ime)
+                        (try $ liftIO $ handle_msg decrypted_xml m_ime)
                             >>= return
                                     . either
                                         (Left . (show :: SomeException -> String))

@@ -11,6 +11,7 @@ import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import Control.Concurrent                   (threadDelay)
+import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Control.Monad.Catch
@@ -52,7 +53,7 @@ parseMultWxppAppConfig obj = do
                 else return Nothing
 
 
-type LoInMsgHandlerList = [SomeWxppInMsgHandler WxppHandlerMonad]
+type InMsgHandlerList m = [SomeWxppInMsgHandler m]
 
 -- | 用于生成 yesod 的 subsite 类型的辅助工具
 -- 它就是为了辅助制造一个 App -> WxppAppID -> MaybeWxppSub 这样的函数
@@ -61,19 +62,21 @@ mkMaybeWxppSub ::
     , DBActionRunner app
     , DBAction app ~ SqlPersistT
     , WxppCacheBackend c
+    , n ~ ResourceT (LoggingT IO)
     ) =>
     app
     -> c
-    -> Maybe (IORef (Maybe LoInMsgHandlerList))
+    -> Maybe (IORef (Maybe (InMsgHandlerList n)))
     -> Map WxppAppID WxppAppConfig
-    -> [WxppInMsgHandlerPrototype WxppHandlerMonad]
+    -> [WxppInMsgHandlerPrototype n]
     -> ([(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> [SomeWxppInMsgProcMiddleware WxppHandlerMonad]
+    -> [SomeWxppInMsgProcMiddleware n]
     -> WxppSubsiteOpts
     -> WxppAppID
     -> MaybeWxppSub
 mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos send_msg middlewares opts app_id =
     mkMaybeWxppSub'
+        (liftM Right . runLoggingTWith foundation . runResourceT)
         foundation
         cache
         (return $ get_last_handlers_ref)
@@ -89,20 +92,22 @@ mkMaybeWxppSub' ::
     , DBActionRunner app
     , DBAction app ~ SqlPersistT
     , WxppCacheBackend c
-    , SV.HasSetter hvar (Maybe LoInMsgHandlerList), SV.HasGetter hvar (Maybe LoInMsgHandlerList)
+    , SV.HasSetter hvar (Maybe (InMsgHandlerList m)), SV.HasGetter hvar (Maybe (InMsgHandlerList m))
+    , MonadIO m, MonadLogger m
     ) =>
-    app
+    (forall a. m a -> IO (Either String a))
+    -> app
     -> c
     -> IO (Maybe hvar)
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
     -> IO (Maybe WxppAppConfig)
             -- ^ 根据 app id 找到相应配置的函数
-    -> IO [WxppInMsgHandlerPrototype WxppHandlerMonad]
+    -> IO [WxppInMsgHandlerPrototype m]
     -> ([(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> [SomeWxppInMsgProcMiddleware WxppHandlerMonad]
+    -> [SomeWxppInMsgProcMiddleware m]
     -> WxppSubsiteOpts
     -> MaybeWxppSub
-mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts =
+mkMaybeWxppSub' m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config
         let data_dirs   = wxppAppConfigDataDir wac
@@ -111,8 +116,8 @@ mkMaybeWxppSub' foundation cache get_last_handlers_ref get_wxpp_config get_proto
                     (SomeWxppCacheBackend cache)
                     (runDBWith foundation)
                     send_msg
-                    (handle_msg data_dirs)
-                    middlewares
+                    (\x1 x2 -> liftM join $ m_to_io $ handle_msg data_dirs x1 x2)
+                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
                     (runLoggingTWith foundation)
                     opts
     where
