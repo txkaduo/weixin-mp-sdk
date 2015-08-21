@@ -68,12 +68,13 @@ loopRefreshAccessTokens ::
     IO Bool     -- ^ This function should be a blocking op,
                 -- return True if the infinite should be aborted.
     -> Int      -- ^ interval between successive checking (in seconds)
-    -> [WxppAppConfig]
+    -> m [WxppAppConfig]
     -> c
     -> NominalDiffTime
     -> m ()
-loopRefreshAccessTokens chk_abort intv wac_list cache dt = do
+loopRefreshAccessTokens chk_abort intv get_wac_list cache dt = do
     loopRunBgJob chk_abort intv $ do
+        wac_list <- get_wac_list
         forM_ wac_list $ \wac -> refreshAccessTokenIfNeeded wac cache dt
 
 
