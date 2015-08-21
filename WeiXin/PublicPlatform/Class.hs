@@ -59,6 +59,9 @@ class WxppCacheBackend a where
 class HasAccessToken a where
     wxppGetAccessToken :: a -> IO (Maybe (AccessToken, UTCTime))
 
+instance HasAccessToken a => HasAccessToken (a, b) where
+    wxppGetAccessToken = wxppGetAccessToken . fst
+
 instance HasAccessToken (IO (Maybe (AccessToken, UTCTime))) where
     wxppGetAccessToken = id
 
@@ -91,11 +94,17 @@ class HasWxppAppID a where
 instance HasWxppAppID WxppAppID where
     getWxppAppID = id
 
+instance HasWxppAppID a => HasWxppAppID (a,b) where
+    getWxppAppID = getWxppAppID . fst
+
 class HasWxppOpenID a where
     getWxppOpenID :: a -> WxppOpenID
 
 instance HasWxppOpenID WxppOpenID where
     getWxppOpenID = id
+
+instance HasWxppOpenID a => HasWxppOpenID (a,b) where
+    getWxppOpenID = getWxppOpenID . fst
 
 
 class HasSomeWxppCacheBackend a where
@@ -104,9 +113,15 @@ class HasSomeWxppCacheBackend a where
 instance HasSomeWxppCacheBackend SomeWxppCacheBackend where
     getSomeWxppCacheBackend = id
 
+instance HasSomeWxppCacheBackend a => HasSomeWxppCacheBackend (a,b) where
+    getSomeWxppCacheBackend = getSomeWxppCacheBackend . fst
+
 
 class HasWxppOutMsgDir a where
     getWxppOutMsgDir :: a -> NonEmpty FilePath
+
+instance HasWxppOutMsgDir a => HasWxppOutMsgDir (a,b) where
+    getWxppOutMsgDir = getWxppOutMsgDir . fst
 
 instance HasWxppOutMsgDir (NonEmpty FilePath) where
     getWxppOutMsgDir = id
