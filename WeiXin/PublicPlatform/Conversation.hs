@@ -9,7 +9,8 @@ module WeiXin.PublicPlatform.Conversation
 import ClassyPrelude
 
 import Control.Monad.State.Strict hiding (mapM_)
-import Control.Monad.Trans.Except
+import Control.Monad.Except hiding (mapM_)
+import Control.Monad.Trans.Maybe
 import Data.Conduit
 import Control.Monad.Logger
 import qualified Data.Conduit.List          as CL
@@ -162,7 +163,7 @@ class WxTalkerDoneAction r m a where
 
 wxTalkerRun :: (Monad m, Eq a, WxTalkerState r m a) =>
     Bool
-    -> (WxTalkerMonad r m a)
+    -> (WxTalkerMonad r m (Maybe a))
     -> (a -> WxTalkerMonad r m ())
     -> Conduit WxppInMsgEntity (WxTalkerMonad r m) WxppOutMsg
 wxTalkerRun skip_first_prompt get_state put_state =
@@ -171,16 +172,19 @@ wxTalkerRun skip_first_prompt get_state put_state =
         else go
     where
         prompt = do
-            st <- lift $ get_state
-            (replies, new_st) <- lift $ wxTalkPromptToInput st
-            mapM_ yield replies
-            unless (st == new_st) $ do
-                lift $ put_state new_st
+            m_st <- lift $ get_state
+            case m_st of
+                Nothing -> return ()
+                Just st -> do
+                    (replies, new_st) <- lift $ wxTalkPromptToInput st
+                    mapM_ yield replies
+                    unless (st == new_st) $ do
+                        lift $ put_state new_st
 
         go = prompt >> chk_wait_and_go
 
         chk_wait_and_go = do
-            done <- lift $ get_state >>= wxTalkIfDone
+            done <- lift $ get_state >>= maybe (return True) wxTalkIfDone
             if done
                 then return ()
                 else wait_and_go
@@ -190,16 +194,19 @@ wxTalkerRun skip_first_prompt get_state put_state =
             case mx of
                 Nothing -> return ()
                 Just t  -> do
-                    st <- lift $ get_state
-                    (replies, new_st) <- lift $ wxTalkHandleInput st t
-                    mapM_ yield replies
-                    unless (st == new_st) $ do
-                        lift $ put_state new_st
-                    go
+                    m_st <- lift $ get_state
+                    case m_st of
+                        Nothing -> return ()
+                        Just st -> do
+                            (replies, new_st) <- lift $ wxTalkHandleInput st t
+                            mapM_ yield replies
+                            unless (st == new_st) $ do
+                                lift $ put_state new_st
+                            go
 
 
 wxTalkerInputOneStep :: (Monad m, WxTalkerState r m s, Eq s) =>
-    WxTalkerMonad r m s                 -- ^ get state
+    WxTalkerMonad r m (Maybe s)         -- ^ get state
     -> (s -> WxTalkerMonad r m ())      -- ^ set state
     -> r
     -> Maybe WxppInMsgEntity
@@ -223,33 +230,34 @@ wxTalkerInputProcessInMsg :: forall m r s .
     , WxTalkerState r m s
     , WxTalkerDoneAction r m s
     ) =>
-    (WxppOpenID -> WxTalkerMonad r m s)             -- ^ get state
+    (WxppOpenID -> WxTalkerMonad r m (Maybe s))     -- ^ get state
     -> (WxppOpenID -> s -> WxTalkerMonad r m ())    -- ^ set state
     -> r
     -> Maybe WxppInMsgEntity
         -- ^ this is nothing only if caller cannot parse the message
     -> m (Either String WxppInMsgHandlerResult)
 wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
-    case m_ime of
-        Nothing -> return []
-        Just ime -> do
-            let open_id = wxppInFromUserName ime
-            (get_st', set_st') <- ioCachedGetSet (get_st open_id) (set_st open_id)
-            st <- run_wx_monad $ get_st'
-            done <- run_wx_monad $ wxTalkIfDone st
-            if done
-                then do
-                    -- not in conversation
-                    return []
+    liftM (fromMaybe []) $ runMaybeT $ do
+        ime <- MaybeT $ return m_ime
+        let open_id = wxppInFromUserName ime
+        (get_st', set_st') <- ioCachedGetSet (get_st open_id) (set_st open_id)
+        st <- MaybeT $ run_wx_monad $ get_st'
+        done <- lift $ run_wx_monad $ wxTalkIfDone st
+        if done
+            then do
+                -- not in conversation
+                return []
 
-                else do
-                    msgs <- ExceptT $ wxTalkerInputOneStep get_st' set_st' env m_ime
-                    new_st <- run_wx_monad $ get_st'
-                    done2 <- run_wx_monad $ wxTalkIfDone new_st
-                    msgs2 <- if done2
-                                then run_wx_monad $ wxTalkDone new_st
+            else do
+                msgs <- lift $ ExceptT $ wxTalkerInputOneStep get_st' set_st' env m_ime
+                msgs2 <- lift $ liftM (fromMaybe []) $ runMaybeT $ do
+                            new_st <- MaybeT $ run_wx_monad $ get_st'
+                            done2 <- lift $ run_wx_monad $ wxTalkIfDone new_st
+                            if done2
+                                then lift $ run_wx_monad $ wxTalkDone new_st
                                 else return []
-                    return $ (map $ (True,) . Just) $ msgs <> msgs2
+
+                return $ (map $ (True,) . Just) $ msgs <> msgs2
     where
         run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
         run_wx_monad = flip runWxTalkerMonadE env
@@ -261,28 +269,30 @@ wxTalkerInputProcessJustInited :: forall m r s .
     , WxTalkerState r m s
     , WxTalkerDoneAction r m s
     ) =>
-    (WxTalkerMonad r m s)               -- ^ get state
+    (WxTalkerMonad r m (Maybe s))       -- ^ get state
     -> (s -> WxTalkerMonad r m ())      -- ^ set state
     -> r
     -> m (Either String WxppInMsgHandlerResult)
-wxTalkerInputProcessJustInited get_st set_st env = runExceptT $ do
-    (get_st', set_st') <- ioCachedGetSet get_st set_st
-    st <- run_wx_monad $ get_st'
-    done <- run_wx_monad $ wxTalkIfDone st
-    if done
-        then do
-            -- not in conversation
-            $logWarn $ "inited state is done?"
-            return []
+wxTalkerInputProcessJustInited get_st set_st env =
+    runExceptT $ liftM (fromMaybe []) $ runMaybeT $ do
+        (get_st', set_st') <- ioCachedGetSet get_st set_st
+        st <- MaybeT $ run_wx_monad $ get_st'
+        done <- lift $ run_wx_monad $ wxTalkIfDone st
+        if done
+            then do
+                -- not in conversation
+                $logWarn $ "inited state is done?"
+                return []
 
-        else do
-            msgs <- ExceptT $ wxTalkerInputOneStep get_st' set_st' env Nothing
-            new_st <- run_wx_monad $ get_st'
-            done2 <- run_wx_monad $ wxTalkIfDone new_st
-            msgs2 <- if done2
-                        then run_wx_monad $ wxTalkDone new_st
-                        else return []
-            return $ (map $ (True,) . Just) $ msgs <> msgs2
+            else do
+                msgs <- lift $ ExceptT $ wxTalkerInputOneStep get_st' set_st' env Nothing
+                msgs2 <- lift $ liftM (fromMaybe []) $ runMaybeT $ do
+                            new_st <- MaybeT $ run_wx_monad $ get_st'
+                            done2 <- lift $ run_wx_monad $ wxTalkIfDone new_st
+                            if done2
+                                then lift $ run_wx_monad $ wxTalkDone new_st
+                                else return []
+                return $ (map $ (True,) . Just) $ msgs <> msgs2
     where
         run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
         run_wx_monad = flip runWxTalkerMonadE env
@@ -291,9 +301,9 @@ wxTalkerInputProcessJustInited get_st set_st env = runExceptT $ do
 -- | 这个小工具用于减少 getter, setter 访问数据库
 -- 前提：状态的读写是单线程的
 ioCachedGetSet :: (MonadIO m, MonadIO n) =>
-    m s
+    m (Maybe s)
     -> (s -> m ())
-    -> n (m s, s -> m ())
+    -> n (m (Maybe s), s -> m ())
         -- ^ 新的 getter, setter
 ioCachedGetSet get_f set_f = do
     ior <- liftIO $ newIORef Nothing
@@ -301,7 +311,7 @@ ioCachedGetSet get_f set_f = do
             set_f x
             liftIO $ writeIORef ior $ Just x
 
-    let get_f' = (liftIO $ readIORef ior) >>= maybe get_f return
+    let get_f' = (liftIO $ readIORef ior) >>= maybe get_f (return . Just)
 
     return (get_f', set_f')
 
