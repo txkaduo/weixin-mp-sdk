@@ -53,6 +53,7 @@ library
                        WeiXin.PublicPlatform.Misc
                        WeiXin.PublicPlatform.Conversation
                        WeiXin.PublicPlatform.Center
+                       WeiXin.PublicPlatform
 
   -- other-modules:       
   default-extensions:  NoImplicitPrelude
