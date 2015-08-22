@@ -377,7 +377,7 @@ newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
                     deriving (Show, Eq, PersistFieldSql, PersistField)
 
 data WxppAppConfig = WxppAppConfig {
-                    wxppAppConfigAppID         :: WxppAppID
+                    wxppConfigAppID         :: WxppAppID
                     , wxppConfigAppSecret   :: WxppAppSecret
                     , wxppConfigAppToken    :: Token
                     , wxppConfigAppAesKey   :: Maybe AesKey
@@ -388,6 +388,10 @@ data WxppAppConfig = WxppAppConfig {
                     , wxppAppConfigDataDir  :: NonEmpty FilePath
                     }
                     deriving (Show, Eq)
+
+-- | for backword-compatibility
+wxppAppConfigAppID :: WxppAppConfig -> WxppAppID
+wxppAppConfigAppID = wxppConfigAppID
 
 instance FromJSON WxppAppConfig where
     parseJSON = withObject "WxppAppConfig" $ \obj -> do
