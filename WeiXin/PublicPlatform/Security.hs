@@ -16,6 +16,7 @@ import qualified Data.Text                  as T
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
+import Data.Time                            (addUTCTime)
 import Data.Aeson                           ( FromJSON(..)
                                             , withObject, (.:))
 import Crypto.Cipher                        ( makeIV, IV, cbcEncrypt
@@ -28,6 +29,7 @@ import Data.Byteable                        (toBytes)
 import qualified Data.Attoparsec.ByteString as AttoB
 
 import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 
 
@@ -69,6 +71,33 @@ refreshAccessToken' app_id app_secret = do
                 >>= asWxppWsResponseNormal'
     $(logDebugS) wxppLogSource $ "access token has been refreshed."
     return atk
+
+
+wxppAcquireAndSaveAccessToken :: (MonadIO m, MonadLogger m, MonadCatch m
+                                 , WxppCacheBackend c) =>
+                                c
+                                -> WxppAppID
+                                -> WxppAppSecret
+                                -> m ()
+wxppAcquireAndSaveAccessToken cache app_id secret = do
+    ws_res <- tryWxppWsResult $ refreshAccessToken' app_id secret
+    case ws_res of
+        Left err -> do
+            $(logErrorS) wxppLogSource $
+                "Failed to refresh access token for app: "
+                    <> unWxppAppID app_id
+                    <> ", error was: "
+                    <> fromString (show err)
+        Right (AccessTokenResp atk_p ttl) -> do
+            $(logDebugS) wxppLogSource $
+                "New access token acquired for app: "
+                    <> unWxppAppID app_id
+                    <> ", expired in: " <> (fromString $ show ttl)
+            now' <- liftIO getCurrentTime
+            let expiry = addUTCTime (fromIntegral ttl) now'
+            liftIO $ do
+                wxppCacheAddAccessToken cache (atk_p app_id) expiry
+                wxppCachePurgeAccessToken cache now'
 
 
 

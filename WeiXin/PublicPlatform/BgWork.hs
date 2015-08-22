@@ -7,7 +7,6 @@ import Control.Monad.Logger
 import System.Timeout                       (timeout)
 import Control.Exception                    (evaluate)
 
-import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Security
 
@@ -26,26 +25,12 @@ refreshAccessTokenIfNeeded wac cache dt = do
     expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
                         liftIO $ wxppCacheGetAccessToken cache app_id
     when (expired) $ do
-        ws_res <- tryWxppWsResult $ refreshAccessToken wac
-        case ws_res of
-            Left err -> do
-                $(logErrorS) wxppLogSource $
-                    "Failed to refresh access token for app: "
-                        <> unWxppAppID app_id
-                        <> ", error was: "
-                        <> fromString (show err)
-            Right (AccessTokenResp atk_p ttl) -> do
-                $(logDebugS) wxppLogSource $
-                    "New access token acquired for app: "
-                        <> unWxppAppID app_id
-                        <> ", expired in: " <> (fromString $ show ttl)
-                now' <- liftIO getCurrentTime
-                let expiry = addUTCTime (fromIntegral ttl) now'
-                liftIO $ do
-                    wxppCacheAddAccessToken cache (atk_p app_id) expiry
-                    wxppCachePurgeAccessToken cache now'
+        wxppAcquireAndSaveAccessToken cache app_id secret
+
     where
-        app_id = wxppAppConfigAppID wac
+        app_id = wxppConfigAppID wac
+        secret = wxppConfigAppSecret wac
+
 
 
 -- | infinite loop to refresh access token
