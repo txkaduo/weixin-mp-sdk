@@ -308,7 +308,10 @@ decodeBase64Encoded = B64.decode . encodeUtf8
 
 decodeBase64AesKey :: Text -> Either String AesKey
 decodeBase64AesKey t = fmap AesKey $ do
-    decodeBase64Encoded t >>= either (Left . show) Right . makeKey
+    decodeBase64Encoded t' >>= either (Left . show) Right . makeKey
+    where
+        -- 相比标准的 base64 微信显示的 AesKey 少了补位的等号
+        t' = t <> T.replicate (4 - length t `rem` 4) "="
 
 parseAesKeyFromText :: Text -> Parser AesKey
 parseAesKeyFromText t = either fail return $ decodeBase64AesKey t
