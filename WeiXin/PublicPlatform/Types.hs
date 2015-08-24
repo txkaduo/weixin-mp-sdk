@@ -154,7 +154,10 @@ instance FromJSON WxppOpenID where
 
 instance PathPiece WxppOpenID where
     toPathPiece (WxppOpenID x)  = toPathPiece x
-    fromPathPiece t             = WxppOpenID <$> fromPathPiece t
+    fromPathPiece t             =   let t' = T.strip t
+                                    in if T.null t'
+                                          then Nothing
+                                          else WxppOpenID <$> fromPathPiece t'
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Read, Eq, Ord, Typeable)
@@ -342,7 +345,10 @@ instance PersistFieldSql WxppAppID where
 
 instance PathPiece WxppAppID where
     toPathPiece (WxppAppID x)   = toPathPiece x
-    fromPathPiece t             = WxppAppID <$> fromPathPiece t
+    fromPathPiece t             =   let t' = T.strip t
+                                    in if T.null t'
+                                          then Nothing
+                                          else WxppAppID <$> fromPathPiece t'
 
 instance ToJSON WxppAppID where toJSON = toJSON . unWxppAppID
 
