@@ -398,7 +398,7 @@ data WxppAppConfig = WxppAppConfig {
                     }
                     deriving (Show, Eq)
 
--- | for backword-compatibility
+-- | for backward-compatibility
 wxppAppConfigAppID :: WxppAppConfig -> WxppAppID
 wxppAppConfigAppID = wxppConfigAppID
 
