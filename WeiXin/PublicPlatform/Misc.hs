@@ -249,3 +249,26 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
 
             liftIO $ threadDelay $ 1000 * 1000
             go
+
+
+retryGetAccessTokenDo :: (MonadIO m, MonadLogger m) =>
+                        Int     -- ^ microseconds interval between retries
+                        -> Int  -- retry number
+                        -> m (Maybe AccessToken)
+                        -> (AccessToken -> m a)
+                        -> m (Maybe a)
+retryGetAccessTokenDo delay retry_cnt get_atk use_atk = go 0
+    where
+        go cnt
+            | cnt > retry_cnt = return Nothing
+
+            | otherwise = do
+                m_atk <- get_atk
+
+                case m_atk of
+                    Nothing -> do
+                        $logError $ "cannot get access token"
+                        liftIO $ threadDelay delay
+                        go (cnt + 1)
+
+                    Just atk -> liftM Just $ use_atk atk
