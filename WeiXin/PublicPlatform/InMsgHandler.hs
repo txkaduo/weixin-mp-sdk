@@ -1,5 +1,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
 import ClassyPrelude hiding (catch)
@@ -27,6 +29,8 @@ import System.Directory                     (canonicalizePath)
 import System.FilePath                      (splitDirectories)
 
 import Yesod.Helpers.Aeson                  (parseArray)
+import Yesod.Helpers.Parsec                 (CharParser)
+import Text.Parsec                          (parse)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -400,6 +404,59 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs $ mkDelayedYamlLoader fp
                 liftM (return . (True,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                                 tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg
+
+
+-- | used in WxppInMsgMenuItemClickGeneral
+class MenuItemEventKey a where
+    -- | used to generate unique name for isNameOfInMsgHandler
+    menuItemEventKeyIdent   :: Proxy a -> Text
+
+    -- | parse the event key string
+    menuItemEventKeyParser  :: CharParser a
+
+
+class MenuItemEventKey a => MenuItemEventKeyHandle m a where
+    type MenuItemEventKeyHandleEnv m a
+    -- | handle the event
+    handleMenuItemEventKey  :: WxppCacheBackend c =>
+                            a
+                            -> MenuItemEventKeyHandleEnv m a
+                            -> c
+                            -> WxppInMsgHandler m
+
+-- | Handler: 处理点击菜单项目的事件通知，比较通用的版本
+-- 真正的逻辑都在 MenuItemEventKey class 里
+data WxppInMsgMenuItemClickGeneral (m :: * -> *) a = WxppInMsgMenuItemClickGeneral
+                                                        (MenuItemEventKeyHandleEnv m a)
+
+instance MenuItemEventKey a => JsonConfigable (WxppInMsgMenuItemClickGeneral m a) where
+    type JsonConfigableUnconfigData (WxppInMsgMenuItemClickGeneral m a) = (MenuItemEventKeyHandleEnv m a)
+
+    isNameOfInMsgHandler _ x =
+        x == "menu-click-general:" <> menuItemEventKeyIdent (Proxy :: Proxy a)
+
+    parseWithExtraData _ x1 _obj = return $ WxppInMsgMenuItemClickGeneral x1
+
+
+type instance WxppInMsgProcessResult (WxppInMsgMenuItemClickGeneral m a) = WxppInMsgHandlerResult
+
+instance (Monad m, MenuItemEventKeyHandle m a) =>
+    IsWxppInMsgProcessor m (WxppInMsgMenuItemClickGeneral m a)
+    where
+
+    processInMsg (WxppInMsgMenuItemClickGeneral env) cache bs m_ime = runExceptT $ do
+        liftM (fromMaybe [] . join) $ forM (fmap wxppInMessage m_ime) $ \in_msg -> do
+            case in_msg of
+                WxppInMsgEvent (WxppEvtClickItem evt_key) -> do
+                    case parse menuItemEventKeyParser "" evt_key of
+                        Left _err -> do
+                            return Nothing
+
+                        Right v -> do
+                            liftM Just $ ExceptT $ handleMenuItemEventKey (v :: a) env cache bs m_ime
+
+                _ -> return Nothing
+
 
 
 -- | Handler: 回复原文本消息中路径指定的任意消息
