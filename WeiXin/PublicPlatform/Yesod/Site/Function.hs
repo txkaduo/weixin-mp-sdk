@@ -54,7 +54,7 @@ data StoreInMsgToDB m = StoreInMsgToDB
                             WxppAppID
                             (WxppSubDBActionRunner m)
                                 -- function to run DB actions
-                            (WxppInMsgRecordId -> WxppBriefMediaID -> m ())
+                            (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> m ())
                                 -- function to download media file
                                 -- 推荐使用异步方式下载
 
@@ -64,7 +64,7 @@ instance JsonConfigable (StoreInMsgToDB m) where
     type JsonConfigableUnconfigData (StoreInMsgToDB m) =
             ( WxppAppID
             , WxppSubDBActionRunner m
-            , WxppInMsgRecordId -> WxppBriefMediaID -> m ()
+            , Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> m ()
             )
 
     isNameOfInMsgHandler _ = ( == "db-store-all" )
@@ -95,7 +95,7 @@ instance (MonadIO m, MonadLogger m
     ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
     preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) _cache bs m_ime = runMaybeT $ do
         now <- liftIO getCurrentTime
-        (msg_record_id, mids) <- mapMaybeT (runWxppSubDBActionRunner db_runner) $ do
+        (msg_record_id, (is_video, mids)) <- mapMaybeT (runWxppSubDBActionRunner db_runner) $ do
             let m_to        = fmap wxppInToUserName m_ime
                 m_from      = fmap wxppInFromUserName m_ime
                 m_ctime     = fmap wxppInCreatedTime m_ime
@@ -116,16 +116,16 @@ instance (MonadIO m, MonadLogger m
                 Right x -> return x
 
             -- save any temporary media data
-            mids <- liftM (fromMaybe []) $ forM m_ime $ \ime -> do
+            (is_video, mids) <- liftM (fromMaybe (False, [])) $ forM m_ime $ \ime -> do
                         case wxppInMessage ime of
-                            WxppInMsgImage mid _   -> return [mid]
-                            WxppInMsgVoice mid _ _ -> return [mid]
-                            WxppInMsgVideo mid mid2 -> return [mid, mid2]
-                            _                       -> return []
-            return (msg_record_id, mids)
+                            WxppInMsgImage mid _   -> return (False, [mid])
+                            WxppInMsgVoice mid _ _ -> return (False, [mid])
+                            WxppInMsgVideo mid mid2 -> return (True, [mid, mid2])
+                            _                       -> return (False, [])
+            return (msg_record_id, (is_video, mids))
 
         lift $ forM_ mids $ \mid -> do
-            media_downloader msg_record_id mid
+            media_downloader (not is_video) msg_record_id mid
         return (bs, m_ime)
 
 
