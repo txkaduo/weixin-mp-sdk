@@ -16,12 +16,15 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.EndUser
     , module WeiXin.PublicPlatform.Propagate
     , module WeiXin.PublicPlatform.Yesod.Site
+    , module WeiXin.PublicPlatform.Yesod.Types
     , module WeiXin.PublicPlatform.Yesod.Site.Function
     , module WeiXin.PublicPlatform.Yesod.Site.Data
     , module WeiXin.PublicPlatform.BgWork
-    , module WeiXin.PublicPlatform.Utils
+    -- , module WeiXin.PublicPlatform.Utils
     , module WeiXin.PublicPlatform.Misc
-    -- , module WeiXin.PublicPlatform.Conversation
+    , module WeiXin.PublicPlatform.Conversation
+    , module WeiXin.PublicPlatform.Conversation.Yesod
+    -- , module WeiXin.PublicPlatform.Conversation.TextParser
     , module WeiXin.PublicPlatform.Center
     ) where
 
@@ -42,10 +45,13 @@ import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Propagate
 import WeiXin.PublicPlatform.Yesod.Site
+import WeiXin.PublicPlatform.Yesod.Types
 import WeiXin.PublicPlatform.Yesod.Site.Function
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.BgWork
-import WeiXin.PublicPlatform.Utils
+-- import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Misc
--- import WeiXin.PublicPlatform.Conversation hiding (Text.Parsec.Text, Text.Parsec.Error, Text.Parsec.Prim)
+import WeiXin.PublicPlatform.Conversation
+import WeiXin.PublicPlatform.Conversation.Yesod
+-- import WeiXin.PublicPlatform.Conversation.TextParser
 import WeiXin.PublicPlatform.Center

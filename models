@@ -94,3 +94,19 @@ WxppCachedUploadedMedia
     UniqueWxppCachedUploadedMedia mediaId app
     UniqueWxppCachedUploadedMediaHash sha256 app
 
+
+-- | 管理公众号中的会话状态
+-- 对于每个用户，都找相应的最新的记录
+-- 如果要表达中止会话，则应把 aborted 设为 true
+-- NEED INDEX: updatedTime
+WxppTalkState
+    appId           WxppAppID maxlen=200
+    openId          WxppOpenID maxlen=200
+    typ             Text
+    json            ByteString          -- ^ 这个内容的解释依赖 typ 字段
+
+    done            Bool
+    aborted         Bool
+
+    updatedTime     UTCTime
+    createdTime     UTCTime

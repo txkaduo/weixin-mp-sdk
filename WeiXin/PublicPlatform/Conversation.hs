@@ -1,12 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module WeiXin.PublicPlatform.Conversation
-    ( module WeiXin.PublicPlatform.Conversation
-    , module Text.Parsec.Text
-    , module Text.Parsec.Error
-    , module Text.Parsec.Prim
-    ) where
+module WeiXin.PublicPlatform.Conversation where
 
 import ClassyPrelude
+import Data.Proxy
 
 import Control.Monad.State.Strict hiding (mapM_)
 import Control.Monad.Except hiding (mapM_)
@@ -20,6 +16,7 @@ import Text.Parsec.Error
 import Text.Parsec.Pos                      (initialPos)
 import Text.Parsec.Prim
 import Data.Aeson.TH                        (deriveJSON, defaultOptions)
+import Data.Aeson                           (ToJSON(..))
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.InMsgHandler
@@ -360,6 +357,55 @@ instance Monad m => WxTalkerFreshState r m NullTalkerState where
 instance Monad m => WxTalkerDoneAction r m NullTalkerState where
     wxTalkDone _ = mkWxTalkerMonad $ \_ -> return $ Right []
 
+
+-- | 用于区分不同对话状态的字串
+-- 实现时须人工保证不同对话状态使用不同的字串
+class HasStateType a where
+    getStateType :: Proxy a -> Text
+
+    getStateType' :: a -> Text
+    getStateType' _ = getStateType (Proxy :: Proxy a)
+
+
+instance HasStateType NullTalkerState where
+    getStateType _ = "null"
+
+
+-- | 用于个别有对环境有更多要求的会话
+type family WxppTalkStateExtraEnv s :: *
+
+data SomeWxppTalkState r m = forall a.
+                            ( HasStateType a
+                            , ToJSON a
+                            , WxTalkerState r m a
+                            , WxTalkerDoneAction r m a
+                            , Eq a
+                            ) =>
+                            SomeWxppTalkState a
+
+getStateTypeOfSomeWxppTalkState :: SomeWxppTalkState r m -> Text
+getStateTypeOfSomeWxppTalkState (SomeWxppTalkState x) = getStateType' x
+
+
+instance Monad m => WxTalkerState r m (SomeWxppTalkState r m) where
+    wxTalkPromptToInput (SomeWxppTalkState x)    = liftM (second SomeWxppTalkState) $
+                                                        wxTalkPromptToInput x
+
+    wxTalkHandleInput (SomeWxppTalkState x)   = liftM (second SomeWxppTalkState) .
+                                                    wxTalkHandleInput x
+
+    wxTalkIfDone (SomeWxppTalkState x)      = wxTalkIfDone x
+
+
+instance WxTalkerDoneAction r m (SomeWxppTalkState r m) where
+    wxTalkDone (SomeWxppTalkState x) = wxTalkDone x
+
+instance Eq (SomeWxppTalkState r m) where
+    (==) (SomeWxppTalkState x) (SomeWxppTalkState y) =
+        getStateType' x == getStateType' y && toJSON x == toJSON y
+
+instance ToJSON (SomeWxppTalkState r m) where
+    toJSON (SomeWxppTalkState x) = toJSON x
 
 {-
 data SomeWxTalkerState m = forall a. (WxTalkerState m a, WxTalkerDoneAction m a) =>

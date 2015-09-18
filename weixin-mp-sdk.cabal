@@ -46,12 +46,15 @@ library
                        WeiXin.PublicPlatform.EndUser
                        WeiXin.PublicPlatform.Propagate
                        WeiXin.PublicPlatform.Yesod.Site
+                       WeiXin.PublicPlatform.Yesod.Types
                        WeiXin.PublicPlatform.Yesod.Site.Function
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
                        WeiXin.PublicPlatform.Utils
                        WeiXin.PublicPlatform.Misc
                        WeiXin.PublicPlatform.Conversation
+                       WeiXin.PublicPlatform.Conversation.Yesod
+                       WeiXin.PublicPlatform.Conversation.TextParser
                        WeiXin.PublicPlatform.Center
                        WeiXin.PublicPlatform
 
@@ -63,14 +66,17 @@ library
                        TemplateHaskell
                        TypeFamilies
                        FlexibleInstances
+                       FlexibleContexts
                        MultiParamTypeClasses
                        ExistentialQuantification
                        ConstraintKinds
                        TupleSections
+                       RankNTypes
 
 
   build-depends:       base >=4.7
                      , classy-prelude
+                     , classy-prelude-yesod
                      , yesod
                      , persistent
                      , yesod-core
