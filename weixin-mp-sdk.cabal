@@ -53,6 +53,7 @@ library
                        WeiXin.PublicPlatform.Utils
                        WeiXin.PublicPlatform.Misc
                        WeiXin.PublicPlatform.Conversation
+                       WeiXin.PublicPlatform.Conversation.Misc
                        WeiXin.PublicPlatform.Conversation.Yesod
                        WeiXin.PublicPlatform.Conversation.TextParser
                        WeiXin.PublicPlatform.Center
