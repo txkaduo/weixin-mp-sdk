@@ -20,6 +20,25 @@ import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Media
 
 
+data CommonTalkEnv = CommonTalkEnv
+                        SomeWxppCacheBackend
+                        WxppAppID
+                        (NonEmpty FilePath)     -- ^ base dir of message files
+
+instance HasAccessToken CommonTalkEnv where
+    wxppGetAccessToken (CommonTalkEnv cache app_id _ ) =
+        wxppCacheGetAccessToken cache app_id
+
+instance HasWxppAppID CommonTalkEnv where
+    getWxppAppID (CommonTalkEnv _ app_id _ ) = app_id
+
+instance HasSomeWxppCacheBackend CommonTalkEnv where
+    getSomeWxppCacheBackend (CommonTalkEnv cache _ _) = cache
+
+instance HasWxppOutMsgDir CommonTalkEnv where
+    getWxppOutMsgDir (CommonTalkEnv _ _ base_dir ) = base_dir
+
+
 type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, MonadThrow m, MonadCatch m)
 
 type LoadMsgEnv r = ( HasWxppOutMsgDir r
