@@ -363,8 +363,8 @@ instance Monad m => WxTalkerDoneAction r m NullTalkerState where
 class HasStateType a where
     getStateType :: Proxy a -> Text
 
-    getStateType' :: a -> Text
-    getStateType' _ = getStateType (Proxy :: Proxy a)
+getStateType' :: forall a. HasStateType a => a -> Text
+getStateType' _ = getStateType (Proxy :: Proxy a)
 
 
 instance HasStateType NullTalkerState where
