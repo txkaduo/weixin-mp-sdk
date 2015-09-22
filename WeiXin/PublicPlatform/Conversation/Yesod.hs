@@ -266,7 +266,9 @@ instance (MonadBaseControl IO m, MonadIO m, MonadLogger m) =>
 
 
 -- | 消息处理器：调用后会新建一个会话
--- 应配合条件判断器使用
+-- 对话状态由类型参数 s 指定
+-- 因为它本身不带条件，所以常常配合条件判断器使用
+-- 但也条件判断也可以在 wxTalkInitiate 里实现
 data WxppTalkInitiator r s = WxppTalkInitiator
                             WxppDbRunner
                             r                           -- ^ 与对话种类无关的环境值
@@ -313,6 +315,67 @@ instance
                                 e_state <- lift $ newWxppTalkState' app_id from_open_id state
                                 ExceptT $ processJustInitedWxTalk
                                             (Proxy :: Proxy s) (env, extra_env) e_state
+
+data WxppTalkerFreshStateEntry r0 m = forall s r.
+                                (Eq s, ToJSON s, FromJSON s, HasStateType s
+                                , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
+                                , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
+                                , WxTalkerFreshState (r0, r) (ReaderT WxppDbBackend m) s
+                                ) =>
+                                WxppTalkerFreshStateEntry (Proxy s) r
+
+-- | 消息处理器：调用后会新建一个会话
+-- 它接受的 event key 必须是以下的形式： initiate-talk:XXX
+-- 其中 XXX 是某个对话状态的 getStateType 内容
+-- 与 WxppTalkInitiator 类似，不同的是：
+-- * WxppTalkInitiator 只能初始化确定的某种对话，
+--   WxppTalkEvtKeyInitiator则在一组可能选择里选择一个
+-- * WxppTalkInitiator 本身不带判断条件，
+--   WxppTalkEvtKeyInitiator 则根据 event key 内容选择合适的对话类型
+data WxppTalkEvtKeyInitiator r m = WxppTalkEvtKeyInitiator
+                                    WxppDbRunner
+                                    r                           -- ^ 与对话种类无关的环境值
+                                    [WxppTalkerFreshStateEntry r m]
+
+instance JsonConfigable (WxppTalkEvtKeyInitiator r m) where
+    type JsonConfigableUnconfigData (WxppTalkEvtKeyInitiator r m) =
+            (WxppDbRunner, r, [WxppTalkerFreshStateEntry r m])
+
+    isNameOfInMsgHandler _ x = x == "evtkey-initiate-talk"
+
+    parseWithExtraData _ (f1, f2, f3) _obj = return $ WxppTalkEvtKeyInitiator f1 f2 f3
+
+
+type instance WxppInMsgProcessResult (WxppTalkEvtKeyInitiator r m) = WxppInMsgHandlerResult
+
+instance
+    ( HasWxppAppID r
+    , MonadBaseControl IO m, MonadIO m, MonadLogger m
+    ) =>
+    IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
+    where
+    processInMsg (WxppTalkEvtKeyInitiator db_runner env entries) _cache _bs m_ime = runExceptT $ do
+        ime <- maybe (throwError []) return m_ime
+        evtkey <- case wxppInMessage ime of
+                    WxppInMsgEvent (WxppEvtClickItem evtkey) -> return evtkey
+                    _                                        -> throwError []
+
+        st_type <- maybe (throwError []) return $ T.stripPrefix "initiate-talk:" evtkey
+        let match_st_type (WxppTalkerFreshStateEntry px _) = getStateType px == st_type
+        WxppTalkerFreshStateEntry st_px extra_env <- maybe (throwError []) return $ find match_st_type entries
+        let from_open_id = wxppInFromUserName ime
+            app_id = getWxppAppID env
+        mapExceptT (runWxppDB db_runner) $ do
+            msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiateBlank st_px from_open_id
+            case msgs_or_state of
+                Left msgs -> do
+                            -- cannot create conversation
+                            return $ map ((False,) . Just) $ msgs
+
+                Right state -> do
+                    -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
+                    e_state <- lift $ newWxppTalkState' app_id from_open_id state
+                    ExceptT $ processJustInitedWxTalk st_px (env, extra_env) e_state
 
 
 -- | 消息处理器：调用后会无条件结束当前会话

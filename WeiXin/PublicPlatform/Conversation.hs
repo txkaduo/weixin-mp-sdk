@@ -147,11 +147,16 @@ class WxTalkerState r m a where
                     -> WxTalkerMonad r m Bool
 
 
--- | 代表一种可以从零知识开始的会话
-class WxTalkerFreshState r m a where
+-- | 代表一种可以从微信消息创建的会话
+class Monad m => WxTalkerFreshState r m a where
     -- | 新建一个会话
     -- Left 代表不能创建状态时，应返回的消息
     wxTalkInitiate :: WxppInMsgEntity -> WxTalkerMonad r m (Either [WxppOutMsg] a)
+
+    -- | 用于无任何额外信息的前提下的初始化
+    -- 例如程序自动初始化
+    wxTalkInitiateBlank :: Proxy a -> WxppOpenID -> WxTalkerMonad r m (Either [WxppOutMsg] a)
+    wxTalkInitiateBlank _ _ = return $ Left []
 
 
 class WxTalkerDoneAction r m a where
