@@ -288,7 +288,7 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     atk <- getAccessTokenSubHandler' foundation
 
     _ <- liftIO $ forkIO $ wxppSubRunLoggingT foundation $ do
-                _ <- wxppSubRunDBAction foundation $ initWxppUserDbCacheOfApp atk
+                _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp atk
                 return ()
 
     return $ toJSON ("run in background" :: Text)
@@ -416,7 +416,7 @@ fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
 -- | initialize db table: WxppUserCachedInfo
 initWxppUserDbCacheOfApp ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> SqlPersistT m Int
+    AccessToken -> ReaderT WxppDbBackend m Int
 initWxppUserDbCacheOfApp atk = do
     wxppGetEndUserSource atk
         =$= CL.concatMap wxppOpenIdListInGetUserResult

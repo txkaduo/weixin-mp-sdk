@@ -11,11 +11,10 @@ import Control.Monad.Logger
 import Data.Aeson
 import Data.Default
 
-import Database.Persist.Sql
-
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Types
+import WeiXin.PublicPlatform.Yesod.Model
 
 
 
@@ -50,13 +49,7 @@ data WxppSub =
                 wxppSubAppConfig        :: WxppAppConfig
                     -- ^ 所有配置信息
                 , wxppSubCacheBackend   :: SomeWxppCacheBackend
-                , wxppSubRunDBAction    ::
-                                        -- XXX: 这里写死两个事实
-                                        --  persistent 版本要 2.0
-                                        --  只能是 SQL 类型数据库
-                                        forall a m. (MonadIO m, MonadBaseControl IO m) =>
-                                                        SqlPersistT m a -> m a
-                    -- ^ execute any DB actions
+                , wxppSubRunDBAction    :: WxppDbRunner -- ^ execute any DB actions
                 , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler IO

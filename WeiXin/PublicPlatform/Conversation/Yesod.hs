@@ -87,17 +87,17 @@ newWxppTalkState' = newWxppTalkState getStateType'
 
 
 saveAnyWxppTalkState :: forall m r a.
-    ( MonadIO m, ToJSON a, HasStateType a, WxTalkerState r (SqlPersistT m) a) =>
+    ( MonadIO m, ToJSON a, HasStateType a, WxTalkerState r (ReaderT WxppDbBackend m) a) =>
     WxppTalkStateId
     -> a
-    -> WxTalkerMonad r (SqlPersistT m) ()
+    -> WxTalkerMonad r (ReaderT WxppDbBackend m) ()
 saveAnyWxppTalkState = saveWxppTalkState getStateType'
 
 loadAnyWxppTalkState :: forall m a.
     (MonadIO m, MonadLogger m, FromJSON a, HasStateType a) =>
     Proxy a
     -> WxppTalkStateId
-    -> SqlPersistT m (Either String (Maybe a))
+    -> ReaderT WxppDbBackend m (Either String (Maybe a))
 loadAnyWxppTalkState proxy state_id = runExceptT $ runMaybeT $ do
     rec <- MaybeT $ lift $ get state_id
     MaybeT $ ExceptT $ parseWxppTalkStateFromRecord proxy $ Entity state_id rec
@@ -144,7 +144,7 @@ saveSomeWxppTalkState = saveWxppTalkState getStateTypeOfSomeWxppTalkState
 loadWxppTalkStateCurrent :: forall m.
     (MonadIO m) =>
     WxppOpenID
-    -> SqlPersistT m (Maybe (Entity WxppTalkState))
+    -> ReaderT WxppDbBackend m (Maybe (Entity WxppTalkState))
 loadWxppTalkStateCurrent open_id = do
     selectFirst [ WxppTalkStateOpenId ==. open_id ]
                 [ Desc WxppTalkStateId ]
@@ -199,8 +199,8 @@ cleanUpTimedOutWxTalk ttls on_abort_talk = do
 -- r0 是 WxppTalkHandlerGeneral 提供的全局环境
 data WxppTalkerStateEntry r0 m = forall s r.
                             (Eq s, ToJSON s, FromJSON s, HasStateType s
-                            , WxTalkerState (r0, r) (SqlPersistT m) s
-                            , WxTalkerDoneAction (r0, r) (SqlPersistT m) s
+                            , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
+                            , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
                             ) =>
                             WxppTalkerStateEntry (Proxy s) r
 
@@ -239,7 +239,7 @@ instance (MonadBaseControl IO m, MonadIO m, MonadLogger m) =>
                         Nothing -> return []
                         Just e_state_rec@(Entity state_id _) -> do
                             let mk :: WxppTalkerStateEntry r m
-                                    -> MaybeT (ExceptT String (SqlPersistT m)) WxppInMsgHandlerResult
+                                    -> MaybeT (ExceptT String (ReaderT WxppDbBackend m)) WxppInMsgHandlerResult
                                 mk (WxppTalkerStateEntry state_proxy rx) = MaybeT $ ExceptT $ processInMsgByWxTalk
                                                     state_proxy
                                                     (env, rx)
@@ -287,9 +287,9 @@ type instance WxppInMsgProcessResult (WxppTalkInitiator r s) = WxppInMsgHandlerR
 instance
     ( HasStateType s, ToJSON s, FromJSON s, Eq s
     , HasWxppAppID r
-    , WxTalkerDoneAction (r, r2) (SqlPersistT m) s
-    , WxTalkerState (r, r2) (SqlPersistT m) s
-    , WxTalkerFreshState (r, r2) (SqlPersistT m) s
+    , WxTalkerDoneAction (r, r2) (ReaderT WxppDbBackend m) s
+    , WxTalkerState (r, r2) (ReaderT WxppDbBackend m) s
+    , WxTalkerFreshState (r, r2) (ReaderT WxppDbBackend m) s
     , r2 ~ WxppTalkStateExtraEnv s
     , MonadBaseControl IO m, MonadIO m, MonadLogger m
     ) =>
@@ -357,12 +357,13 @@ instance (MonadIO m, MonadBaseControl IO m, MonadLogger m, MonadCatch m) =>
 
 processInMsgByWxTalk :: (HasStateType s, Eq s, FromJSON s, ToJSON s
                         , MonadIO m, MonadLogger m
-                        , WxTalkerState r (SqlPersistT m) s, WxTalkerDoneAction r (SqlPersistT m) s)  =>
+                        , WxTalkerState r (ReaderT WxppDbBackend m) s
+                        , WxTalkerDoneAction r (ReaderT WxppDbBackend m) s)  =>
                         Proxy s
                         -> r
                         -> Entity WxppTalkState
                         -> WxppInMsgEntity
-                        -> SqlPersistT m (Either String (Maybe WxppInMsgHandlerResult))
+                        -> ReaderT WxppDbBackend m (Either String (Maybe WxppInMsgHandlerResult))
 processInMsgByWxTalk state_proxy env (Entity state_id state_rec) ime = do
     let state_type = wxppTalkStateTyp state_rec
     if (state_type /= getStateType state_proxy)
@@ -385,8 +386,8 @@ processInMsgByWxTalk state_proxy env (Entity state_id state_rec) ime = do
 
 processJustInitedWxTalk :: (MonadIO m, MonadLogger m
                            , Eq s, FromJSON s, ToJSON s, HasStateType s
-                           , WxTalkerDoneAction r (SqlPersistT m) s
-                           , WxTalkerState r (SqlPersistT m) s
+                           , WxTalkerDoneAction r (ReaderT WxppDbBackend m) s
+                           , WxTalkerState r (ReaderT WxppDbBackend m) s
                            ) =>
                             Proxy s
                             -> r

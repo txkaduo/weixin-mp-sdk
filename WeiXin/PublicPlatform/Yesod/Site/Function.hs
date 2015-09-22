@@ -230,7 +230,7 @@ downloadSaveMediaToDB if_ssl atk msg_id media_id = do
 wxppUserLatestActiveTime :: (MonadIO m, MonadResource m) =>
     UTCTime         -- ^ 只检查过去一段时间内的消息历史
     -> WxppAppID
-    -> Source (SqlPersistT m) (WxppOpenID, UTCTime)
+    -> Source (ReaderT WxppDbBackend m) (WxppOpenID, UTCTime)
 wxppUserLatestActiveTime start_time app_id = do
     open_id_fn <- lift $ getFieldName WxppInMsgRecordFrom
     created_time_fn <- lift $ getFieldName WxppInMsgRecordCreatedTime

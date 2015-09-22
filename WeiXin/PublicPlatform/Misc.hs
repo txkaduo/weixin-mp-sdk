@@ -23,8 +23,6 @@ import Text.Shakespeare.I18N                (RenderMessage)
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
 import Yesod.Helpers.Persist
 
-import Database.Persist.Sql
-
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.CS
@@ -61,7 +59,7 @@ type InMsgHandlerList m = [SomeWxppInMsgHandler m]
 mkMaybeWxppSub ::
     ( LoggingTRunner app
     , DBActionRunner app
-    , DBAction app ~ SqlPersistT
+    , DBAction app ~ ReaderT WxppDbBackend
     , WxppCacheBackend c
     , n ~ ResourceT (LoggingT IO)
     ) =>
@@ -91,7 +89,7 @@ mkMaybeWxppSub foundation cache get_last_handlers_ref wxpp_config_map get_protos
 mkMaybeWxppSub' ::
     ( LoggingTRunner app
     , DBActionRunner app
-    , DBAction app ~ SqlPersistT
+    , DBAction app ~ ReaderT WxppDbBackend
     , WxppCacheBackend c
     , SV.HasSetter hvar (Maybe (InMsgHandlerList m)), SV.HasGetter hvar (Maybe (InMsgHandlerList m))
     , MonadIO m, MonadLogger m
@@ -115,7 +113,7 @@ mkMaybeWxppSub' m_to_io foundation cache get_last_handlers_ref get_wxpp_config g
         return $ WxppSub
                     wac
                     (SomeWxppCacheBackend cache)
-                    (runDBWith foundation)
+                    (WxppDbRunner $ runDBWith foundation)
                     send_msg
                     (\x1 x2 -> liftM join $ m_to_io $ handle_msg data_dirs x1 x2)
                     (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
