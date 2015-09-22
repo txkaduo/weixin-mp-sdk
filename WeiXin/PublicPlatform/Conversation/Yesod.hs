@@ -19,7 +19,6 @@ import Data.Aeson                           ((.:?), (.!=))
 
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Class
-import WeiXin.PublicPlatform.Yesod.Types
 import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.WS
@@ -211,14 +210,14 @@ data WxppTalkerStateEntry r0 m = forall s r.
 -- 不在对话中，则相当于空操作
 data WxppTalkHandlerGeneral r m =
             WxppTalkHandlerGeneral
-                    SqlBackendRunner
+                    WxppDbRunner
                             -- ^ to run db functions
                     r       -- ^ read only data/environment
                     [WxppTalkerStateEntry r m]
 
 instance JsonConfigable (WxppTalkHandlerGeneral r m) where
     type JsonConfigableUnconfigData (WxppTalkHandlerGeneral r m) =
-        (SqlBackendRunner, r, [WxppTalkerStateEntry r m])
+        (WxppDbRunner, r, [WxppTalkerStateEntry r m])
 
     isNameOfInMsgHandler _ x = x == "any-talk"
 
@@ -233,7 +232,7 @@ instance (MonadBaseControl IO m, MonadIO m, MonadLogger m) =>
         case m_ime of
             Nothing -> return []
             Just ime -> do
-                mapExceptT (runSqlBackendRunner db_runner) $ do
+                mapExceptT (runWxppDB db_runner) $ do
                     let open_id = wxppInFromUserName ime
                     m_state_rec <- lift $ loadWxppTalkStateCurrent open_id
                     case m_state_rec of
@@ -269,13 +268,13 @@ instance (MonadBaseControl IO m, MonadIO m, MonadLogger m) =>
 -- | 消息处理器：调用后会新建一个会话
 -- 应配合条件判断器使用
 data WxppTalkInitiator r s = WxppTalkInitiator
-                            SqlBackendRunner
+                            WxppDbRunner
                             r                           -- ^ 与对话种类无关的环境值
                             (WxppTalkStateExtraEnv s)     -- ^ 对话特定相关的环境值
 
 instance HasStateType s => JsonConfigable (WxppTalkInitiator r s) where
     type JsonConfigableUnconfigData (WxppTalkInitiator r s) =
-            (SqlBackendRunner, r, WxppTalkStateExtraEnv s)
+            (WxppDbRunner, r, WxppTalkStateExtraEnv s)
 
     isNameOfInMsgHandler _ x =
         x == "initiate-talk:" <> getStateType (Proxy :: Proxy s)
@@ -302,7 +301,7 @@ instance
             Just ime -> do
                     let from_open_id = wxppInFromUserName ime
                         app_id = getWxppAppID env
-                    mapExceptT (runSqlBackendRunner db_runner) $ do
+                    mapExceptT (runWxppDB db_runner) $ do
                         msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiate ime
                         case msgs_or_state of
                             Left msgs -> do
@@ -320,12 +319,12 @@ instance
 data WxppTalkTerminator = WxppTalkTerminator
                             WxppAppID
                             (NonEmpty FilePath) -- ^ out-msg dir path
-                            SqlBackendRunner
+                            WxppDbRunner
                             Bool                -- ^ if primary
                             WxppOutMsgLoader    -- ^ 打算回复用户的消息
 
 instance JsonConfigable WxppTalkTerminator where
-    type JsonConfigableUnconfigData WxppTalkTerminator = (WxppAppID, NonEmpty FilePath, SqlBackendRunner)
+    type JsonConfigableUnconfigData WxppTalkTerminator = (WxppAppID, NonEmpty FilePath, WxppDbRunner)
 
     isNameOfInMsgHandler _ x = x == "terminate-talk"
 
@@ -344,7 +343,7 @@ instance (MonadIO m, MonadBaseControl IO m, MonadLogger m, MonadCatch m) =>
             Nothing -> return []
             Just ime -> do
                     let from_open_id = wxppInFromUserName ime
-                    mapExceptT (runSqlBackendRunner db_runner) $ do
+                    mapExceptT (runWxppDB db_runner) $ do
                         lift $ abortCurrentWxppTalkState app_id from_open_id
 
                     let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $

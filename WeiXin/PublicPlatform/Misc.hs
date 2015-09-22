@@ -166,8 +166,9 @@ mkMaybeWxppSub' m_to_io foundation cache get_last_handlers_ref get_wxpp_config g
                             bs ime
 
 
-defaultInMsgProcMiddlewares :: forall m. (MonadIO m, MonadLogger m, MonadCatch m, Functor m) =>
-    WxppSubDBActionRunner m
+defaultInMsgProcMiddlewares :: forall m.
+    (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
+    WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
     -> [SomeWxppInMsgProcMiddleware m]

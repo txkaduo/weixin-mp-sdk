@@ -7,11 +7,6 @@ import Data.Bits                            ((.&.))
 import Network.Socket                       (SockAddr(..))
 import Network.Wai                          (remoteHost)
 
-newtype SqlBackendRunner = SqlBackendRunner {
-                                runSqlBackendRunner ::
-                                    forall a m. (MonadIO m, MonadBaseControl IO m) =>
-                                        ReaderT SqlBackend m a -> m a
-                                }
 
 -- | 判断 WAI 请求是否来自可信的来源
 -- 有若干 web 接口是打算暴露给同伴使用的
