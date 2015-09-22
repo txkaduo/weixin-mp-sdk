@@ -41,6 +41,7 @@ import qualified Data.Aeson                 as A
 
 import Database.Persist.Sql
 
+import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Security

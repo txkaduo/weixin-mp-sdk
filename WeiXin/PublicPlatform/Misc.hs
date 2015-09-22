@@ -31,6 +31,7 @@ import WeiXin.PublicPlatform.CS
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Site.Function
+import WeiXin.PublicPlatform.Yesod.Model
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)

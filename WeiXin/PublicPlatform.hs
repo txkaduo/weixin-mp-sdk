@@ -17,6 +17,7 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Propagate
     , module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Types
+    , module WeiXin.PublicPlatform.Yesod.Model
     , module WeiXin.PublicPlatform.Yesod.Site.Function
     , module WeiXin.PublicPlatform.Yesod.Site.Data
     , module WeiXin.PublicPlatform.BgWork
@@ -46,6 +47,7 @@ import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Propagate
 import WeiXin.PublicPlatform.Yesod.Site
 import WeiXin.PublicPlatform.Yesod.Types
+import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.Yesod.Site.Function
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.BgWork

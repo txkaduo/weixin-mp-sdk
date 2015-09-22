@@ -19,8 +19,8 @@ import Data.Aeson                           ((.:?), (.!=))
 
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Class
-import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Types
+import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils

@@ -26,6 +26,7 @@ import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
+import WeiXin.PublicPlatform.Yesod.Model
 
 
 newtype WxppSubDBActionRunner m = WxppSubDBActionRunner

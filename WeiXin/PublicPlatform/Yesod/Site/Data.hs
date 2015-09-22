@@ -1,6 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ViewPatterns #-}
 module WeiXin.PublicPlatform.Yesod.Site.Data where
@@ -8,7 +7,6 @@ module WeiXin.PublicPlatform.Yesod.Site.Data where
 import ClassyPrelude
 import qualified Data.ByteString.Lazy       as LB
 import Yesod
-import Database.Persist.Quasi
 import Control.Monad.Logger
 import Data.Aeson
 import Data.Default
@@ -18,18 +16,6 @@ import Database.Persist.Sql
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Types
-
-
-wxppSubModelsDef ::
-#if MIN_VERSION_persistent(2, 0, 0)
-    [EntityDef]
-#else
-    [EntityDef SqlType]
-#endif
-wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
-
-share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
-                    $(persistFileWith lowerCaseSettings "models")
 
 
 

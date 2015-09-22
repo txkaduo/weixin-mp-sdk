@@ -47,6 +47,7 @@ library
                        WeiXin.PublicPlatform.Propagate
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Types
+                       WeiXin.PublicPlatform.Yesod.Model
                        WeiXin.PublicPlatform.Yesod.Site.Function
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
