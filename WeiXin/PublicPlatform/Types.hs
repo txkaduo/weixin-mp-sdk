@@ -29,6 +29,7 @@ import Database.Persist                     (PersistValue)
 import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
 import Data.Proxy                           (Proxy(..))
+import Language.Haskell.TH.Lift             (deriveLift)
 
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec)
 import Yesod.Helpers.Utils                  (emptyTextToNothing)
@@ -117,6 +118,7 @@ instance PathPiece WxppDurableMediaID where
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
                     deriving (Show, Eq)
+$(deriveLift ''WxppMediaID)
 
 fromWxppBriefMediaID :: WxppBriefMediaID -> WxppMediaID
 fromWxppBriefMediaID = WxppMediaID . unWxppBriefMediaID
@@ -714,6 +716,7 @@ data WxppArticle = WxppArticle {
                     , wxppArticleUrl    :: Maybe UrlText -- ^ url
                     }
                     deriving (Show, Eq)
+$(deriveLift ''WxppArticle)
 
 instance ToJSON WxppArticle where
     toJSON wa = object
@@ -751,6 +754,8 @@ data WxppOutMsg = WxppOutMsgText Text
                 | WxppOutMsgTransferToCustomerService
                     -- ^ 把信息转发至客服
                 deriving (Show, Eq)
+
+$(deriveLift ''WxppOutMsg)
 
 wxppOutMsgTypeString :: IsString a => WxppOutMsg -> a
 wxppOutMsgTypeString (WxppOutMsgText {})                    = "text"

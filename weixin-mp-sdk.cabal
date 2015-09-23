@@ -136,6 +136,7 @@ library
                      , semigroups
                      , JuicyPixels
                      , array
+                     , th-lift
                      , case-insensitive
 
   if flag(parsec3)
