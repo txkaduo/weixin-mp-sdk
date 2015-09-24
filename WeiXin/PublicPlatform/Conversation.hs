@@ -10,6 +10,7 @@ import Control.Monad.Trans.Maybe
 import Data.Conduit
 import Control.Monad.Logger
 import qualified Data.Conduit.List          as CL
+import qualified Data.Text                  as T
 
 import Text.Parsec.Text
 import Text.Parsec.Error
@@ -18,7 +19,7 @@ import Text.Parsec.Prim
 import Data.Aeson.TH                        (deriveJSON, defaultOptions)
 import Data.Aeson                           (ToJSON(..))
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
 
 class TalkerState a where
@@ -411,6 +412,17 @@ instance Eq (SomeWxppTalkState r m) where
 
 instance ToJSON (SomeWxppTalkState r m) where
     toJSON (SomeWxppTalkState x) = toJSON x
+
+
+wxTalkGetAccessToken :: (MonadIO m, HasAccessToken r, HasWxppAppID r) =>
+    r -> m (Either String AccessToken)
+wxTalkGetAccessToken env = runExceptT $ do
+    (liftIO $ wxppGetAccessToken env)
+        >>= maybe
+                (throwError $ "no access token for app: " <> T.unpack (unWxppAppID app_id))
+                (return . fst)
+    where
+        app_id = getWxppAppID env
 
 {-
 data SomeWxTalkerState m = forall a. (WxTalkerState m a, WxTalkerDoneAction m a) =>

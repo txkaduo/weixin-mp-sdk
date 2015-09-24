@@ -25,6 +25,7 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Misc
     , module WeiXin.PublicPlatform.Conversation
     , module WeiXin.PublicPlatform.Conversation.Yesod
+    , module WeiXin.PublicPlatform.Conversation.Message
     -- , module WeiXin.PublicPlatform.Conversation.TextParser
     , module WeiXin.PublicPlatform.Center
     ) where
@@ -55,5 +56,6 @@ import WeiXin.PublicPlatform.BgWork
 import WeiXin.PublicPlatform.Misc
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Conversation.Yesod
+import WeiXin.PublicPlatform.Conversation.Message
 -- import WeiXin.PublicPlatform.Conversation.TextParser
 import WeiXin.PublicPlatform.Center

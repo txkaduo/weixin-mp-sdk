@@ -55,6 +55,7 @@ library
                        WeiXin.PublicPlatform.Misc
                        WeiXin.PublicPlatform.Conversation
                        WeiXin.PublicPlatform.Conversation.Misc
+                       WeiXin.PublicPlatform.Conversation.Message
                        WeiXin.PublicPlatform.Conversation.Yesod
                        WeiXin.PublicPlatform.Conversation.TextParser
                        WeiXin.PublicPlatform.Center
@@ -77,6 +78,7 @@ library
 
 
   build-depends:       base >=4.7
+                     , template-haskell
                      , classy-prelude
                      , classy-prelude-yesod
                      , yesod

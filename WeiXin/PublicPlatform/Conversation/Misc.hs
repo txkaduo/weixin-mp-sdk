@@ -15,9 +15,8 @@ import Yesod.Helpers.Parsec                 (CharParser)
 
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Conversation.TextParser
+import WeiXin.PublicPlatform.Conversation.Message
 import WeiXin.PublicPlatform.Class
-import WeiXin.PublicPlatform.Utils
-import WeiXin.PublicPlatform.Media
 
 
 data CommonTalkEnv = CommonTalkEnv
@@ -39,61 +38,6 @@ instance HasWxppOutMsgDir CommonTalkEnv where
     getWxppOutMsgDir (CommonTalkEnv _ _ base_dir ) = base_dir
 
 
-type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, MonadThrow m, MonadCatch m)
-
-type LoadMsgEnv r = ( HasWxppOutMsgDir r
-                    , HasSomeWxppCacheBackend r
-                    , HasAccessToken r
-                    , HasWxppAppID r
-                    )
-
-talkerMessageDir :: HasWxppOutMsgDir a => a -> NonEmpty FilePath
-talkerMessageDir env = fmap (</> "talk") $ getWxppOutMsgDir env
-
-
-wxTalkGetAccessToken :: (MonadIO m, HasAccessToken r, HasWxppAppID r) =>
-    r -> m (Either String AccessToken)
-wxTalkGetAccessToken env = runExceptT $ do
-    (liftIO $ wxppGetAccessToken env)
-        >>= maybe
-                (throwError $ "no access token for app: " <> T.unpack (unWxppAppID app_id))
-                (return . fst)
-    where
-        app_id = getWxppAppID env
-
-
-
-loadTalkMessage :: ( LoadMsgMonad m, LoadMsgEnv r) =>
-    r -> FilePath -> m (Either String WxppOutMsg)
-loadTalkMessage env sub_path = runExceptT $ do
-    msg_l <- ExceptT $ runDelayedYamlLoaderL
-                (talkerMessageDir env)
-                (mkDelayedYamlLoader $ setExtIfNotExist "yml" $ sub_path)
-    fromWxppOutMsgL
-        (getWxppOutMsgDir env)
-        (getSomeWxppCacheBackend env)
-        (ExceptT $ wxTalkGetAccessToken env)
-        msg_l
-
-loadTalkMessage' :: ( LoadMsgMonad m, LoadMsgEnv r) =>
-                    FilePath
-                    -> WxTalkerMonad r m WxppOutMsg
-loadTalkMessage' sub_path = mkWxTalkerMonad $ \env -> loadTalkMessage env sub_path
-
-
-generalInternalErrorMsg :: (LoadMsgMonad m, LoadMsgEnv r) =>
-    r -> m (Either String WxppOutMsg)
-generalInternalErrorMsg env = loadTalkMessage env ("common" </> "internal_error")
-
-generalConfirmCancelledMsg :: (LoadMsgMonad m, LoadMsgEnv r) =>
-    r -> m (Either String WxppOutMsg)
-generalConfirmCancelledMsg env = loadTalkMessage env ("common" </> "confirm" </> "cancelled")
-
-generalConfirmDontUnderstandMsg :: (LoadMsgMonad m, LoadMsgEnv r) =>
-    r -> m (Either String WxppOutMsg)
-generalConfirmDontUnderstandMsg env = loadTalkMessage env ("common" </> "confirm" </> "dont_understand")
-
-
 -- | 取出待确认的内容
 class HasConfirmContent r m a where
     getConfirmContent :: a -> WxTalkerMonad r m [WxppOutMsg]
@@ -106,6 +50,18 @@ class ToCancelledMessage r m a where
 class ToDontUnderstandMessage r m a where
     toDontUnderstandMessage :: a -> WxTalkerMonad r m [WxppOutMsg]
 
+
+generalInternalErrorMsg :: (LoadMsgMonad m, LoadMsgEnv r) =>
+    r -> m (Either String WxppOutMsg)
+generalInternalErrorMsg = $(loadTalkMessageTH "default-msgs" ("common" </> "internal_error"))
+
+generalConfirmCancelledMsg :: (LoadMsgMonad m, LoadMsgEnv r) =>
+    r -> m (Either String WxppOutMsg)
+generalConfirmCancelledMsg = $(loadTalkMessageTH "default-msgs" ("common" </> "confirm" </> "cancelled"))
+
+generalConfirmDontUnderstandMsg :: (LoadMsgMonad m, LoadMsgEnv r) =>
+    r -> m (Either String WxppOutMsg)
+generalConfirmDontUnderstandMsg = $(loadTalkMessageTH "default-msgs" ("common" </> "confirm" </> "dont_understand"))
 
 
 -- | 这个对话状态用于包装另一个对话状态（待执行的操作）
