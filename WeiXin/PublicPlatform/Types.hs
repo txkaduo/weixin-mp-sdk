@@ -791,7 +791,7 @@ instance ToJSON WxppOutMsg where
 
 instance FromJSON WxppOutMsg where
     parseJSON = withObject "WxppOutMsg" $ \obj -> do
-      typ <- obj .: "type"
+      typ <- obj .:? "type" .!= "text"
       case (typ :: String) of
           "text"  -> WxppOutMsgText <$> obj .: "text"
           "image" -> WxppOutMsgImage <$> obj .: "media_id"
