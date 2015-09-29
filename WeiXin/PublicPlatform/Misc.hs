@@ -10,11 +10,14 @@ import qualified Data.Text                  as T
 import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
+import qualified Data.ByteString            as B
 import Control.Concurrent                   (threadDelay)
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Control.Monad.Catch
+import Data.Char
+import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
 import Yesod.Core                           (HandlerSite)
@@ -272,3 +275,26 @@ retryGetAccessTokenDo delay retry_cnt get_atk use_atk = go 0
                         go (cnt + 1)
 
                     Just atk -> liftM Just $ use_atk atk
+
+
+-- | XXX: this is a incomplete list
+-- 这只是根据微信文档，把可能常用的mime映射到最常见的扩展名
+fileExtOfMime :: IsString s => MimeType -> s
+fileExtOfMime "text/plain"    = ".txt"
+fileExtOfMime "audio/x-speex" = ".spx"
+fileExtOfMime mime            =
+    -- 处理所有类似于 image/jpeg -> jpeg 这样的情况
+    case m_sub of
+        Just sub | not (B.null main) &&
+                    not (B.null sub) &&
+                    B.length sub <= 4 &&
+                    B.all (isAlphaNum . chr . fromIntegral) sub -> fromString $ '.' : C8.unpack sub
+        _   ->  ".dat"
+    where (main,m_sub) = second (stripPrefix "/") $ break (== fromIntegral (ord '/')) mime
+
+
+-- | 微信发过来的语音有个 format 字段，据此生成一个合适的文件扩展名
+contentTypeOfAudioFormat :: Text -> Maybe MimeType
+contentTypeOfAudioFormat "amr"   = Just "audio/amr"
+contentTypeOfAudioFormat "speex" = Just "audio/x-speex"
+contentTypeOfAudioFormat _       = Nothing
