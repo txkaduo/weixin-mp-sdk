@@ -28,6 +28,7 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Conversation.Message
     -- , module WeiXin.PublicPlatform.Conversation.TextParser
     , module WeiXin.PublicPlatform.Center
+    , module WeiXin.PublicPlatform.OAuth
     ) where
 
 import WeiXin.PublicPlatform.Error
@@ -59,3 +60,4 @@ import WeiXin.PublicPlatform.Conversation.Yesod
 import WeiXin.PublicPlatform.Conversation.Message
 -- import WeiXin.PublicPlatform.Conversation.TextParser
 import WeiXin.PublicPlatform.Center
+import WeiXin.PublicPlatform.OAuth

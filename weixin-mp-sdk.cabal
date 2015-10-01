@@ -28,6 +28,10 @@ Flag parsec3
     Description:   Use parsec3
     Default:       False
 
+Flag network-uri
+    Description: Get Network.URI from the network-uri package
+    Default: True
+
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
                        WeiXin.PublicPlatform.Types
@@ -59,6 +63,7 @@ library
                        WeiXin.PublicPlatform.Conversation.Yesod
                        WeiXin.PublicPlatform.Conversation.TextParser
                        WeiXin.PublicPlatform.Center
+                       WeiXin.PublicPlatform.OAuth
                        WeiXin.PublicPlatform
 
   -- other-modules:       
@@ -140,11 +145,17 @@ library
                      , array
                      , th-lift
                      , case-insensitive
+                     , HTTP
 
   if flag(parsec3)
       build-depends:   parsec3
   else
       build-depends:   parsec == 3.*
+
+  if flag(network-uri)
+     build-depends: network-uri >= 2.6, network >= 2.6
+  else
+     build-depends: network-uri < 2.6, network < 2.6
 
   -- hs-source-dirs:      
   default-language:    Haskell2010
