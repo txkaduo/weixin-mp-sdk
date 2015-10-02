@@ -1281,6 +1281,143 @@ instance FromJSON WxppForwardedEnv where
                     WxppForwardedEnv    <$> ( obj .: "user_info" )
                                         <*> ( obj .: "access_token" )
 
+data OAuthScope = AS_SnsApiBase
+                | AS_SnsApiUserInfo
+                deriving (Eq, Ord, Enum, Bounded)
+
+$(derivePersistFieldS "OAuthScope")
+
+instance SimpleStringRep OAuthScope where
+    -- Encode values will be used in wxppAuthPageUrl
+    -- so they must be consistent with WX doc.
+    simpleEncode AS_SnsApiBase      = "snsapi_base"
+    simpleEncode AS_SnsApiUserInfo  = "snsapi_userinfo"
+
+    simpleParser = makeSimpleParserByTable
+                    [ ("snsapi_base", AS_SnsApiBase)
+                    , ("snsapi_userinfo", AS_SnsApiUserInfo)
+                    ]
+
+
+newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
+                    deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
+
+instance PathPiece OAuthCode where
+    fromPathPiece = fmap OAuthCode . fromPathPiece
+    toPathPiece = toPathPiece . unOAuthCode
+
+instance ToJSON OAuthCode where toJSON = toJSON . unOAuthCode
+
+
+newtype OAuthAccessToken = OAuthAccessToken { unOAuthAccessToken :: Text }
+                        deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
+
+instance SafeCopy OAuthAccessToken where
+    getCopy                      = contain $ OAuthAccessToken <$> safeGet
+    putCopy (OAuthAccessToken x) = contain $ safePut x
+    errorTypeName _              = "OAuthAccessToken"
+
+instance PathPiece OAuthAccessToken where
+    fromPathPiece = fmap OAuthAccessToken . fromPathPiece
+    toPathPiece = toPathPiece . unOAuthAccessToken
+
+instance FromJSON OAuthAccessToken where
+    parseJSON = fmap OAuthAccessToken . parseJSON
+
+
+newtype OAuthRefreshToken = OAuthRefreshToken { unOAuthRefreshToken :: Text }
+                            deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
+
+instance SafeCopy OAuthRefreshToken where
+    getCopy                       = contain $ OAuthRefreshToken <$> safeGet
+    putCopy (OAuthRefreshToken x) = contain $ safePut x
+    errorTypeName _               = "OAuthRefreshToken"
+
+instance PathPiece OAuthRefreshToken where
+    fromPathPiece = fmap OAuthRefreshToken . fromPathPiece
+    toPathPiece = toPathPiece . unOAuthRefreshToken
+
+instance FromJSON OAuthRefreshToken where parseJSON = fmap OAuthRefreshToken . parseJSON
+
+instance ToJSON OAuthRefreshToken where toJSON = toJSON . unOAuthRefreshToken
+
+-- | access token 通常要与 open id 一起使用，并且有对应关系，因此打包在一起
+data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
+                            oauthAtkPRaw        :: OAuthAccessToken
+                            , oauthAtkRtk       :: OAuthRefreshToken
+                            , oauthAtkPOpenID   :: WxppOpenID
+                            , oauthAtkPAppID    :: WxppAppID
+                            }
+                            deriving (Eq, Ord, Show)
+
+$(deriveSafeCopy 0 'base ''OAuthAccessTokenPkg)
+
+
+data OAuthAccessTokenResult = OAuthAccessTokenResult {
+                                oauthAtkToken           :: OAuthAccessToken
+                                , oauthAtkTTL           :: NominalDiffTime
+                                , oauthAtkScope         :: [Text]
+                                , oauthAtkRefreshToken  :: OAuthRefreshToken
+                                , oauthAtkOpenID        :: WxppOpenID
+                                , oauthAtkUnionID       :: Maybe WxppUnionID
+                                }
+                                deriving (Eq, Show)
+
+instance FromJSON OAuthAccessTokenResult where
+    parseJSON = withObject "OAuthAccessTokenResult" $ \o -> do
+                    OAuthAccessTokenResult
+                        <$> o .: "access_token"
+                        <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
+                        <*> ((map T.strip . T.splitOn ",") <$> o .: "scope")
+                        <*> o .: "refresh_token"
+                        <*> o .: "openid"
+                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+
+
+data OAuthRefreshAccessTokenResult = OAuthRefreshAccessTokenResult {
+                                        oauthRtkToken           :: OAuthAccessToken
+                                        , oauthRtkTTL           :: NominalDiffTime
+                                        , oauthRtkScope         :: [Text]
+                                        , ouahtRtkRefreshToken  :: OAuthRefreshToken
+                                        , oauthRtkOpenID        :: WxppOpenID
+                                        }
+                                        deriving (Eq, Show)
+
+instance FromJSON OAuthRefreshAccessTokenResult where
+    parseJSON = withObject "OAuthRefreshAccessTokenResult" $ \o -> do
+                    OAuthRefreshAccessTokenResult
+                        <$> o .: "access_token"
+                        <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
+                        <*> ((map T.strip . T.splitOn ",") <$> o .: "scope")
+                        <*> o .: "refresh_token"
+                        <*> o .: "openid"
+
+data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
+                                oauthUserInfoOpenID         :: WxppOpenID
+                                , oauthUserInfoNickname     :: Text
+                                , oauthUserInfoGender       :: Maybe Gender
+                                , oauthUserInfoProvice      :: Text
+                                , oauthUserInfoCity         :: Text
+                                , oauthUserInfoCountry      :: Text
+                                , oauthUserInfoHeadImgUrl   :: Maybe UrlText
+                                , oauthUserInfoPrivileges   :: [Text]
+                                , oauthUserInfoUnionID      :: Maybe WxppUnionID
+                                }
+                                deriving (Eq, Show)
+
+instance FromJSON OAuthGetUserInfoResult where
+    parseJSON = withObject "OAuthGetUserInfoResult" $ \o -> do
+                    OAuthGetUserInfoResult
+                        <$> o .: "openid"
+                        <*> o .: "nickname"
+                        <*> (o .: "sex" >>= parseSexJson)
+                        <*> o .: "province"
+                        <*> o .: "city"
+                        <*> o .: "country"
+                        <*> (fmap UrlText . join . fmap emptyTextToNothing <$> o .:? "headimgurl")
+                        <*> o .: "privilege"
+                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+
 
 -- | 程序内部因公众号的变化而产生的事件
 data WxppSignal = WxppSignalNewApp WxppAppID

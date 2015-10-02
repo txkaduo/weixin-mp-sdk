@@ -2,6 +2,7 @@
 module WeiXin.PublicPlatform.OAuth
     ( OAuthCode(..)
     , OAuthAccessToken(..)
+    , OAuthAccessTokenPkg(..)
     , OAuthRefreshToken(..)
     , OAuthAccessTokenResult(..)
     , OAuthRefreshAccessTokenResult(..)
@@ -17,10 +18,6 @@ import ClassyPrelude
 import qualified Data.Text                  as T
 import Network.Wreq
 import Control.Lens
-import Data.Aeson
-import Data.Time                            (NominalDiffTime)
-import Yesod.Core                           (PathPiece(..))
-import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..))
 import Network.URI                          ( parseAbsoluteURI, uriQuery, uriFragment
                                             , uriToString
                                             )
@@ -28,130 +25,12 @@ import Network.HTTP                         (urlEncodeVars)
 import Text.Shakespeare.I18N                (Lang)
 
 import Yesod.Helpers.Parsec
-import Yesod.Helpers.Utils                  (emptyTextToNothing)
 
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 
 
-
-data OAuthScope = AS_SnsApiBase
-                | AS_SnsApiUserInfo
-                deriving (Eq, Ord, Enum, Bounded)
-
-$(derivePersistFieldS "OAuthScope")
-
-instance SimpleStringRep OAuthScope where
-    -- Encode values will be used in wxppAuthPageUrl
-    -- so they must be consistent with WX doc.
-    simpleEncode AS_SnsApiBase      = "snsapi_base"
-    simpleEncode AS_SnsApiUserInfo  = "snsapi_userinfo"
-
-    simpleParser = makeSimpleParserByTable
-                    [ ("snsapi_base", AS_SnsApiBase)
-                    , ("snsapi_userinfo", AS_SnsApiUserInfo)
-                    ]
-
-
-newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
-                    deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
-
-instance PathPiece OAuthCode where
-    fromPathPiece = fmap OAuthCode . fromPathPiece
-    toPathPiece = toPathPiece . unOAuthCode
-
-instance ToJSON OAuthCode where toJSON = toJSON . unOAuthCode
-
-
-newtype OAuthAccessToken = OAuthAccessToken { unOAuthAccessToken :: Text }
-                        deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
-
-instance PathPiece OAuthAccessToken where
-    fromPathPiece = fmap OAuthAccessToken . fromPathPiece
-    toPathPiece = toPathPiece . unOAuthAccessToken
-
-instance FromJSON OAuthAccessToken where
-    parseJSON = fmap OAuthAccessToken . parseJSON
-
-
-newtype OAuthRefreshToken = OAuthRefreshToken { unOAuthRefreshToken :: Text }
-                            deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
-
-
-instance PathPiece OAuthRefreshToken where
-    fromPathPiece = fmap OAuthRefreshToken . fromPathPiece
-    toPathPiece = toPathPiece . unOAuthRefreshToken
-
-instance FromJSON OAuthRefreshToken where parseJSON = fmap OAuthRefreshToken . parseJSON
-
-instance ToJSON OAuthRefreshToken where toJSON = toJSON . unOAuthRefreshToken
-
-
-data OAuthAccessTokenResult = OAuthAccessTokenResult {
-                                oauthAtkToken           :: OAuthAccessToken
-                                , oauthAtkTTL           :: NominalDiffTime
-                                , oauthAtkScope         :: [Text]
-                                , oauthAtkRefreshToken  :: OAuthRefreshToken
-                                , oauthAtkOpenID        :: WxppOpenID
-                                , oauthAtkUnionID       :: Maybe WxppUnionID
-                                }
-                                deriving (Eq, Show)
-
-instance FromJSON OAuthAccessTokenResult where
-    parseJSON = withObject "OAuthAccessTokenResult" $ \o -> do
-                    OAuthAccessTokenResult
-                        <$> o .: "access_token"
-                        <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
-                        <*> ((map T.strip . T.splitOn ",") <$> o .: "scope")
-                        <*> o .: "refresh_token"
-                        <*> o .: "openid"
-                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
-
-
-data OAuthRefreshAccessTokenResult = OAuthRefreshAccessTokenResult {
-                                        oauthRtkToken           :: OAuthAccessToken
-                                        , oauthRtkTTL           :: NominalDiffTime
-                                        , oauthRtkScope         :: [Text]
-                                        , ouahtRtkRefreshToken  :: OAuthRefreshToken
-                                        , oauthRtkOpenID        :: WxppOpenID
-                                        }
-                                        deriving (Eq, Show)
-
-instance FromJSON OAuthRefreshAccessTokenResult where
-    parseJSON = withObject "OAuthRefreshAccessTokenResult" $ \o -> do
-                    OAuthRefreshAccessTokenResult
-                        <$> o .: "access_token"
-                        <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
-                        <*> ((map T.strip . T.splitOn ",") <$> o .: "scope")
-                        <*> o .: "refresh_token"
-                        <*> o .: "openid"
-
-data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
-                                oauthUserInfoOpenID         :: WxppOpenID
-                                , oauthUserInfoNickname     :: Text
-                                , oauthUserInfoGender       :: Maybe Gender
-                                , oauthUserInfoProvice      :: Text
-                                , oauthUserInfoCity         :: Text
-                                , oauthUserInfoCountry      :: Text
-                                , oauthUserInfoHeadImgUrl   :: Maybe UrlText
-                                , oauthUserInfoPrivileges   :: [Text]
-                                , oauthUserInfoUnionID      :: Maybe WxppUnionID
-                                }
-                                deriving (Eq, Show)
-
-instance FromJSON OAuthGetUserInfoResult where
-    parseJSON = withObject "OAuthGetUserInfoResult" $ \o -> do
-                    OAuthGetUserInfoResult
-                        <$> o .: "openid"
-                        <*> o .: "nickname"
-                        <*> (o .: "sex" >>= parseSexJson)
-                        <*> o .: "province"
-                        <*> o .: "city"
-                        <*> o .: "country"
-                        <*> (fmap UrlText . join . fmap emptyTextToNothing <$> o .:? "headimgurl")
-                        <*> o .: "privilege"
-                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
 
 -- | 获取用户授权
 wxppOAuthRequestAuth :: WxppAppID
@@ -211,25 +90,23 @@ wxppOAuthRefreshAccessToken app_id rtk = do
 
 wxppOAuthGetUserInfo :: (MonadIO m, MonadThrow m)
                     => Lang
-                    -> OAuthAccessToken
-                    -> WxppOpenID
+                    -> OAuthAccessTokenPkg
                     -> m OAuthGetUserInfoResult
-wxppOAuthGetUserInfo lang atk open_id = do
+wxppOAuthGetUserInfo lang atk_p = do
     let url = "https://api.weixin.qq.com/sns/userinfo"
-        opts = defaults & param "access_token" .~ [ unOAuthAccessToken atk ]
-                        & param "openid" .~ [ unWxppOpenID open_id ]
+        opts = defaults & param "access_token" .~ [ unOAuthAccessToken $ oauthAtkPRaw atk_p ]
+                        & param "openid" .~ [ unWxppOpenID $ oauthAtkPOpenID atk_p ]
                         & param "lang" .~ [ lang ]
     liftIO (getWith opts url)
         >>= asWxppWsResponseNormal'
 
 
 wxppOAuthCheckAccessToken :: (MonadIO m, MonadThrow m)
-                            => OAuthAccessToken
-                            -> WxppOpenID
+                            => OAuthAccessTokenPkg
                             -> m ()
-wxppOAuthCheckAccessToken atk open_id = do
+wxppOAuthCheckAccessToken atk_p = do
     let url = "https://api.weixin.qq.com/sns/auth"
-        opts = defaults & param "access_token" .~ [ unOAuthAccessToken atk ]
-                        & param "openid" .~ [ unWxppOpenID open_id ]
+        opts = defaults & param "access_token" .~ [ unOAuthAccessToken $ oauthAtkPRaw atk_p ]
+                        & param "openid" .~ [ unWxppOpenID $ oauthAtkPOpenID atk_p ]
     liftIO (getWith opts url)
         >>= asWxppWsResponseVoid

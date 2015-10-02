@@ -30,6 +30,22 @@ class WxppCacheBackend a where
         -> UTCTime      -- ^ expiry time
         -> IO ()
 
+    -- | add access-token of oauth to cache
+    wxppCacheAddOAuthAccessToken :: a
+                                -> OAuthAccessTokenPkg
+                                -> UTCTime
+                                -> IO ()
+
+    -- | lookup oauth access-token from cache
+    wxppCacheGetOAuthAccessToken :: a
+                                -> WxppAppID
+                                -> WxppOpenID
+                                -> IO (Maybe (OAuthAccessTokenPkg, UTCTime))
+
+    wxppCachePurgeOAuthAccessToken :: a
+                                    -> UTCTime
+                                    -> IO ()
+
     wxppCacheLookupUserInfo ::
         a
         -> WxppAppID
@@ -80,6 +96,9 @@ instance WxppCacheBackend SomeWxppCacheBackend where
     wxppCacheGetAccessToken (SomeWxppCacheBackend x)    = wxppCacheGetAccessToken x
     wxppCacheAddAccessToken (SomeWxppCacheBackend x)    = wxppCacheAddAccessToken x
     wxppCachePurgeAccessToken (SomeWxppCacheBackend x)  = wxppCachePurgeAccessToken x
+    wxppCacheAddOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheAddOAuthAccessToken x
+    wxppCachePurgeOAuthAccessToken (SomeWxppCacheBackend x) = wxppCachePurgeOAuthAccessToken x
+    wxppCacheGetOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheGetOAuthAccessToken x
     wxppCacheLookupUserInfo (SomeWxppCacheBackend x)    = wxppCacheLookupUserInfo x
     wxppCacheSaveUserInfo   (SomeWxppCacheBackend x)    = wxppCacheSaveUserInfo x
     wxppCacheLookupUploadedMediaIDByHash

@@ -61,6 +61,15 @@ WxppCachedAccessToken
     expiryTime          UTCTime
     createdTime         UTCTime
 
+-- | access-token of oauth
+WxppCachedOAuthToken
+    app                 WxppAppID maxlen=200
+    openId		WxppOpenID maxlen=200
+    access		OAuthAccessToken maxlen=200
+    refresh		OAuthRefreshToken maxlen=200
+    expiryTime          UTCTime
+    createdTime         UTCTime
+
 -- | 缓存用户信息
 -- 如果不使用数据库实现缓存，则此表无用
 -- XXX: 此表的作用与 WxppUserCachedInfo 有重合

@@ -29,6 +29,13 @@ data WxppAcidState = WxppAcidState {
                         -- 这个列表实现时没有明确地限制长度
                         -- 而是定时丢弃过期的 access token
                         -- 注意：这个列表是排了序的
+
+                    , _wxppAcidStateOAuthAccessTokens :: !(Map
+                                                            (WxppOpenID, WxppAppID)
+                                                            ((OAuthAccessToken, OAuthRefreshToken), UTCTime)
+                                                            )
+                        -- ^ oauth access tokens 
+
                     , _wxppAcidStateUploadedMedia :: !(Map WxppAppID (Map SHA256Hash UploadResult))
                     , _wxppAcidStateCachedUserInfo :: !(Map (WxppOpenID, WxppAppID)
                                                             (TimeTagged EndUserQueryResult))
@@ -37,10 +44,10 @@ data WxppAcidState = WxppAcidState {
                     deriving (Typeable)
 
 $(makeLenses ''WxppAcidState)
-$(deriveSafeCopy 0 'base ''WxppAcidState)
+$(deriveSafeCopy 1 'base ''WxppAcidState)
 
 instance Default WxppAcidState where
-    def = WxppAcidState def def def
+    def = WxppAcidState def def def def
 
 wxppAcidGetAcccessTokens :: WxppAppID -> Query WxppAcidState [(AccessToken, UTCTime)]
 wxppAcidGetAcccessTokens app_id =
@@ -63,6 +70,33 @@ wxppAcidPurgeAcccessToken ::
 wxppAcidPurgeAcccessToken expiry = do
     modify $ over wxppAcidStateAccessTokens $
                 filter ((> expiry) . snd)
+
+wxppAcidAddOAuthAcccessToken :: OAuthAccessTokenPkg
+                            -> UTCTime
+                            -> Update WxppAcidState ()
+wxppAcidAddOAuthAcccessToken atk_p expiry = do
+    modify $ over wxppAcidStateOAuthAccessTokens $
+        Map.union $ Map.singleton (open_id, app_id) ((atk, rtk), expiry)
+    where
+        app_id    = oauthAtkPAppID atk_p
+        open_id   = oauthAtkPOpenID atk_p
+        atk       = oauthAtkPRaw atk_p
+        rtk       = oauthAtkRtk atk_p
+
+wxppAcidPurgeOAuthAccessToken :: UTCTime
+                                -> Update WxppAcidState ()
+wxppAcidPurgeOAuthAccessToken expiry = do
+    modify $ over wxppAcidStateOAuthAccessTokens $
+        Map.filter ((> expiry) . snd)
+
+wxppAcidLookupOAuthAccessTokens :: WxppAppID
+                                -> WxppOpenID
+                                -> Query WxppAcidState
+                                        (Maybe
+                                            ((OAuthAccessToken, OAuthRefreshToken), UTCTime)
+                                        )
+wxppAcidLookupOAuthAccessTokens app_id open_id = do
+    asks $ Map.lookup (open_id, app_id) . _wxppAcidStateOAuthAccessTokens
 
 wxppAcidLookupUploadedMediaIDByHash ::
     WxppAppID -> SHA256Hash -> Query WxppAcidState (Maybe UploadResult)
@@ -105,6 +139,9 @@ $(makeAcidic ''WxppAcidState
     , 'wxppAcidGetAcccessToken
     , 'wxppAcidAddAcccessToken
     , 'wxppAcidPurgeAcccessToken
+    , 'wxppAcidAddOAuthAcccessToken
+    , 'wxppAcidPurgeOAuthAccessToken
+    , 'wxppAcidLookupOAuthAccessTokens
     , 'wxppAcidLookupUploadedMediaIDByHash
     , 'wxppAcidSaveUploadedMediaID
     , 'wxppAcidSetCachedUserInfo
@@ -124,6 +161,18 @@ instance WxppCacheBackend WxppCacheByAcid where
 
     wxppCachePurgeAccessToken (WxppCacheByAcid acid) expiry = do
         update acid $ WxppAcidPurgeAcccessToken expiry
+
+    wxppCacheAddOAuthAccessToken (WxppCacheByAcid acid) atk_p expiry = do
+        update acid $ WxppAcidAddOAuthAcccessToken atk_p expiry
+
+    wxppCacheGetOAuthAccessToken (WxppCacheByAcid acid) app_id open_id = do
+        liftM (fmap (first mk_p)) $
+            query acid $ WxppAcidLookupOAuthAccessTokens app_id open_id
+        where
+            mk_p (atk, rtk) = OAuthAccessTokenPkg atk rtk open_id app_id 
+
+    wxppCachePurgeOAuthAccessToken (WxppCacheByAcid acid) expiry = do
+        update acid $ WxppAcidPurgeOAuthAccessToken expiry
 
     wxppCacheLookupUserInfo (WxppCacheByAcid acid) app_id open_id = do
         fmap (fmap $ _unTimeTag &&& _ttTime) $

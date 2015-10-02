@@ -54,6 +54,35 @@ instance WxppCacheBackend WxppDbRunner where
         run_db $ do
             deleteWhere [ WxppCachedAccessTokenExpiryTime <=. expiry ]
 
+    wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
+        now <- liftIO getCurrentTime
+        run_db $ do
+            insert_ $ WxppCachedOAuthToken app_id open_id atk rtk expiry now
+        where
+            app_id    = oauthAtkPAppID atk_p
+            open_id   = oauthAtkPOpenID atk_p
+            atk       = oauthAtkPRaw atk_p
+            rtk       = oauthAtkRtk atk_p
+
+    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id = do
+        now <- liftIO getCurrentTime
+        run_db $ liftM (fmap $ (mk_p &&& wxppCachedOAuthTokenExpiryTime) . entityVal) $ 
+            selectFirst [ WxppCachedOAuthTokenApp ==. app_id
+                        , WxppCachedOAuthTokenOpenId ==. open_id
+                        , WxppCachedOAuthTokenExpiryTime >. now
+                        ]
+                        [ Desc WxppCachedOAuthTokenId ]
+        where
+            mk_p rec = OAuthAccessTokenPkg
+                            (wxppCachedOAuthTokenAccess rec)
+                            (wxppCachedOAuthTokenRefresh rec)
+                            open_id
+                            app_id
+
+    wxppCachePurgeOAuthAccessToken (WxppDbRunner run_db) expiry = do
+        run_db $
+            deleteWhere [ WxppCachedOAuthTokenExpiryTime <=. expiry ]
+
     wxppCacheLookupUserInfo (WxppDbRunner run_db) app_id open_id = do
         run_db $ do
             fmap
