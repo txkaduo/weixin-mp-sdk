@@ -36,7 +36,7 @@ import WeiXin.PublicPlatform.WS
 wxppOAuthRequestAuth :: WxppAppID
                     -> OAuthScope
                     -> UrlText      -- ^ return to this url
-                    -> Maybe String -- ^ state to return
+                    -> Maybe Text -- ^ state to return
                     -> UrlText
 wxppOAuthRequestAuth app_id scope return_url m_state =
     UrlText $ fromString $ uriToString id uri ""
@@ -49,7 +49,7 @@ wxppOAuthRequestAuth app_id scope return_url m_state =
                 , Just ("redirect_uri",  T.unpack (unUrlText return_url))
                 , Just ("response_type", "code")
                 , Just ("scope",         simpleEncode scope)
-                , flip fmap m_state $ \state -> ("state", state)
+                , flip fmap m_state $ \state -> ("state", T.unpack state)
                 ]
 
         uri = base_uri

@@ -64,11 +64,17 @@ WxppCachedAccessToken
 -- | access-token of oauth
 WxppCachedOAuthToken
     app                 WxppAppID maxlen=200
-    openId		WxppOpenID maxlen=200
-    access		OAuthAccessToken maxlen=200
-    refresh		OAuthRefreshToken maxlen=200
+    openId              WxppOpenID maxlen=200
+    access              OAuthAccessToken maxlen=200
+    refresh             OAuthRefreshToken maxlen=200
+    state               Text Maybe
     expiryTime          UTCTime
     createdTime         UTCTime
+
+-- | WxppCachedOAuthToken 对应的 scope
+WxppCachedOAuthTokenScope
+    token               WxppCachedOAuthTokenId
+    scope               OAuthScope
 
 -- | 缓存用户信息
 -- 如果不使用数据库实现缓存，则此表无用

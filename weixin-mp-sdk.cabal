@@ -146,6 +146,7 @@ library
                      , th-lift
                      , case-insensitive
                      , HTTP
+                     , vector
 
   if flag(parsec3)
       build-depends:   parsec3

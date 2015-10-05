@@ -15,7 +15,9 @@ import Data.Aeson.Types                     (Parser, Pair, typeMismatch)
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.Set                   as Set
 import Data.Byteable                        (toBytes)
+import Data.Char                            (isSpace)
 import Crypto.Cipher                        (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
@@ -31,7 +33,7 @@ import Text.Read                            (Read(..))
 import Data.Proxy                           (Proxy(..))
 import Language.Haskell.TH.Lift             (deriveLift)
 
-import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec)
+import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
 import Yesod.Helpers.Utils                  (emptyTextToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Yesod.Helpers.Parsec                 ( SimpleStringRep(..), natural
@@ -1283,20 +1285,29 @@ instance FromJSON WxppForwardedEnv where
 
 data OAuthScope = AS_SnsApiBase
                 | AS_SnsApiUserInfo
-                deriving (Eq, Ord, Enum, Bounded)
+                | AS_Unknown Text
+                deriving (Show, Eq, Ord)
 
 $(derivePersistFieldS "OAuthScope")
+$(derivePathPieceS "OAuthScope")
+$(deriveSafeCopy 0 'base ''OAuthScope)
 
 instance SimpleStringRep OAuthScope where
     -- Encode values will be used in wxppAuthPageUrl
     -- so they must be consistent with WX doc.
     simpleEncode AS_SnsApiBase      = "snsapi_base"
     simpleEncode AS_SnsApiUserInfo  = "snsapi_userinfo"
+    simpleEncode (AS_Unknown s)     = T.unpack s
 
-    simpleParser = makeSimpleParserByTable
+    simpleParser = try p Text.Parsec.<|> parse_unknown
+        where
+            p = makeSimpleParserByTable
                     [ ("snsapi_base", AS_SnsApiBase)
                     , ("snsapi_userinfo", AS_SnsApiUserInfo)
                     ]
+
+            parse_unknown = fmap (AS_Unknown . fromString) $
+                                many1 $ satisfy $ not . isSpace
 
 
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
@@ -1344,7 +1355,9 @@ instance ToJSON OAuthRefreshToken where toJSON = toJSON . unOAuthRefreshToken
 -- | access token 通常要与 open id 一起使用，并且有对应关系，因此打包在一起
 data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
                             oauthAtkPRaw        :: OAuthAccessToken
-                            , oauthAtkRtk       :: OAuthRefreshToken
+                            , oauthAtkPRtk      :: OAuthRefreshToken
+                            , oauthAtkPScopes   :: Set OAuthScope
+                            , oauthAtkPState    :: Maybe Text
                             , oauthAtkPOpenID   :: WxppOpenID
                             , oauthAtkPAppID    :: WxppAppID
                             }
@@ -1352,11 +1365,27 @@ data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
 
 $(deriveSafeCopy 0 'base ''OAuthAccessTokenPkg)
 
+data OAuthTokenInfo = OAuthTokenInfo
+                        !OAuthAccessToken
+                        !OAuthRefreshToken
+                        !(Set OAuthScope)
+                        !(Maybe Text)   -- ^ state
+                        !UTCTime
+                        deriving (Show, Eq, Ord)
+$(deriveSafeCopy 0 'base ''OAuthTokenInfo)
+
+packOAuthTokenInfo :: WxppAppID
+                    -> WxppOpenID
+                    -> OAuthTokenInfo
+                    -> OAuthAccessTokenPkg
+packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes m_state _expiry) =
+    OAuthAccessTokenPkg atk rtk scopes m_state open_id app_id
+
 
 data OAuthAccessTokenResult = OAuthAccessTokenResult {
                                 oauthAtkToken           :: OAuthAccessToken
                                 , oauthAtkTTL           :: NominalDiffTime
-                                , oauthAtkScope         :: [Text]
+                                , oauthAtkScopes        :: Set OAuthScope
                                 , oauthAtkRefreshToken  :: OAuthRefreshToken
                                 , oauthAtkOpenID        :: WxppOpenID
                                 , oauthAtkUnionID       :: Maybe WxppUnionID
@@ -1368,16 +1397,18 @@ instance FromJSON OAuthAccessTokenResult where
                     OAuthAccessTokenResult
                         <$> o .: "access_token"
                         <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
-                        <*> ((map T.strip . T.splitOn ",") <$> o .: "scope")
+                        <*> (fmap Set.fromList $ o .: "scope" >>= parseTextByParsec p_scopes)
                         <*> o .: "refresh_token"
                         <*> o .: "openid"
                         <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+                where
+                    p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
 
 
 data OAuthRefreshAccessTokenResult = OAuthRefreshAccessTokenResult {
                                         oauthRtkToken           :: OAuthAccessToken
                                         , oauthRtkTTL           :: NominalDiffTime
-                                        , oauthRtkScope         :: [Text]
+                                        , oauthRtkScopes        :: Set OAuthScope
                                         , ouahtRtkRefreshToken  :: OAuthRefreshToken
                                         , oauthRtkOpenID        :: WxppOpenID
                                         }
@@ -1388,9 +1419,11 @@ instance FromJSON OAuthRefreshAccessTokenResult where
                     OAuthRefreshAccessTokenResult
                         <$> o .: "access_token"
                         <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
-                        <*> ((map T.strip . T.splitOn ",") <$> o .: "scope")
+                        <*> (fmap Set.fromList $ o .: "scope" >>= parseTextByParsec p_scopes)
                         <*> o .: "refresh_token"
                         <*> o .: "openid"
+                where
+                    p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
 
 data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
                                 oauthUserInfoOpenID         :: WxppOpenID

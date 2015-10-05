@@ -4,6 +4,7 @@ module WeiXin.PublicPlatform.Acid
     ) where
 
 import ClassyPrelude
+import qualified Data.Set                   as Set
 import Control.Lens
 import Data.SafeCopy
 import Data.Acid
@@ -32,7 +33,7 @@ data WxppAcidState = WxppAcidState {
 
                     , _wxppAcidStateOAuthAccessTokens :: !(Map
                                                             (WxppOpenID, WxppAppID)
-                                                            ((OAuthAccessToken, OAuthRefreshToken), UTCTime)
+                                                            (Set OAuthTokenInfo)
                                                             )
                         -- ^ oauth access tokens 
 
@@ -76,27 +77,32 @@ wxppAcidAddOAuthAcccessToken :: OAuthAccessTokenPkg
                             -> Update WxppAcidState ()
 wxppAcidAddOAuthAcccessToken atk_p expiry = do
     modify $ over wxppAcidStateOAuthAccessTokens $
-        Map.union $ Map.singleton (open_id, app_id) ((atk, rtk), expiry)
+        Map.unionWith Set.union $ Map.singleton (open_id, app_id) (Set.singleton info)
     where
         app_id    = oauthAtkPAppID atk_p
         open_id   = oauthAtkPOpenID atk_p
         atk       = oauthAtkPRaw atk_p
-        rtk       = oauthAtkRtk atk_p
+        rtk       = oauthAtkPRtk atk_p
+        scopes    = oauthAtkPScopes atk_p
+        m_state   = oauthAtkPState atk_p
+        info      = OAuthTokenInfo atk rtk scopes m_state expiry
 
 wxppAcidPurgeOAuthAccessToken :: UTCTime
                                 -> Update WxppAcidState ()
 wxppAcidPurgeOAuthAccessToken expiry = do
     modify $ over wxppAcidStateOAuthAccessTokens $
-        Map.filter ((> expiry) . snd)
+        Map.filter (not . Set.null) .
+            Map.map (Set.filter ((> expiry) . get_expiry))
+    where
+        get_expiry (OAuthTokenInfo _ _ _ _ e) = e
 
 wxppAcidLookupOAuthAccessTokens :: WxppAppID
                                 -> WxppOpenID
                                 -> Query WxppAcidState
-                                        (Maybe
-                                            ((OAuthAccessToken, OAuthRefreshToken), UTCTime)
-                                        )
+                                        (Set OAuthTokenInfo)
 wxppAcidLookupOAuthAccessTokens app_id open_id = do
-    asks $ Map.lookup (open_id, app_id) . _wxppAcidStateOAuthAccessTokens
+    liftM (fromMaybe Set.empty) $
+        asks $ Map.lookup (open_id, app_id) . _wxppAcidStateOAuthAccessTokens
 
 wxppAcidLookupUploadedMediaIDByHash ::
     WxppAppID -> SHA256Hash -> Query WxppAcidState (Maybe UploadResult)
@@ -165,11 +171,15 @@ instance WxppCacheBackend WxppCacheByAcid where
     wxppCacheAddOAuthAccessToken (WxppCacheByAcid acid) atk_p expiry = do
         update acid $ WxppAcidAddOAuthAcccessToken atk_p expiry
 
-    wxppCacheGetOAuthAccessToken (WxppCacheByAcid acid) app_id open_id = do
-        liftM (fmap (first mk_p)) $
-            query acid $ WxppAcidLookupOAuthAccessTokens app_id open_id
+    wxppCacheGetOAuthAccessToken (WxppCacheByAcid acid) app_id open_id req_scopes m_state = do
+        infos <- query acid $ WxppAcidLookupOAuthAccessTokens app_id open_id
+        return $ fmap fst $ Set.maxView $ Set.filter
+                                (\x -> (check_req_scopes $ get_scopes x) && match_state x)
+                                infos
         where
-            mk_p (atk, rtk) = OAuthAccessTokenPkg atk rtk open_id app_id 
+            match_state (OAuthTokenInfo _ _ _ ms _) = m_state == ms
+            get_scopes (OAuthTokenInfo _ _ scopes _ _) = scopes
+            check_req_scopes scopes = Set.isSubsetOf req_scopes scopes
 
     wxppCachePurgeOAuthAccessToken (WxppCacheByAcid acid) expiry = do
         update acid $ WxppAcidPurgeOAuthAccessToken expiry

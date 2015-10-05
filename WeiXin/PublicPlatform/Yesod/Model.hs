@@ -3,6 +3,8 @@
 module WeiXin.PublicPlatform.Yesod.Model where
 
 import ClassyPrelude.Yesod
+import qualified Data.Conduit.List          as CL
+import qualified Data.Set                   as Set
 import Database.Persist.Quasi
 
 
@@ -57,27 +59,45 @@ instance WxppCacheBackend WxppDbRunner where
     wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
         now <- liftIO getCurrentTime
         run_db $ do
-            insert_ $ WxppCachedOAuthToken app_id open_id atk rtk expiry now
+            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk m_state expiry now
+            insertMany_ $
+                map (\x -> WxppCachedOAuthTokenScope rec_id x) $ toList scopes
         where
             app_id    = oauthAtkPAppID atk_p
             open_id   = oauthAtkPOpenID atk_p
             atk       = oauthAtkPRaw atk_p
-            rtk       = oauthAtkRtk atk_p
+            rtk       = oauthAtkPRtk atk_p
+            scopes    = oauthAtkPScopes atk_p
+            m_state   = oauthAtkPState atk_p
 
-    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id = do
+    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes m_state = do
         now <- liftIO getCurrentTime
-        run_db $ liftM (fmap $ (mk_p &&& wxppCachedOAuthTokenExpiryTime) . entityVal) $ 
-            selectFirst [ WxppCachedOAuthTokenApp ==. app_id
-                        , WxppCachedOAuthTokenOpenId ==. open_id
-                        , WxppCachedOAuthTokenExpiryTime >. now
-                        ]
-                        [ Desc WxppCachedOAuthTokenId ]
+        runResourceT $ run_db $ do
+            selectSource
+                    [ WxppCachedOAuthTokenApp ==. app_id
+                    , WxppCachedOAuthTokenOpenId ==. open_id
+                    , WxppCachedOAuthTokenState ==. m_state
+                    , WxppCachedOAuthTokenExpiryTime >. now
+                    ]
+                    [ Desc WxppCachedOAuthTokenId ]
+                =$= check_scopes
+                $$ CL.head
         where
-            mk_p rec = OAuthAccessTokenPkg
-                            (wxppCachedOAuthTokenAccess rec)
-                            (wxppCachedOAuthTokenRefresh rec)
-                            open_id
-                            app_id
+            check_scopes = awaitForever $ \(Entity rec_id rec) -> do
+                has_scopes <- lift $
+                                liftM (Set.fromList .
+                                        (map $  wxppCachedOAuthTokenScopeScope . entityVal)
+                                    ) $
+                                    selectList [ WxppCachedOAuthTokenScopeToken ==. rec_id ] []
+                when ( Set.isSubsetOf req_scopes has_scopes ) $ do
+                    yield $ mk_p rec has_scopes
+
+            mk_p rec scopes = OAuthTokenInfo
+                                (wxppCachedOAuthTokenAccess rec)
+                                (wxppCachedOAuthTokenRefresh rec)
+                                scopes
+                                (wxppCachedOAuthTokenState rec)
+                                (wxppCachedOAuthTokenExpiryTime rec)
 
     wxppCachePurgeOAuthAccessToken (WxppDbRunner run_db) expiry = do
         run_db $

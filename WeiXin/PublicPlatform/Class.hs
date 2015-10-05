@@ -8,6 +8,7 @@ import ClassyPrelude
 import WeiXin.PublicPlatform.Types
 import Data.List.NonEmpty                   as LNE
 
+
 -- | WXPP 服务器所需的一切 cache 接口
 -- 实际cache可以用各种后端，包括acid-state，各种数据库等等
 class WxppCacheBackend a where
@@ -40,7 +41,9 @@ class WxppCacheBackend a where
     wxppCacheGetOAuthAccessToken :: a
                                 -> WxppAppID
                                 -> WxppOpenID
-                                -> IO (Maybe (OAuthAccessTokenPkg, UTCTime))
+                                -> Set OAuthScope
+                                -> Maybe Text   -- ^ state
+                                -> IO (Maybe OAuthTokenInfo)
 
     wxppCachePurgeOAuthAccessToken :: a
                                     -> UTCTime
