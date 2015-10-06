@@ -235,7 +235,7 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
                         -> m UrlText
 wxppOAuthLoginRedirectUrl url_render_io app_id scope m_state return_url = do
     oauth_retrurn_url <- liftIO $ liftM UrlText $
-                            url_render_io OAuthReturnR [ ("return", unUrlText return_url) ]
+                            url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuth app_id scope
                         oauth_retrurn_url
                         m_state
@@ -266,8 +266,8 @@ sessionGetWxppUser app_id =
     (,) <$> ( fmap WxppOpenID <$> lookupSession (sessionKeyWxppUser app_id) )
         <*> lookupSession (sessionKeyWxppOAuthState app_id)
 
-getOAuthReturnR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
-getOAuthReturnR = withWxppSubHandler $ \sub -> do
+getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
+getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
     return_url <- reqPathPieceParamPostGet "return"
     m_state <- lookupGetParam "state"
