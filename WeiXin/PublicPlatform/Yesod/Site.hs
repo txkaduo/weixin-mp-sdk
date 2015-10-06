@@ -226,14 +226,14 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                 Right xdoc  -> return xdoc
 
 
-wxppOauthLoginRedirect :: (MonadHandler m, MonadIO m)
+wxppOAuthLoginRedirect :: (MonadHandler m, MonadIO m)
                         => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                         -> WxppAppID
                         -> OAuthScope
                         -> Maybe Text       -- ^ optional state
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOauthLoginRedirect url_render_io app_id scope m_state return_url = do
+wxppOAuthLoginRedirect url_render_io app_id scope m_state return_url = do
     oauth_retrurn_url <- liftIO $ liftM UrlText $
                             url_render_io OAuthReturnR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuth app_id scope
@@ -334,7 +334,7 @@ wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m, WxppCache
 wxppOAuthHandler cache render_url_io app_id scope m_state f = do
     let get_auth = do
             url <- getCurrentUrl
-            wxppOauthLoginRedirect render_url_io app_id scope m_state (UrlText url)
+            wxppOAuthLoginRedirect render_url_io app_id scope m_state (UrlText url)
                 >>= redirect . unUrlText
 
     (m_open_id, m_state2) <- sessionGetWxppUser app_id
