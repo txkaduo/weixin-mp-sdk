@@ -53,9 +53,13 @@ wxppOAuthRequestAuth app_id scope return_url m_state =
                 ]
 
         uri = base_uri
-                { uriQuery      = urlEncodeVars vars
+                { uriQuery      = add_qmark (urlEncodeVars vars)
                 , uriFragment   = "#wechat_redirect"
                 }
+        add_qmark s = case s of
+                        []    -> s
+                        '?':_ -> s
+                        _     -> '?' : s
 
 
 -- | 根据 code 取 access token
