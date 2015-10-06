@@ -334,7 +334,7 @@ wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m, WxppCache
 wxppOAuthHandler cache render_url_io app_id scope m_state f = do
     let get_auth = do
             url <- getCurrentUrl
-            wxppOAuthLoginRedirect render_url_io app_id scope m_state (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url_io app_id scope m_state (UrlText url)
                 >>= redirect . unUrlText
 
     (m_open_id, m_state2) <- sessionGetWxppUser app_id
