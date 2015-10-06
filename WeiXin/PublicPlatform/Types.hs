@@ -1371,7 +1371,7 @@ data OAuthTokenInfo = OAuthTokenInfo
                         !(Set OAuthScope)
                         !(Maybe Text)   -- ^ state
                         !UTCTime
-                        deriving (Show, Eq, Ord)
+                        deriving (Show, Typeable, Eq, Ord)
 $(deriveSafeCopy 0 'base ''OAuthTokenInfo)
 
 packOAuthTokenInfo :: WxppAppID
