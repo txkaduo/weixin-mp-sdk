@@ -226,16 +226,18 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                 Right xdoc  -> return xdoc
 
 
-wxppOauthLoginRedirect :: (MonadHandler m, HandlerSite m ~ MaybeWxppSub)
-                        => WxppAppID
+wxppOauthLoginRedirect :: (MonadHandler m, MonadIO m)
+                        => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
+                        -> WxppAppID
                         -> OAuthScope
                         -> Maybe Text       -- ^ optional state
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOauthLoginRedirect app_id scope m_state return_url = do
-    url_render <- getUrlRenderParams
+wxppOauthLoginRedirect url_render_io app_id scope m_state return_url = do
+    oauth_retrurn_url <- liftIO $ liftM UrlText $
+                            url_render_io OAuthReturnR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuth app_id scope
-                        (UrlText $ url_render OAuthReturnR [ ("return", unUrlText return_url) ])
+                        oauth_retrurn_url
                         m_state
     redirect $ unUrlText auth_url
 
@@ -319,32 +321,31 @@ getOAuthReturnR = withWxppSubHandler $ \sub -> do
 
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数
 -- 否则重定向至微信授权页面，待用户授权成功后再重定向回到当前页面
-wxppOAuthHandler :: (MonadHandler m, HandlerSite m ~ MaybeWxppSub
-                , MonadBaseControl IO m
-                )
-                => OAuthScope
+wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m, WxppCacheBackend c)
+                => c
+                -> (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
+                -> WxppAppID
+                -> OAuthScope
                 -> Maybe Text   -- ^ 调用 oauth 接口的 state 参数（初始值）
                                 -- 但真正传给 'f' 的 state 在 OAuthAccessTokenPkg 里
                                 -- 未必与前者相同
-                -> ( WxppSub -> OAuthAccessTokenPkg -> m a )
+                -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
-wxppOAuthHandler scope m_state f = withWxppSubHandler $ \sub -> do
-    let app_id = wxppConfigAppID $ wxppSubAppConfig sub
-        get_auth = do
+wxppOAuthHandler cache render_url_io app_id scope m_state f = do
+    let get_auth = do
             url <- getCurrentUrl
-            wxppOauthLoginRedirect app_id scope m_state (UrlText url)
+            wxppOauthLoginRedirect render_url_io app_id scope m_state (UrlText url)
                 >>= redirect . unUrlText
 
     (m_open_id, m_state2) <- sessionGetWxppUser app_id
     case m_open_id of
         Nothing -> get_auth
         Just open_id -> do
-            let cache = wxppSubCacheBackend sub
             m_atk_info <- liftIO $ wxppCacheGetOAuthAccessToken cache
                                         app_id open_id (Set.singleton scope) m_state2
             case m_atk_info of
                 Nothing         -> get_auth
-                Just atk_info   -> f sub (packOAuthTokenInfo app_id open_id atk_info)
+                Just atk_info   -> f (packOAuthTokenInfo app_id open_id atk_info)
 
 
 -- | 演示/测试微信 oauth 授权的页面
