@@ -64,6 +64,7 @@ library
                        WeiXin.PublicPlatform.Conversation.TextParser
                        WeiXin.PublicPlatform.Center
                        WeiXin.PublicPlatform.OAuth
+                       WeiXin.PublicPlatform.JS
                        WeiXin.PublicPlatform
 
   -- other-modules:       

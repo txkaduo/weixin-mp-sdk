@@ -76,6 +76,14 @@ WxppCachedOAuthTokenScope
     token               WxppCachedOAuthTokenId
     scope               OAuthScope
 
+WxppCachedJsTicket
+    app                 WxppAppID maxlen=200
+    data                Text
+    expiryTime          UTCTime
+    createdTime         UTCTime
+
+    UniqueWxppCachedJsTicket app
+
 -- | 缓存用户信息
 -- 如果不使用数据库实现缓存，则此表无用
 -- XXX: 此表的作用与 WxppUserCachedInfo 有重合

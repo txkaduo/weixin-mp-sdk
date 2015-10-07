@@ -37,6 +37,8 @@ data WxppAcidState = WxppAcidState {
                                                             )
                         -- ^ oauth access tokens 
 
+                    , _wxppAcidStateJsTickets   :: !(Map WxppAppID (WxppJsTicket, UTCTime))
+
                     , _wxppAcidStateUploadedMedia :: !(Map WxppAppID (Map SHA256Hash UploadResult))
                     , _wxppAcidStateCachedUserInfo :: !(Map (WxppOpenID, WxppAppID)
                                                             (TimeTagged EndUserQueryResult))
@@ -45,10 +47,10 @@ data WxppAcidState = WxppAcidState {
                     deriving (Typeable)
 
 $(makeLenses ''WxppAcidState)
-$(deriveSafeCopy 1 'base ''WxppAcidState)
+$(deriveSafeCopy 2 'base ''WxppAcidState)
 
 instance Default WxppAcidState where
-    def = WxppAcidState def def def def
+    def = WxppAcidState def def def def def
 
 wxppAcidGetAcccessTokens :: WxppAppID -> Query WxppAcidState [(AccessToken, UTCTime)]
 wxppAcidGetAcccessTokens app_id =
@@ -118,6 +120,23 @@ wxppAcidSaveUploadedMediaID app_id h u_res =
     modify $ over wxppAcidStateUploadedMedia $
         Map.unionWith Map.union (Map.singleton app_id (Map.singleton h u_res))
 
+wxppAcidAddJsTicket :: WxppAppID
+                    -> WxppJsTicket
+                    -> UTCTime
+                    -> Update WxppAcidState ()
+wxppAcidAddJsTicket app_id ticket expiry = do
+    modify $ over wxppAcidStateJsTickets $
+            Map.union $ Map.singleton app_id (ticket, expiry)
+
+wxppAcidGetJsTicket :: WxppAppID
+                    -> Query WxppAcidState (Maybe (WxppJsTicket, UTCTime))
+wxppAcidGetJsTicket app_id = do
+    asks $ Map.lookup app_id . _wxppAcidStateJsTickets
+
+wxppAcidPurgeJsTicket :: UTCTime
+                      -> Update WxppAcidState ()
+wxppAcidPurgeJsTicket expiry = do
+    modify $ over wxppAcidStateJsTickets $ Map.filter $ (> expiry) . snd
 
 -- | 为 EndUserQueryResult 增加缓存
 wxppAcidSetCachedUserInfo ::
@@ -147,6 +166,9 @@ $(makeAcidic ''WxppAcidState
     , 'wxppAcidPurgeAcccessToken
     , 'wxppAcidAddOAuthAcccessToken
     , 'wxppAcidPurgeOAuthAccessToken
+    , 'wxppAcidAddJsTicket
+    , 'wxppAcidGetJsTicket
+    , 'wxppAcidPurgeJsTicket
     , 'wxppAcidLookupOAuthAccessTokens
     , 'wxppAcidLookupUploadedMediaIDByHash
     , 'wxppAcidSaveUploadedMediaID
@@ -183,6 +205,22 @@ instance WxppCacheBackend WxppCacheByAcid where
 
     wxppCachePurgeOAuthAccessToken (WxppCacheByAcid acid) expiry = do
         update acid $ WxppAcidPurgeOAuthAccessToken expiry
+
+    wxppCacheAddJsTicket (WxppCacheByAcid acid) app_id ticket expiry = do
+        update acid $ WxppAcidAddJsTicket app_id ticket expiry
+
+    wxppCacheGetJsTicket (WxppCacheByAcid acid) app_id = do
+        now <- liftIO getCurrentTime
+        m_tk <- query acid $ WxppAcidGetJsTicket app_id
+        case m_tk of
+            Nothing -> return Nothing
+            Just (_tk, expiry) -> do
+                if expiry > now
+                    then return m_tk
+                    else return Nothing
+
+    wxppCachePurgeJsTicket (WxppCacheByAcid acid) expiry = do
+        update acid $ WxppAcidPurgeJsTicket expiry
 
     wxppCacheLookupUserInfo (WxppCacheByAcid acid) app_id open_id = do
         fmap (fmap $ _unTimeTag &&& _ttTime) $

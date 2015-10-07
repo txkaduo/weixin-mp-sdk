@@ -1451,6 +1451,34 @@ instance FromJSON OAuthGetUserInfoResult where
                         <*> o .: "privilege"
                         <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
 
+newtype WxppJsTicket = WxppJsTicket { unWxppJsTicket :: Text }
+                    deriving (Show, Read, Eq, Ord, Typeable)
+
+instance SafeCopy WxppJsTicket where
+    getCopy                  = contain $ WxppJsTicket <$> safeGet
+    putCopy (WxppJsTicket x) = contain $ safePut x
+    errorTypeName _          = "WxppJsTicket"
+
+instance PersistField WxppJsTicket where
+    toPersistValue      = toPersistValue . unWxppJsTicket
+    fromPersistValue    = fmap WxppJsTicket . fromPersistValue
+
+instance PersistFieldSql WxppJsTicket where
+    sqlType _ = SqlString
+
+instance ToJSON WxppJsTicket where
+    toJSON = toJSON . unWxppJsTicket
+
+instance FromJSON WxppJsTicket where
+    parseJSON = fmap WxppJsTicket . parseJSON
+
+instance PathPiece WxppJsTicket where
+    toPathPiece (WxppJsTicket x)  = toPathPiece x
+    fromPathPiece t             =   let t' = T.strip t
+                                    in if T.null t'
+                                          then Nothing
+                                          else WxppJsTicket <$> fromPathPiece t'
+
 
 -- | 程序内部因公众号的变化而产生的事件
 data WxppSignal = WxppSignalNewApp WxppAppID

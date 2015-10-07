@@ -103,6 +103,31 @@ instance WxppCacheBackend WxppDbRunner where
         run_db $
             deleteWhere [ WxppCachedOAuthTokenExpiryTime <=. expiry ]
 
+
+    wxppCacheAddJsTicket (WxppDbRunner run_db) app_id (WxppJsTicket tk) expiry = do
+        now <- liftIO getCurrentTime
+        run_db $ do
+            void $ upsert
+                    (WxppCachedJsTicket app_id tk expiry now)
+                    [ WxppCachedJsTicketData =. tk
+                    , WxppCachedJsTicketExpiryTime =. expiry
+                    , WxppCachedJsTicketCreatedTime =. now
+                    ]
+
+    wxppCacheGetJsTicket (WxppDbRunner run_db) app_id = do
+        now <- liftIO getCurrentTime
+        run_db $ do
+            liftM (fmap $ ((WxppJsTicket . wxppCachedJsTicketData) &&& wxppCachedJsTicketExpiryTime) . entityVal) $
+                selectFirst
+                    [ WxppCachedJsTicketApp ==. app_id
+                    , WxppCachedJsTicketExpiryTime >. now
+                    ]
+                    [ Desc WxppCachedJsTicketId ]
+
+    wxppCachePurgeJsTicket (WxppDbRunner run_db) expiry = do
+        run_db $ do
+            deleteWhere [ WxppCachedJsTicketExpiryTime <=. expiry ]
+
     wxppCacheLookupUserInfo (WxppDbRunner run_db) app_id open_id = do
         run_db $ do
             fmap

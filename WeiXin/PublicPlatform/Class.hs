@@ -49,6 +49,22 @@ class WxppCacheBackend a where
                                     -> UTCTime
                                     -> IO ()
 
+    wxppCacheAddJsTicket :: a
+                        -> WxppAppID
+                        -> WxppJsTicket
+                        -> UTCTime
+                        -> IO ()
+
+
+    -- | 与 wxppCacheGetAccessToken, 如果 ticket 已过期，则返回 Nothing
+    wxppCacheGetJsTicket :: a
+                        -> WxppAppID
+                        -> IO (Maybe (WxppJsTicket, UTCTime))
+
+    wxppCachePurgeJsTicket :: a
+                            -> UTCTime
+                            -> IO ()
+
     wxppCacheLookupUserInfo ::
         a
         -> WxppAppID
@@ -102,6 +118,9 @@ instance WxppCacheBackend SomeWxppCacheBackend where
     wxppCacheAddOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheAddOAuthAccessToken x
     wxppCachePurgeOAuthAccessToken (SomeWxppCacheBackend x) = wxppCachePurgeOAuthAccessToken x
     wxppCacheGetOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheGetOAuthAccessToken x
+    wxppCacheAddJsTicket (SomeWxppCacheBackend x)       = wxppCacheAddJsTicket x
+    wxppCacheGetJsTicket (SomeWxppCacheBackend x)       = wxppCacheGetJsTicket x
+    wxppCachePurgeJsTicket (SomeWxppCacheBackend x)     = wxppCachePurgeJsTicket x
     wxppCacheLookupUserInfo (SomeWxppCacheBackend x)    = wxppCacheLookupUserInfo x
     wxppCacheSaveUserInfo   (SomeWxppCacheBackend x)    = wxppCacheSaveUserInfo x
     wxppCacheLookupUploadedMediaIDByHash
