@@ -1357,7 +1357,7 @@ data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
                             oauthAtkPRaw        :: OAuthAccessToken
                             , oauthAtkPRtk      :: OAuthRefreshToken
                             , oauthAtkPScopes   :: Set OAuthScope
-                            , oauthAtkPState    :: Maybe Text
+                            , oauthAtkPState    :: Text
                             , oauthAtkPOpenID   :: WxppOpenID
                             , oauthAtkPAppID    :: WxppAppID
                             }
@@ -1369,7 +1369,7 @@ data OAuthTokenInfo = OAuthTokenInfo
                         !OAuthAccessToken
                         !OAuthRefreshToken
                         !(Set OAuthScope)
-                        !(Maybe Text)   -- ^ state
+                        !Text   -- ^ state
                         !UTCTime
                         deriving (Show, Typeable, Eq, Ord)
 $(deriveSafeCopy 0 'base ''OAuthTokenInfo)

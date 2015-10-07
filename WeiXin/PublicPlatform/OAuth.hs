@@ -36,20 +36,19 @@ import WeiXin.PublicPlatform.WS
 wxppOAuthRequestAuth :: WxppAppID
                     -> OAuthScope
                     -> UrlText      -- ^ return to this url
-                    -> Maybe Text -- ^ state to return
+                    -> Text -- ^ state to return
                     -> UrlText
-wxppOAuthRequestAuth app_id scope return_url m_state =
+wxppOAuthRequestAuth app_id scope return_url state =
     UrlText $ fromString $ uriToString id uri ""
     where
         base_uri = fromMaybe (error "cannot parse uri") $
                     parseAbsoluteURI "https://open.weixin.qq.com/connect/oauth2/authorize"
 
-        vars = catMaybes
-                [ Just ("appid",         T.unpack (unWxppAppID app_id))
-                , Just ("redirect_uri",  T.unpack (unUrlText return_url))
-                , Just ("response_type", "code")
-                , Just ("scope",         simpleEncode scope)
-                , flip fmap m_state $ \state -> ("state", T.unpack state)
+        vars =  [ ("appid",         T.unpack (unWxppAppID app_id))
+                , ("redirect_uri",  T.unpack (unUrlText return_url))
+                , ("response_type", "code")
+                , ("scope",         simpleEncode scope)
+                , ("state",         T.unpack state)
                 ]
 
         uri = base_uri

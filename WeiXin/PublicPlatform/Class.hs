@@ -42,7 +42,7 @@ class WxppCacheBackend a where
                                 -> WxppAppID
                                 -> WxppOpenID
                                 -> Set OAuthScope
-                                -> Maybe Text   -- ^ state
+                                -> Text   -- ^ state
                                 -> IO (Maybe OAuthTokenInfo)
 
     wxppCachePurgeOAuthAccessToken :: a

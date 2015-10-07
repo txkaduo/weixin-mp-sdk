@@ -59,7 +59,7 @@ instance WxppCacheBackend WxppDbRunner where
     wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
         now <- liftIO getCurrentTime
         run_db $ do
-            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk m_state expiry now
+            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk state expiry now
             insertMany_ $
                 map (\x -> WxppCachedOAuthTokenScope rec_id x) $ toList scopes
         where
@@ -68,15 +68,15 @@ instance WxppCacheBackend WxppDbRunner where
             atk       = oauthAtkPRaw atk_p
             rtk       = oauthAtkPRtk atk_p
             scopes    = oauthAtkPScopes atk_p
-            m_state   = oauthAtkPState atk_p
+            state   = oauthAtkPState atk_p
 
-    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes m_state = do
+    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes state = do
         now <- liftIO getCurrentTime
         runResourceT $ run_db $ do
             selectSource
                     [ WxppCachedOAuthTokenApp ==. app_id
                     , WxppCachedOAuthTokenOpenId ==. open_id
-                    , WxppCachedOAuthTokenState ==. m_state
+                    , WxppCachedOAuthTokenState ==. state
                     , WxppCachedOAuthTokenExpiryTime >. now
                     ]
                     [ Desc WxppCachedOAuthTokenId ]

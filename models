@@ -67,7 +67,7 @@ WxppCachedOAuthToken
     openId              WxppOpenID maxlen=200
     access              OAuthAccessToken maxlen=200
     refresh             OAuthRefreshToken maxlen=200
-    state               Text Maybe
+    state               Text
     expiryTime          UTCTime
     createdTime         UTCTime
 

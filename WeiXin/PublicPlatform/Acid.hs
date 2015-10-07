@@ -84,8 +84,8 @@ wxppAcidAddOAuthAcccessToken atk_p expiry = do
         atk       = oauthAtkPRaw atk_p
         rtk       = oauthAtkPRtk atk_p
         scopes    = oauthAtkPScopes atk_p
-        m_state   = oauthAtkPState atk_p
-        info      = OAuthTokenInfo atk rtk scopes m_state expiry
+        state     = oauthAtkPState atk_p
+        info      = OAuthTokenInfo atk rtk scopes state expiry
 
 wxppAcidPurgeOAuthAccessToken :: UTCTime
                                 -> Update WxppAcidState ()
@@ -171,13 +171,13 @@ instance WxppCacheBackend WxppCacheByAcid where
     wxppCacheAddOAuthAccessToken (WxppCacheByAcid acid) atk_p expiry = do
         update acid $ WxppAcidAddOAuthAcccessToken atk_p expiry
 
-    wxppCacheGetOAuthAccessToken (WxppCacheByAcid acid) app_id open_id req_scopes m_state = do
+    wxppCacheGetOAuthAccessToken (WxppCacheByAcid acid) app_id open_id req_scopes state = do
         infos <- query acid $ WxppAcidLookupOAuthAccessTokens app_id open_id
         return $ fmap fst $ Set.maxView $ Set.filter
                                 (\x -> (check_req_scopes $ get_scopes x) && match_state x)
                                 infos
         where
-            match_state (OAuthTokenInfo _ _ _ ms _) = m_state == ms
+            match_state (OAuthTokenInfo _ _ _ s _) = state == s
             get_scopes (OAuthTokenInfo _ _ scopes _ _) = scopes
             check_req_scopes scopes = Set.isSubsetOf req_scopes scopes
 

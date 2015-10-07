@@ -18,6 +18,7 @@ import qualified Data.Set                   as Set
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
+import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Network.URI                          ( parseURI, uriQuery )
 import Network.HTTP                         ( urlEncode )
 import Yesod.Default.Util                   ( widgetFileReload )
@@ -230,15 +231,17 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
                         => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                         -> WxppAppID
                         -> OAuthScope
-                        -> Maybe Text       -- ^ optional state
+                        -> Text             -- ^ optional state: 测试表达微信总是传回一个 state 参数
+                                            -- 就算我们我们不传给它 state 参数
+                                            -- 所以 state 参数不用 Maybe Text 表达
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOAuthLoginRedirectUrl url_render_io app_id scope m_state return_url = do
+wxppOAuthLoginRedirectUrl url_render_io app_id scope state return_url = do
     oauth_retrurn_url <- liftIO $ liftM UrlText $
                             url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuth app_id scope
                         oauth_retrurn_url
-                        m_state
+                        state
     return auth_url
 
 sessionKeyWxppUser :: WxppAppID -> Text
@@ -250,27 +253,27 @@ sessionKeyWxppOAuthState app_id = "wxpp-oauth-st|" <> unWxppAppID app_id
 sessionMarkWxppUser :: MonadHandler m
                     => WxppAppID
                     -> WxppOpenID
-                    -> Maybe Text
+                    -> Text
                     -> m ()
-sessionMarkWxppUser app_id open_id m_state = do
+sessionMarkWxppUser app_id open_id state = do
     setSession (sessionKeyWxppUser app_id) (unWxppOpenID open_id)
     let st_key = sessionKeyWxppOAuthState app_id
-    case m_state of
-        Nothing -> deleteSession st_key
-        Just state -> setSession st_key state
+    if T.null state
+        then deleteSession st_key
+        else setSession st_key state
 
 sessionGetWxppUser :: MonadHandler m
                     => WxppAppID
-                    -> m (Maybe WxppOpenID, Maybe Text)
-sessionGetWxppUser app_id = 
-    (,) <$> ( fmap WxppOpenID <$> lookupSession (sessionKeyWxppUser app_id) )
-        <*> lookupSession (sessionKeyWxppOAuthState app_id)
+                    -> m (Maybe (WxppOpenID, Text))
+sessionGetWxppUser app_id = runMaybeT $ do
+    (,) <$> ( fmap WxppOpenID $ MaybeT $ lookupSession (sessionKeyWxppUser app_id) )
+        <*> ( liftM (fromMaybe "") $ lift $ lookupSession (sessionKeyWxppOAuthState app_id))
 
 getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
     return_url <- reqPathPieceParamPostGet "return"
-    m_state <- lookupGetParam "state"
+    state <- liftM (fromMaybe "") $ lookupGetParam "state"
     let wac    = wxppSubAppConfig sub
         app_id = wxppConfigAppID wac
         secret = wxppConfigAppSecret wac
@@ -294,17 +297,17 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
                             (oauthAtkToken atk_info)
                             (oauthAtkRefreshToken atk_info)
                             (oauthAtkScopes atk_info)
-                            m_state
+                            state
                             open_id
                             app_id
 
             liftIO $ wxppCacheAddOAuthAccessToken cache atk_p expiry
 
-            sessionMarkWxppUser app_id open_id m_state
+            sessionMarkWxppUser app_id open_id state
 
             redirect $
-                case (parseURI return_url, m_state) of
-                    (Just uri, Just state) ->
+                case parseURI return_url of
+                    Just uri ->
                                 let qs = uriQuery uri
                                     qs' = if null qs || qs == "?"
                                             then qs
@@ -326,23 +329,23 @@ wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m, WxppCache
                 -> (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                 -> WxppAppID
                 -> OAuthScope
-                -> Maybe Text   -- ^ 调用 oauth 接口的 state 参数（初始值）
+                -> Text         -- ^ 调用 oauth 接口的 state 参数（初始值）
                                 -- 但真正传给 'f' 的 state 在 OAuthAccessTokenPkg 里
                                 -- 未必与前者相同
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
-wxppOAuthHandler cache render_url_io app_id scope m_state f = do
+wxppOAuthHandler cache render_url_io app_id scope state f = do
     let get_auth = do
             url <- getCurrentUrl
-            wxppOAuthLoginRedirectUrl render_url_io app_id scope m_state (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url_io app_id scope state (UrlText url)
                 >>= redirect . unUrlText
 
-    (m_open_id, m_state2) <- sessionGetWxppUser app_id
-    case m_open_id of
+    m_oauth_st <- sessionGetWxppUser app_id
+    case m_oauth_st of
         Nothing -> get_auth
-        Just open_id -> do
+        Just (open_id, state2) -> do
             m_atk_info <- liftIO $ wxppCacheGetOAuthAccessToken cache
-                                        app_id open_id (Set.singleton scope) m_state2
+                                        app_id open_id (Set.singleton scope) state2
             case m_atk_info of
                 Nothing         -> get_auth
                 Just atk_info   -> f (packOAuthTokenInfo app_id open_id atk_info)
@@ -353,12 +356,12 @@ getOAuthTestR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getOAuthTestR = withWxppSubHandler $ \sub -> do
     let wac    = wxppSubAppConfig sub
         app_id = wxppConfigAppID wac
-    (m_open_id, m_state) <- sessionGetWxppUser app_id
-    case m_open_id of
+    m_oauth_st <- sessionGetWxppUser app_id
+    case m_oauth_st of
         Nothing -> return "no open id, authorization failed"
-        Just open_id -> return $
+        Just (open_id, state) -> return $
                             "Your open id is: " <> unWxppOpenID open_id
-                                <> ", state is: " <> fromMaybe "<Nothing>" m_state
+                                <> ", state is: " <> state
 
 
 checkWaiReqThen :: Yesod master =>
