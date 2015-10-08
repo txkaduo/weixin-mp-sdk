@@ -172,11 +172,19 @@ wxppEncrypt :: MonadIO m =>
 wxppEncrypt app_id ak msg = do
     -- 虽然文档没有写，看样子随机字串应该只能用安全的字符
     -- 使用 base64-url 编码一个完全字节流可以达到这个效果
-    let gen_len = salt_len  -- long enough
-        salt_len = 16
-    salt <- liftIO $ liftM (take salt_len . B64L.encode . B.pack) $ replicateM gen_len randomIO
+    let salt_len = 16
+    Nonce nonce <- liftIO $ wxppMakeNonce salt_len
+    let salt = encodeUtf8 nonce
     return $ (, salt) <$> wxppEncryptInternal2 app_id ak salt msg
 
+
+wxppMakeNonce :: MonadIO m
+                => Int
+                -> m Nonce
+wxppMakeNonce salt_len = liftIO $ do
+    let gen_len = salt_len  -- long enough
+    liftM (Nonce . fromString . C8.unpack . take salt_len . B64L.encode . B.pack) $
+        replicateM gen_len randomIO
 
 -- | 加密明文的入口: base64-encoded
 wxppEncryptB64 :: MonadIO m =>
