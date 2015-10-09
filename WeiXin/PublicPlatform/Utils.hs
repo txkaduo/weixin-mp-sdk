@@ -8,6 +8,7 @@ import qualified Data.ByteString            as B
 import qualified Codec.Picture              as P -- from `JuicyPixel' package
 import qualified Codec.Picture.Saving       as P -- from `JuicyPixel' package
 import qualified Data.Text                  as T
+import qualified Data.Serialize             as S
 
 import Data.Array                           (bounds,(!), array)
 import Data.List                            ((!!))
@@ -15,6 +16,9 @@ import Data.Time                            (NominalDiffTime)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
 import System.FilePath                      (hasExtension)
+import Network.Mime                         (MimeType, defaultMimeType)
+import Network.Wreq                         (Response, responseBody, responseHeader)
+import Control.Lens                         ((^.), (^?))
 import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, prettyPrintParseException)
@@ -185,3 +189,27 @@ encodeStringQRCodeJpeg :: MonadIO m =>
                         -> m LB.ByteString
 encodeStringQRCodeJpeg pixelPerCell input =
     liftM (P.imageToJpg 100 . P.ImageY8) $ encodeStringQRCodeImage pixelPerCell input
+
+
+-- | 经常需要保存微信的文件内容及mime到本地
+-- 这个类型及下面的工具函数为此而设
+type FileContentAndMime = (LB.ByteString, MimeType)
+
+saveWreqResponseContentAndMime :: (MonadIO m)
+                                => Handle
+                                -> Response LB.ByteString
+                                -> m FileContentAndMime
+saveWreqResponseContentAndMime h r = liftIO $ do
+    LB.hPut h $ S.encodeLazy dat
+    return dat
+    where
+        dat  = (body, mime)
+        body = r ^. responseBody
+        mime = fromMaybe defaultMimeType $ r ^? responseHeader "Content-Type"
+
+loadWreqResponseContentAndMime :: (MonadIO m)
+                                => Handle -- ^ 因为使用了 hGetContents ，Handle 会关闭
+                                -> m FileContentAndMime
+loadWreqResponseContentAndMime h = liftIO $ do
+    lbs <- LB.hGetContents h
+    either (const $ throwM $ userError "cannot decode file as FileContentAndMime") return $ S.decodeLazy lbs

@@ -148,6 +148,7 @@ library
                      , case-insensitive
                      , HTTP
                      , vector
+                     , cereal
 
   if flag(parsec3)
       build-depends:   parsec3
