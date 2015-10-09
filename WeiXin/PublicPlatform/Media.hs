@@ -5,6 +5,7 @@ module WeiXin.PublicPlatform.Media
     ) where
 
 import ClassyPrelude hiding (catch)
+import qualified Data.Text                  as T
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
@@ -14,10 +15,27 @@ import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:))
+import Network.HTTP                         (urlEncodeVars)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
+
+
+-- | 生成直接下载临时素材的URL，可用于从第三方平台直接下载
+-- CAUTION: URL 包含 access token 敏感信息，不要交给不可信的第三方
+wxppDownloadMediaUrl :: Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
+                    -> AccessToken
+                    -> WxppBriefMediaID
+                    -> UrlText
+wxppDownloadMediaUrl if_ssl (AccessToken { accessTokenData = atk }) mid =
+    UrlText $ fromString $ url0 <> "?" <> qs
+    where
+        url0 = if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl <> "/media/get"
+        vars =  [ ("access_token", T.unpack atk)
+                , ("media_id", T.unpack (unWxppBriefMediaID mid))
+                ]
+        qs  = urlEncodeVars vars
 
 
 -- | 下载一个多媒体文件
