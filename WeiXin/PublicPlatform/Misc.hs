@@ -20,7 +20,7 @@ import Data.Char
 import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
-import Yesod.Core                           (HandlerSite)
+import Yesod.Core                           (HandlerSite, PathPiece(..))
 import Text.Shakespeare.I18N                (RenderMessage)
 
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
@@ -54,6 +54,34 @@ parseMultWxppAppConfig obj = do
                 then Just . (wxppAppConfigAppID &&& id) <$> parseJSON v
                 else return Nothing
 
+-- | parseMultWxppAppConfig 相似
+-- 但使用这个解释得到的字典是 wxpp~xxx 中的 xxx 作为键值（而不是app id）
+-- 'xxx' 部分可以作为外部标识app的字串（例如用在 url上）
+parseMultiWxppAppConfig2 :: Object -> Parser (Map Text WxppAppConfig)
+parseMultiWxppAppConfig2 obj = do
+    liftM (Map.fromList . catMaybes) $
+        forM (HM.toList obj) $ \(k, v) -> do
+            case T.stripPrefix "wxpp~" k of
+                Nothing     -> return Nothing
+                Just cname  -> Just . (cname, ) <$> parseJSON v
+
+-- | 为方便在 URL 上使用 code name 而设（与 parseMultWxppAppConfig2 的结果配合使用）
+newtype CodeNameOrAppID = CodeNameOrAppID { unCodeNameOrAppID :: Text }
+                        deriving (Eq, Ord, Show, Read)
+
+instance PathPiece CodeNameOrAppID where
+    toPathPiece (CodeNameOrAppID x) = toPathPiece x
+    fromPathPiece = fmap CodeNameOrAppID . fromPathPiece
+
+lookupMultiWxppAppConfig2 :: CodeNameOrAppID
+                            -> Map Text WxppAppConfig
+                            -> Maybe WxppAppConfig
+lookupMultiWxppAppConfig2 (CodeNameOrAppID t) the_map =
+    Map.lookup t the_map <|> lookup_by_app_id the_map
+    where
+        lookup_by_app_id = fmap fst . Map.minView .
+                                Map.filterWithKey
+                                    (\_ wac -> wxppConfigAppID wac == WxppAppID t)
 
 type InMsgHandlerList m = [SomeWxppInMsgHandler m]
 
