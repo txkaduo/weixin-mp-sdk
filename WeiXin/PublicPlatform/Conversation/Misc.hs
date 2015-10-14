@@ -9,9 +9,7 @@ import Control.Monad.Except
 import Control.Monad.State                  (StateT(..))
 import Data.List.NonEmpty                   as LNE hiding (insert)
 import Data.Aeson                           (FromJSON(..), ToJSON(..))
-import Text.Parsec                          (parse, eof, sourceLine, sourceColumn, errorPos)
-
-import Yesod.Helpers.Parsec                 (CharParser)
+import Text.Parsec                          (parse, eof, sourceLine, sourceColumn, errorPos, ParsecT)
 
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Conversation.TextParser
@@ -150,14 +148,14 @@ parseInputOrLoadErrorMsg :: forall a m r.
     (Text -> Text)      -- ^ function to apply before parsing
     -> r                -- ^ env
     -> FilePath         -- ^ error message
-    -> CharParser a     -- ^ the text parser
+    -> ParsecT String () Identity a     -- ^ the text parser
     -> WxppInMsgEntity
     -> ExceptT String m (Either WxppOutMsg a)
 parseInputOrLoadErrorMsg prep env err_msg_file p ime = do
     case wxppInMessage ime of
         WxppInMsgText t -> do
             let err_or_x = case runTextParser p' (prep t) of
-                            Left _err -> runTextParser p' t
+                            Left (_err :: Text) -> runTextParser p' t
                             Right x -> Right x
             case err_or_x of
                 Left err -> do
@@ -173,7 +171,6 @@ parseInputOrLoadErrorMsg prep env err_msg_file p ime = do
             liftM Left $ ExceptT $ loadTalkMessage env ("common" </> "text_only")
 
     where
-        p' :: CharParser a
         p' = p <* eof
 
 parseInputThenOrLoadErrorMsg :: forall a m r s.
@@ -181,7 +178,7 @@ parseInputThenOrLoadErrorMsg :: forall a m r s.
     (Text -> Text)      -- ^ function to apply before parsing
     -> r                -- ^ env
     -> FilePath         -- ^ error message
-    -> CharParser a     -- ^ the text parser
+    -> ParsecT String () Identity a     -- ^ the text parser
     -> WxppInMsgEntity
     -> s                -- ^ old state
     -> (a -> ExceptT String m ([WxppOutMsg], s))
@@ -196,7 +193,7 @@ parseInputThenOrLoadErrorMsgT :: forall a m r s.
     (LoadMsgEnv r, LoadMsgMonad m) =>
     (Text -> Text)      -- ^ function to apply before parsing
     -> FilePath         -- ^ error message
-    -> CharParser a     -- ^ the text parser
+    -> ParsecT String () Identity a     -- ^ the text parser
     -> WxppInMsgEntity
     -> (a -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg])
     -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg]
@@ -213,7 +210,7 @@ parseInputThenOrLoadErrorMsgT prep err_msg_file p ime f = do
 -- 如果输入的文字一点都不匹配，也 throwError []
 -- 如果解释吃掉足够长的输入，则 throwError 出提示信息
 parseUserInputText :: (MonadError [WxppOutMsg] m, MonadLogger m) =>
-                    CharParser a
+                    ParsecT String () Identity a
                         -- ^ 根据这个函数的行为，这个parser应吃掉尽可能多的输入
                     -> Text
                     -> WxppInMsgEntity
@@ -222,7 +219,7 @@ parseUserInputText p help_txt ime = do
     parseUserInputX p (throwError []) (throwError $ [WxppOutMsgText help_txt]) ime
 
 parseUserInputX :: (MonadLogger m) =>
-                    CharParser a
+                    ParsecT String () Identity a
                         -- ^ 根据这个函数的行为，这个parser应吃掉尽可能多的输入
                     -> m a      -- ^ call parser consumes nothing
                     -> m a      -- ^ call when parser consume something

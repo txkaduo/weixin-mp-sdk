@@ -56,6 +56,9 @@ parsePossibleFullWithDecimalNumber = do
 readAllMaybe :: Read a => String -> Maybe a
 readAllMaybe = fmap fst . listToMaybe . filter (null . snd) . reads
 
-runTextParser :: CharParser a -> Text -> Either Text a
+runTextParser :: forall s a. IsString s
+                => Parsec String () a
+                -> Text
+                -> Either s a
 runTextParser p t = either (Left . fromString . show) Right $ parse p "" (T.unpack $ T.strip t)
 
