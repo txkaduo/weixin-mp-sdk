@@ -46,6 +46,17 @@ generalParseConfirm = do
                 then return False
                 else mzero
 
+generalParseSave :: CharParser Bool
+generalParseSave = do
+    spaces
+    name <- T.toLower . T.strip . fromString <$> many1 anyChar
+    if name `elem` [ "保存", "确定", "save" ]
+        then return True
+        else
+            if name `elem` [ "放弃", "discard" ]
+                then return False
+                else mzero
+
 
 parsePossibleFullWithDecimalNumber :: (Integral a, Read a) => CharParser a
 parsePossibleFullWithDecimalNumber = do
