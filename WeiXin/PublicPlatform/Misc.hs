@@ -104,21 +104,22 @@ mkMaybeWxppSub ::
             -- ^ 找到相应配置的函数
     -> (WxppAppConfig -> IO [WxppInMsgHandlerPrototype m])
     -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> (WxppAppID -> [SomeWxppInMsgProcMiddleware m])
+    -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppSubsiteOpts
     -> MaybeWxppSub
-mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg middlewares opts =
+mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config
         let app_id      = wxppConfigAppID wac
         let data_dirs   = wxppAppConfigDataDir wac
+        middlewares <- liftIO $ get_middleware app_id
         return $ WxppSub
                     wac
                     (SomeWxppCacheBackend cache)
                     (WxppDbRunner $ runDBWith foundation)
                     (send_msg app_id)
                     (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
-                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares (middlewares app_id) cache x1 x2)
+                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
                     (runLoggingTWith foundation)
                     opts
     where
