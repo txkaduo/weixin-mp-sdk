@@ -8,6 +8,7 @@ import System.Exit
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Lazy       as LB
+import qualified Data.ByteString.Base16     as B16
 import Data.Default                         (def)
 import Text.XML                             (renderText)
 import qualified Data.Text.Lazy             as LT
@@ -18,9 +19,7 @@ import Data.Aeson                           (ToJSON(..))
 import Text.Parsec
 import Yesod.Helpers.Parsec
 
-import WeiXin.PublicPlatform.Security
-import WeiXin.PublicPlatform.Message
-import WeiXin.PublicPlatform.Propagate
+import WeiXin.PublicPlatform
 
 
 testLikeJava :: IO ()
@@ -129,8 +128,25 @@ showJson a = do
     LB.putStr $ A.encode a
     putStrLn ""
 
+
+testJsApiTicket :: IO ()
+testJsApiTicket = do
+    let sign = wxppJsApiSignature
+                    (WxppJsTicket "sM4AOVdWfPE4DxkXGEs8VMCPGGVi4C3VM0P37wVUCFvkVAy_90u5h9nbSlYy3-Sl-HhTdfl2fzFy1AOcHKP7qg")
+                    (UrlText "http://mp.weixin.qq.com?params=value")
+                    1414587457
+                    (Nonce "Wm3WZYTPz0wzccnW")
+        sign_str = C8.unpack (B16.encode sign)
+    if sign_str /= "0f9de62fce790f9a083d5c99e95740ceb90c27ed"
+        then do
+            putStrLn $ "wrong js signature: " <> fromString sign_str
+            exitFailure
+        else
+            putStrLn $ "js signature OK: " <> fromString sign_str
+
 main :: IO ()
 main = do
+    testJsApiTicket
     testMsgToXml
     -- testLikeJava
     testParseScene

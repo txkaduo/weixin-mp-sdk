@@ -1,7 +1,7 @@
 module WeiXin.PublicPlatform.JS where
 
 import ClassyPrelude hiding (catch)
-import qualified Crypto.Hash.SHA256         as SHA256
+import qualified Crypto.Hash.SHA1           as SHA1
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
@@ -44,7 +44,7 @@ wxppJsApiSignature :: WxppJsTicket
                     -> Nonce         -- ^ random string
                     -> ByteString
 wxppJsApiSignature (WxppJsTicket ticket) (UrlText url) ptime (Nonce noncestr) =
-    SHA256.hash $ encodeUtf8 s_input
+    SHA1.hash $ encodeUtf8 s_input
     where
         vars = sort [ ("jsapi_ticket", ticket)
                     , ("noncestr", noncestr)
