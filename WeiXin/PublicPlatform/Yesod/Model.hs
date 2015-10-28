@@ -6,6 +6,7 @@ import ClassyPrelude.Yesod
 import qualified Data.Conduit.List          as CL
 import qualified Data.Set                   as Set
 import Database.Persist.Quasi
+import Control.Monad.Trans.Maybe            (MaybeT(..))
 
 
 import WeiXin.PublicPlatform.Types
@@ -102,6 +103,55 @@ instance WxppCacheBackend WxppDbRunner where
     wxppCachePurgeOAuthAccessToken (WxppDbRunner run_db) expiry = do
         run_db $
             deleteWhere [ WxppCachedOAuthTokenExpiryTime <=. expiry ]
+
+    wxppCacheGetSnsUserInfo (WxppDbRunner run_db) app_id open_id lang = do
+        runMaybeT $ do
+            rec <- liftM entityVal $ MaybeT $ run_db $
+                        getBy $ UniqueWxppCachedSnsUserInfo app_id open_id lang
+            let info = OAuthGetUserInfoResult
+                        open_id
+                        (wxppCachedSnsUserInfoNickname rec)
+                        (wxppCachedSnsUserInfoGender rec)
+                        (wxppCachedSnsUserInfoCountry rec)
+                        (wxppCachedSnsUserInfoProvince rec)
+                        (wxppCachedSnsUserInfoCity rec)
+                        (wxppCachedSnsUserInfoHeadImgUrl rec)
+                        (wxppCachedSnsUserInfoPrivileges rec)
+                        (wxppCachedSnsUserInfoUnionId rec)
+            return (info, wxppCachedSnsUserInfoUpdatedTime rec)
+
+    wxppCacheAddSnsUserInfo (WxppDbRunner run_db) app_id open_id lang info now = do
+        let rec = WxppCachedSnsUserInfo
+                    app_id
+                    open_id
+                    (oauthUserInfoUnionID info)
+                    lang
+                    (oauthUserInfoGender info)
+                    (oauthUserInfoNickname info)
+                    (oauthUserInfoCountry info)
+                    (oauthUserInfoProvince info)
+                    (oauthUserInfoCity info)
+                    (oauthUserInfoHeadImgUrl info)
+                    (oauthUserInfoPrivileges info)
+                    now
+        run_db $ do
+            -- 因为这个表有两个 unique ，就不用 upsert 了
+            m_old_id <- liftM (fmap entityKey) $ getBy $ UniqueWxppCachedSnsUserInfo app_id open_id lang
+            case m_old_id of
+                Nothing -> insert_ rec
+                Just old_id -> do
+                    update old_id
+                        [ WxppCachedSnsUserInfoUnionId =. oauthUserInfoUnionID info
+                        , WxppCachedSnsUserInfoGender =. oauthUserInfoGender info
+                        , WxppCachedSnsUserInfoNickname =. oauthUserInfoNickname info
+                        , WxppCachedSnsUserInfoCountry =. oauthUserInfoCountry info
+                        , WxppCachedSnsUserInfoProvince =. oauthUserInfoProvince info
+                        , WxppCachedSnsUserInfoCity =. oauthUserInfoCity info
+                        , WxppCachedSnsUserInfoHeadImgUrl =. oauthUserInfoHeadImgUrl info
+                        , WxppCachedSnsUserInfoPrivileges =. oauthUserInfoPrivileges info
+                        , WxppCachedSnsUserInfoUpdatedTime =. now
+                        ]
+
 
 
     wxppCacheAddJsTicket (WxppDbRunner run_db) app_id (WxppJsTicket tk) expiry = do

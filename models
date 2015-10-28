@@ -76,6 +76,26 @@ WxppCachedOAuthTokenScope
     token               WxppCachedOAuthTokenId
     scope               OAuthScope
 
+WxppCachedSnsUserInfo
+    app                 WxppAppID maxlen=200
+    openId              WxppOpenID maxlen=200
+    unionId             WxppUnionID Maybe maxlen=200
+    lang                Lang
+
+    gender              Gender Maybe
+    nickname            Text
+    country             CountryName
+    province            ProvinceName
+    city                CityName
+    headImgUrl          UrlText Maybe maxlen=200
+    privileges          [Text]
+
+    updatedTime         UTCTime
+
+    UniqueWxppCachedSnsUserInfo app openId lang
+    UniqueWxppCachedSnsUserInfo2 app unionId lang !force
+
+
 WxppCachedJsTicket
     app                 WxppAppID maxlen=200
     data                Text

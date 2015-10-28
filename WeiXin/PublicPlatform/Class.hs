@@ -4,6 +4,9 @@ module WeiXin.PublicPlatform.Class
     ) where
 
 import ClassyPrelude
+import Text.Shakespeare.I18N                (Lang)
+import Data.Time                            (NominalDiffTime, diffUTCTime)
+import Control.Monad.Trans.Maybe            (MaybeT(..))
 
 import WeiXin.PublicPlatform.Types
 import Data.List.NonEmpty                   as LNE
@@ -48,6 +51,21 @@ class WxppCacheBackend a where
     wxppCachePurgeOAuthAccessToken :: a
                                     -> UTCTime
                                     -> IO ()
+
+    -- | User info from SNS api
+    wxppCacheGetSnsUserInfo :: a
+                            -> WxppAppID
+                            -> WxppOpenID
+                            -> Lang
+                            -> IO (Maybe (OAuthGetUserInfoResult, UTCTime))
+
+    wxppCacheAddSnsUserInfo :: a
+                            -> WxppAppID
+                            -> WxppOpenID
+                            -> Lang
+                            -> OAuthGetUserInfoResult
+                            -> UTCTime
+                            -> IO ()
 
     wxppCacheAddJsTicket :: a
                         -> WxppAppID
@@ -108,6 +126,18 @@ wxppGetUsableAccessToken cache app_id = liftIO $ do
     fmap (join . (fmap $ \x -> if snd x > now then Just x else Nothing)) $
         wxppCacheGetAccessToken cache app_id
 
+wxppGetSnsUserInfoCached :: (MonadIO m, WxppCacheBackend c)
+                            => c
+                            -> NominalDiffTime
+                            -> WxppAppID
+                            -> WxppOpenID
+                            -> Lang
+                            -> m (Maybe OAuthGetUserInfoResult)
+wxppGetSnsUserInfoCached cache ttl app_id open_id lang = runMaybeT $ do
+    (info, update_time) <- MaybeT $ liftIO $ wxppCacheGetSnsUserInfo cache app_id open_id lang
+    now <- liftIO getCurrentTime
+    guard $ diffUTCTime now update_time < ttl
+    return info
 
 data SomeWxppCacheBackend = forall a. WxppCacheBackend a => SomeWxppCacheBackend a
 
@@ -117,6 +147,8 @@ instance WxppCacheBackend SomeWxppCacheBackend where
     wxppCachePurgeAccessToken (SomeWxppCacheBackend x)  = wxppCachePurgeAccessToken x
     wxppCacheAddOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheAddOAuthAccessToken x
     wxppCachePurgeOAuthAccessToken (SomeWxppCacheBackend x) = wxppCachePurgeOAuthAccessToken x
+    wxppCacheGetSnsUserInfo (SomeWxppCacheBackend x)  = wxppCacheGetSnsUserInfo x
+    wxppCacheAddSnsUserInfo (SomeWxppCacheBackend x)    = wxppCacheAddSnsUserInfo x
     wxppCacheGetOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheGetOAuthAccessToken x
     wxppCacheAddJsTicket (SomeWxppCacheBackend x)       = wxppCacheAddJsTicket x
     wxppCacheGetJsTicket (SomeWxppCacheBackend x)       = wxppCacheGetJsTicket x

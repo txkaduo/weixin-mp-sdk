@@ -11,6 +11,8 @@ import Data.Acid
 import Data.Default                         (Default(..))
 import Control.Monad.Reader                 (asks)
 import Control.Monad.State                  (modify)
+import Control.Monad.Trans.Maybe            (MaybeT(..))
+import Text.Shakespeare.I18N                (Lang)
 import qualified Data.Map.Strict            as Map
 
 import Yesod.Helpers.SafeCopy
@@ -37,6 +39,11 @@ data WxppAcidState = WxppAcidState {
                                                             )
                         -- ^ oauth access tokens 
 
+                    , _wxppAcidStateCachedSnsUserInfo :: !(Map
+                                                            ((WxppOpenID, WxppAppID), Lang)
+                                                            (TimeTagged OAuthGetUserInfoResult)
+                                                            )
+
                     , _wxppAcidStateJsTickets   :: !(Map WxppAppID (WxppJsTicket, UTCTime))
 
                     , _wxppAcidStateUploadedMedia :: !(Map WxppAppID (Map SHA256Hash UploadResult))
@@ -50,7 +57,7 @@ $(makeLenses ''WxppAcidState)
 $(deriveSafeCopy 2 'base ''WxppAcidState)
 
 instance Default WxppAcidState where
-    def = WxppAcidState def def def def def
+    def = WxppAcidState def def def def def def
 
 wxppAcidGetAcccessTokens :: WxppAppID -> Query WxppAcidState [(AccessToken, UTCTime)]
 wxppAcidGetAcccessTokens app_id =
@@ -151,6 +158,25 @@ wxppAcidGetCachedUserInfo app_id open_id =
     asks $ Map.lookup (open_id, app_id) .
             _wxppAcidStateCachedUserInfo
 
+wxppAcidGetCachedSnsUserInfo ::
+    WxppAppID
+    -> WxppOpenID
+    -> Lang
+    -> Query WxppAcidState (Maybe (TimeTagged OAuthGetUserInfoResult))
+wxppAcidGetCachedSnsUserInfo app_id open_id lang =
+    asks $ Map.lookup ((open_id, app_id), lang) . _wxppAcidStateCachedSnsUserInfo
+
+wxppAcidAddCachedSnsUserInfo ::
+    WxppAppID
+    -> WxppOpenID
+    -> Lang
+    -> OAuthGetUserInfoResult
+    -> UTCTime
+    -> Update WxppAcidState ()
+wxppAcidAddCachedSnsUserInfo app_id open_id lang info now = do
+    modify $ over wxppAcidStateCachedSnsUserInfo $
+                Map.union (Map.singleton ((open_id, app_id), lang) (TimeTagged now info))
+
 -- | 查找 UnionID 缓存
 wxppAcidLookupCachedUnionID ::
     WxppOpenID -> WxppAppID -> Query WxppAcidState (Maybe (Maybe WxppUnionID, UTCTime))
@@ -175,6 +201,8 @@ $(makeAcidic ''WxppAcidState
     , 'wxppAcidSetCachedUserInfo
     , 'wxppAcidGetCachedUserInfo
     , 'wxppAcidLookupCachedUnionID
+    , 'wxppAcidGetCachedSnsUserInfo
+    , 'wxppAcidAddCachedSnsUserInfo
     ])
 
 
@@ -205,6 +233,13 @@ instance WxppCacheBackend WxppCacheByAcid where
 
     wxppCachePurgeOAuthAccessToken (WxppCacheByAcid acid) expiry = do
         update acid $ WxppAcidPurgeOAuthAccessToken expiry
+
+    wxppCacheGetSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang = runMaybeT $ do
+        tt_info <- MaybeT $ query acid $ WxppAcidGetCachedSnsUserInfo app_id open_id lang
+        return (_unTimeTag tt_info, _ttTime tt_info)
+
+    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang info now = do
+        update acid $ WxppAcidAddCachedSnsUserInfo app_id open_id lang info now
 
     wxppCacheAddJsTicket (WxppCacheByAcid acid) app_id ticket expiry = do
         update acid $ WxppAcidAddJsTicket app_id ticket expiry
