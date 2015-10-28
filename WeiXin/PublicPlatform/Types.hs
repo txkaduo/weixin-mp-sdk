@@ -1127,6 +1127,10 @@ endUserQueryResultSubsTime :: EndUserQueryResult -> Maybe UTCTime
 endUserQueryResultSubsTime (EndUserQueryResultNotSubscribed {})             = Nothing
 endUserQueryResultSubsTime (EndUserQueryResult _ _ _ _ _ _ _ _ subs_time _) = Just subs_time
 
+endUserQueryResultNickname :: EndUserQueryResult -> Maybe NickName
+endUserQueryResultNickname (EndUserQueryResultNotSubscribed {})     = Nothing
+endUserQueryResultNickname (EndUserQueryResult _ x _ _ _ _ _ _ _ _) = Just x
+
 instance FromJSON EndUserQueryResult where
     parseJSON = withObject "EndUserQueryResult" $ \obj -> do
                 open_id <- obj .: "openid"
