@@ -335,21 +335,30 @@ wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m, WxppCache
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
 wxppOAuthHandler cache render_url_io app_id scope state f = do
-    let get_auth = do
+    m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
+    case m_atk_p of
+        Nothing -> do
             url <- getCurrentUrl
             wxppOAuthLoginRedirectUrl render_url_io app_id scope state (UrlText url)
                 >>= redirect . unUrlText
+        Just atk_p -> f atk_p
 
+
+wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, MonadIO m, MonadBaseControl IO m, WxppCacheBackend c)
+                                    => c
+                                    -> WxppAppID
+                                    -> OAuthScope
+                                    -> m (Maybe OAuthAccessTokenPkg)
+wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
     m_oauth_st <- sessionGetWxppUser app_id
     case m_oauth_st of
-        Nothing -> get_auth
+        Nothing -> return Nothing
         Just (open_id, state2) -> do
             m_atk_info <- liftIO $ wxppCacheGetOAuthAccessToken cache
                                         app_id open_id (Set.singleton scope) state2
             case m_atk_info of
-                Nothing         -> get_auth
-                Just atk_info   -> f (packOAuthTokenInfo app_id open_id atk_info)
-
+                Nothing         -> return Nothing
+                Just atk_info   -> return $ Just (packOAuthTokenInfo app_id open_id atk_info)
 
 -- | 演示/测试微信 oauth 授权的页面
 getOAuthTestR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
