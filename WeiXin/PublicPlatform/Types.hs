@@ -1433,14 +1433,15 @@ data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
                                 oauthUserInfoOpenID         :: WxppOpenID
                                 , oauthUserInfoNickname     :: Text
                                 , oauthUserInfoGender       :: Maybe Gender
-                                , oauthUserInfoProvice      :: Text
-                                , oauthUserInfoCity         :: Text
                                 , oauthUserInfoCountry      :: Text
+                                , oauthUserInfoProvince     :: Text
+                                , oauthUserInfoCity         :: Text
                                 , oauthUserInfoHeadImgUrl   :: Maybe UrlText
                                 , oauthUserInfoPrivileges   :: [Text]
                                 , oauthUserInfoUnionID      :: Maybe WxppUnionID
                                 }
                                 deriving (Eq, Show)
+$(deriveSafeCopy 0 'base ''OAuthGetUserInfoResult)
 
 instance FromJSON OAuthGetUserInfoResult where
     parseJSON = withObject "OAuthGetUserInfoResult" $ \o -> do
@@ -1448,9 +1449,9 @@ instance FromJSON OAuthGetUserInfoResult where
                         <$> o .: "openid"
                         <*> o .: "nickname"
                         <*> (o .: "sex" >>= parseSexJson)
+                        <*> o .: "country"
                         <*> o .: "province"
                         <*> o .: "city"
-                        <*> o .: "country"
                         <*> (fmap UrlText . join . fmap emptyTextToNothing <$> o .:? "headimgurl")
                         <*> o .: "privilege"
                         <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
