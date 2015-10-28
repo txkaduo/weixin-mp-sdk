@@ -12,6 +12,7 @@ module WeiXin.PublicPlatform.OAuth
     , wxppOAuthRefreshAccessToken
     , wxppOAuthGetUserInfo
     , wxppOAuthCheckAccessToken
+    , wxppOAuthGetUserInfoCached
     ) where
 
 import ClassyPrelude
@@ -23,11 +24,12 @@ import Network.URI                          ( parseAbsoluteURI, uriQuery, uriFra
                                             )
 import Network.HTTP                         (urlEncodeVars)
 import Text.Shakespeare.I18N                (Lang)
+import Data.Time                            (NominalDiffTime)
 
 import Yesod.Helpers.Parsec
 
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 
 
@@ -103,6 +105,25 @@ wxppOAuthGetUserInfo lang atk_p = do
     liftIO (getWith opts url)
         >>= asWxppWsResponseNormal'
 
+-- | call wxppOAuthGetUserInfo and save it in cache
+wxppOAuthGetUserInfoCached :: (MonadIO m, MonadThrow m, WxppCacheBackend c)
+                            => c
+                            -> NominalDiffTime
+                            -> Lang
+                            -> OAuthAccessTokenPkg
+                            -> m OAuthGetUserInfoResult
+wxppOAuthGetUserInfoCached cache ttl lang atk_p = do
+    m_info <- wxppGetSnsUserInfoCached cache ttl app_id open_id lang
+    case m_info of
+        Just info -> return info
+        Nothing -> do
+            info <- wxppOAuthGetUserInfo lang atk_p
+            now <- liftIO getCurrentTime
+            liftIO $ wxppCacheAddSnsUserInfo cache app_id open_id lang info now
+            return info
+    where
+        app_id = oauthAtkPAppID atk_p
+        open_id = oauthAtkPOpenID atk_p
 
 wxppOAuthCheckAccessToken :: (MonadIO m, MonadThrow m)
                             => OAuthAccessTokenPkg
