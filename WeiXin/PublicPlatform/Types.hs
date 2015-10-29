@@ -1440,7 +1440,7 @@ data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
                                 , oauthUserInfoPrivileges   :: [Text]
                                 , oauthUserInfoUnionID      :: Maybe WxppUnionID
                                 }
-                                deriving (Eq, Show)
+                                deriving (Eq, Show, Typeable)
 $(deriveSafeCopy 0 'base ''OAuthGetUserInfoResult)
 
 instance FromJSON OAuthGetUserInfoResult where
