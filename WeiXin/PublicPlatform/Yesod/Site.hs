@@ -19,7 +19,7 @@ import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
-import Network.URI                          ( parseURI, uriQuery )
+import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
 import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
@@ -313,7 +313,10 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
                                     qs' = if null qs || qs == "?"
                                             then qs
                                             else qs ++ "&"
-                                in qs' ++ "state=" ++ urlEncode (T.unpack state)
+                                    new_uri = uri { uriQuery =
+                                                        qs' ++ "state=" ++ urlEncode (T.unpack state)
+                                                    }
+                                in uriToString id new_uri ""
 
                     _ -> return_url
 
