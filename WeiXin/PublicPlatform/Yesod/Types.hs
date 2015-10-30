@@ -1,11 +1,13 @@
 module WeiXin.PublicPlatform.Yesod.Types where
 
-import ClassyPrelude.Yesod hiding (Request)
+import ClassyPrelude.Yesod hiding (Request, requestHeaders)
+import qualified Data.ByteString            as B
 
 import Network.Wai                          (Request)
 import Data.Bits                            ((.&.))
+import Data.Char                            (isDigit, chr)
 import Network.Socket                       (SockAddr(..))
-import Network.Wai                          (remoteHost)
+import Network.Wai                          (remoteHost, requestHeaders)
 
 
 -- | 判断 WAI 请求是否来自可信的来源
@@ -31,3 +33,17 @@ isLoopbackSockAddr addr =
         SockAddrInet6 _ _ w _   -> w == (0, 0, 0, 1)
         _                       -> False
 
+
+-- | 从 User-Agent 找微信版本
+handlerGetWeixinClientVersion :: MonadHandler m => m (Maybe ByteString)
+handlerGetWeixinClientVersion = do
+    req <- waiRequest
+    let headers = requestHeaders req
+    return $ join $ fmap parse_header $ lookup hUserAgent headers
+    where
+        parse_header h = do
+            let prefix = "MicroMessenger/"
+                mm_start = snd $ B.breakSubstring prefix h
+            guard $ B.isPrefixOf prefix mm_start
+            return $ B.takeWhile ((\c -> isDigit c || c == '.') . chr . fromIntegral) $
+                        B.drop (length prefix) mm_start

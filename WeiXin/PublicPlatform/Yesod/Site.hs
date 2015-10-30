@@ -49,6 +49,7 @@ import qualified Data.Aeson                 as A
 
 import Database.Persist.Sql
 
+import WeiXin.PublicPlatform.Yesod.Types    (handlerGetWeixinClientVersion)
 import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Class
@@ -338,6 +339,9 @@ wxppOAuthHandler cache render_url_io app_id scope state f = do
     m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
     case m_atk_p of
         Nothing -> do
+            is_wx <- isJust <$> handlerGetWeixinClientVersion
+            unless is_wx $ do
+                permissionDenied "请用在微信里打开此网页"
             url <- getCurrentUrl
             wxppOAuthLoginRedirectUrl render_url_io app_id scope state (UrlText url)
                 >>= redirect . unUrlText
