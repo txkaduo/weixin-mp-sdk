@@ -320,6 +320,9 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
                     _ -> return_url
 
+            -- $logDebugS wxppLogSource $ "redirecting to: " <> T.pack rdr_url
+            redirect rdr_url
+
         Nothing -> do
             -- 授权失败
             defaultLayoutSub $ do
