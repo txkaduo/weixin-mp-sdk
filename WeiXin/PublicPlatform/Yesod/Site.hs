@@ -306,13 +306,13 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
             sessionMarkWxppUser app_id open_id state
 
-            redirect $
-                case parseURI return_url of
+            let rdr_url = case parseURI return_url of
                     Just uri ->
                                 let qs = uriQuery uri
-                                    qs' = if null qs || qs == "?"
-                                            then qs
-                                            else qs ++ "&"
+                                    qs' = case qs of
+                                            _   | null qs   -> qs ++ "?"
+                                                | qs == "?" -> qs
+                                                | otherwise -> qs ++ "&"
                                     new_uri = uri { uriQuery =
                                                         qs' ++ "state=" ++ urlEncode (T.unpack state)
                                                     }
