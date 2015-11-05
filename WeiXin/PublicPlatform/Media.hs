@@ -31,7 +31,7 @@ wxppDownloadMediaUrl :: Bool    -- ^ 文档说下载视频时不能用 https，�
 wxppDownloadMediaUrl if_ssl (AccessToken { accessTokenData = atk }) mid =
     UrlText $ fromString $ url0 <> "?" <> qs
     where
-        url0 = if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl <> "/media/get"
+        url0 = (if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl) <> "/media/get"
         vars =  [ ("access_token", T.unpack atk)
                 , ("media_id", T.unpack (unWxppBriefMediaID mid))
                 ]
@@ -46,7 +46,7 @@ wxppDownloadMedia ::
     -> WxppBriefMediaID
     -> m (Response LB.ByteString)
 wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
-    let url = if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl <> "/media/get"
+    let url = (if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl) <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppBriefMediaID mid ]
     rb <- liftIO $ getWith opts url
