@@ -22,17 +22,26 @@ refreshAccessTokenIfNeeded ::
     -> NominalDiffTime
     -> m ()
 refreshAccessTokenIfNeeded wac cache dt = do
+    refreshAccessTokenIfNeeded' cache app_id secret dt
+    where
+        app_id = wxppConfigAppID wac
+        secret = wxppConfigAppSecret wac
+
+
+refreshAccessTokenIfNeeded' ::
+    (MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c)
+    => c
+    -> WxppAppID
+    -> WxppAppSecret
+    -> NominalDiffTime
+    -> m ()
+refreshAccessTokenIfNeeded' cache app_id secret dt = do
     now <- liftIO getCurrentTime
     let t = addUTCTime (abs dt) now
     expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
                         liftIO $ wxppCacheGetAccessToken cache app_id
     when (expired) $ do
         wxppAcquireAndSaveAccessToken cache app_id secret
-
-    where
-        app_id = wxppConfigAppID wac
-        secret = wxppConfigAppSecret wac
-
 
 
 -- | infinite loop to refresh access token
