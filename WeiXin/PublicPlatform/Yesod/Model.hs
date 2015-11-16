@@ -6,6 +6,7 @@ import ClassyPrelude.Yesod
 import qualified Data.Conduit.List          as CL
 import qualified Data.Set                   as Set
 import Database.Persist.Quasi
+import Database.Persist.Sql                 (Migration)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 
 
@@ -13,16 +14,30 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
 
 
-wxppSubModelsDef ::
+wxppSubModelsDefBasic ::
 #if MIN_VERSION_persistent(2, 0, 0)
     [EntityDef]
 #else
     [EntityDef SqlType]
 #endif
-wxppSubModelsDef = $(persistFileWith lowerCaseSettings "models")
+wxppSubModelsDefBasic = $(persistFileWith lowerCaseSettings "models")
 
-share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModels"]
+share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModelsBasic"]
                     $(persistFileWith lowerCaseSettings "models")
+
+wxppSubModelsDefCache ::
+#if MIN_VERSION_persistent(2, 0, 0)
+    [EntityDef]
+#else
+    [EntityDef SqlType]
+#endif
+wxppSubModelsDefCache = $(persistFileWith lowerCaseSettings "models_cache")
+
+share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModelsCache"]
+                    $(persistFileWith lowerCaseSettings "models_cache")
+
+migrateAllWxppSubModels :: Migration
+migrateAllWxppSubModels = migrateAllWxppSubModelsBasic >> migrateAllWxppSubModelsCache
 
 
 type WxppDbBackend = PersistEntityBackend WxppInMsgRecord
