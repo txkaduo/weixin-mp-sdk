@@ -74,7 +74,7 @@ refreshAccessToken' app_id app_secret = do
 
 
 wxppAcquireAndSaveAccessToken :: (MonadIO m, MonadLogger m, MonadCatch m
-                                 , WxppCacheBackend c) =>
+                                 , WxppCacheTokenUpdater c) =>
                                 c
                                 -> WxppAppID
                                 -> WxppAppSecret

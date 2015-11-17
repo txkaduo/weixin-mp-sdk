@@ -208,18 +208,22 @@ $(makeAcidic ''WxppAcidState
 
 newtype WxppCacheByAcid = WxppCacheByAcid (AcidState WxppAcidState)
 
-instance WxppCacheBackend WxppCacheByAcid where
-    wxppCacheGetAccessToken (WxppCacheByAcid acid) app_id =
-        query acid $ WxppAcidGetAcccessToken app_id
-
+instance WxppCacheTokenUpdater WxppCacheByAcid where
     wxppCacheAddAccessToken (WxppCacheByAcid acid) atk expiry = do
         update acid $ WxppAcidAddAcccessToken atk expiry
 
     wxppCachePurgeAccessToken (WxppCacheByAcid acid) expiry = do
         update acid $ WxppAcidPurgeAcccessToken expiry
 
-    wxppCacheAddOAuthAccessToken (WxppCacheByAcid acid) atk_p expiry = do
-        update acid $ WxppAcidAddOAuthAcccessToken atk_p expiry
+    wxppCacheAddJsTicket (WxppCacheByAcid acid) app_id ticket expiry = do
+        update acid $ WxppAcidAddJsTicket app_id ticket expiry
+
+    wxppCachePurgeJsTicket (WxppCacheByAcid acid) expiry = do
+        update acid $ WxppAcidPurgeJsTicket expiry
+
+instance WxppCacheTokenReader WxppCacheByAcid where
+    wxppCacheGetAccessToken (WxppCacheByAcid acid) app_id =
+        query acid $ WxppAcidGetAcccessToken app_id
 
     wxppCacheGetOAuthAccessToken (WxppCacheByAcid acid) app_id open_id req_scopes state = do
         infos <- query acid $ WxppAcidLookupOAuthAccessTokens app_id open_id
@@ -231,19 +235,6 @@ instance WxppCacheBackend WxppCacheByAcid where
             get_scopes (OAuthTokenInfo _ _ scopes _ _) = scopes
             check_req_scopes scopes = Set.isSubsetOf req_scopes scopes
 
-    wxppCachePurgeOAuthAccessToken (WxppCacheByAcid acid) expiry = do
-        update acid $ WxppAcidPurgeOAuthAccessToken expiry
-
-    wxppCacheGetSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang = runMaybeT $ do
-        tt_info <- MaybeT $ query acid $ WxppAcidGetCachedSnsUserInfo app_id open_id lang
-        return (_unTimeTag tt_info, _ttTime tt_info)
-
-    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang info now = do
-        update acid $ WxppAcidAddCachedSnsUserInfo app_id open_id lang info now
-
-    wxppCacheAddJsTicket (WxppCacheByAcid acid) app_id ticket expiry = do
-        update acid $ WxppAcidAddJsTicket app_id ticket expiry
-
     wxppCacheGetJsTicket (WxppCacheByAcid acid) app_id = do
         now <- liftIO getCurrentTime
         m_tk <- query acid $ WxppAcidGetJsTicket app_id
@@ -254,8 +245,13 @@ instance WxppCacheBackend WxppCacheByAcid where
                     then return m_tk
                     else return Nothing
 
-    wxppCachePurgeJsTicket (WxppCacheByAcid acid) expiry = do
-        update acid $ WxppAcidPurgeJsTicket expiry
+instance WxppCacheTemp WxppCacheByAcid where
+    wxppCacheGetSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang = runMaybeT $ do
+        tt_info <- MaybeT $ query acid $ WxppAcidGetCachedSnsUserInfo app_id open_id lang
+        return (_unTimeTag tt_info, _ttTime tt_info)
+
+    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang info now = do
+        update acid $ WxppAcidAddCachedSnsUserInfo app_id open_id lang info now
 
     wxppCacheLookupUserInfo (WxppCacheByAcid acid) app_id open_id = do
         fmap (fmap $ _unTimeTag &&& _ttTime) $
@@ -271,3 +267,10 @@ instance WxppCacheBackend WxppCacheByAcid where
 
     wxppCacheSaveUploadedMediaID (WxppCacheByAcid acid) app_id h ures = do
         update acid $ WxppAcidSaveUploadedMediaID app_id h ures
+
+    wxppCacheAddOAuthAccessToken (WxppCacheByAcid acid) atk_p expiry = do
+        update acid $ WxppAcidAddOAuthAcccessToken atk_p expiry
+
+    wxppCachePurgeOAuthAccessToken (WxppCacheByAcid acid) expiry = do
+        update acid $ WxppAcidPurgeOAuthAccessToken expiry
+

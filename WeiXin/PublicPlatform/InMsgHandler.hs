@@ -96,7 +96,7 @@ type family WxppInMsgProcessResult h :: *
 -- Predictor 其处理结果是个 Bool 值
 -- Handler 其处理结果是个 WxppInMsgHandlerResult
 class IsWxppInMsgProcessor m h where
-    processInMsg :: WxppCacheBackend c =>
+    processInMsg :: (WxppCacheTokenReader c, WxppCacheTemp c) =>
         h
         -> c
         -> WxppInMsgProcessor m (WxppInMsgProcessResult h)
@@ -144,7 +144,7 @@ data SomeWxppInMsgHandlerRouter m =
 
 class IsWxppInMsgProcMiddleware m a where
     preProcInMsg ::
-        WxppCacheBackend c =>
+        (WxppCacheTokenReader c, WxppCacheTemp c) =>
         a
         -> c
         -> LB.ByteString
@@ -251,7 +251,7 @@ tryEveryInMsgHandler handlers bs m_ime = do
 
     return $ Right $ join res_lst
 
-tryEveryInMsgHandler' :: (MonadLogger m, WxppCacheBackend c) =>
+tryEveryInMsgHandler' :: (MonadLogger m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     c
     -> [SomeWxppInMsgHandler m]
     -> WxppInMsgHandler m
@@ -280,7 +280,7 @@ tryInMsgHandlerUntilFirstPrimary handlers bs m_ime = do
                 then return rs'
                 else go rs' xs
 
-tryInMsgHandlerUntilFirstPrimary' :: (MonadLogger m, WxppCacheBackend c) =>
+tryInMsgHandlerUntilFirstPrimary' :: (MonadLogger m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     c
     -> [SomeWxppInMsgHandler m]
     -> WxppInMsgHandler m
@@ -288,7 +288,7 @@ tryInMsgHandlerUntilFirstPrimary' cache known_hs =
     tryInMsgHandlerUntilFirstPrimary $ flip map known_hs $ \h -> processInMsg h cache
 
 
-preProcessInMsgByMiddlewares :: (Monad m, WxppCacheBackend c) =>
+preProcessInMsgByMiddlewares :: (Monad m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     [SomeWxppInMsgProcMiddleware m]
     -> c
     -> LB.ByteString
@@ -418,7 +418,7 @@ class MenuItemEventKey a where
 class MenuItemEventKey a => MenuItemEventKeyHandle m a where
     type MenuItemEventKeyHandleEnv m a
     -- | handle the event
-    handleMenuItemEventKey  :: WxppCacheBackend c =>
+    handleMenuItemEventKey  :: (WxppCacheTokenReader c, WxppCacheTemp c) =>
                             a
                             -> MenuItemEventKeyHandleEnv m a
                             -> c
@@ -1112,7 +1112,7 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
 
 -- | 直接包装一个函数，相当于可以用任意类型适合的函数处理消息
 newtype WxppInMsgProcessorFunc m h = WxppInMsgProcessorFunc
-                                        (forall c. WxppCacheBackend c =>
+                                        (forall c. (WxppCacheTokenReader c, WxppCacheTemp c) =>
                                             c
                                             -> WxppInMsgProcessor m h
                                         )

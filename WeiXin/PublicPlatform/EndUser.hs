@@ -98,7 +98,7 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
 -- 先从缓存找，找不到或找到的记录太旧，则调用接口
 -- 如果调用接口取得最新的数据，立刻缓存之
 wxppCachedGetEndUserUnionID ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTemp c) =>
     c
     -> NominalDiffTime
     -> AccessToken
@@ -108,7 +108,7 @@ wxppCachedGetEndUserUnionID cache ttl atk open_id = do
     liftM endUserQueryResultUnionID $ wxppCachedQueryEndUserInfo cache ttl atk open_id
 
 wxppCachedQueryEndUserInfo ::
-    (MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    (MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTemp c) =>
     c
     -> NominalDiffTime
     -> AccessToken

@@ -106,7 +106,7 @@ wxppOAuthGetUserInfo lang atk_p = do
         >>= asWxppWsResponseNormal'
 
 -- | call wxppOAuthGetUserInfo and save it in cache
-wxppOAuthGetUserInfoCached :: (MonadIO m, MonadThrow m, WxppCacheBackend c)
+wxppOAuthGetUserInfoCached :: (MonadIO m, MonadThrow m, WxppCacheTemp c)
                             => c
                             -> NominalDiffTime
                             -> Lang

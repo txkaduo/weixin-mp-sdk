@@ -91,7 +91,7 @@ mkMaybeWxppSub ::
     ( LoggingTRunner app
     , DBActionRunner app
     , DBAction app ~ ReaderT WxppDbBackend
-    , WxppCacheBackend c
+    , WxppCacheTokenReader c, WxppCacheTemp c
     , SV.HasSetter hvar (Maybe (InMsgHandlerList m)), SV.HasGetter hvar (Maybe (InMsgHandlerList m))
     , MonadIO m, MonadLogger m
     ) =>

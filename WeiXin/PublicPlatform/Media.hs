@@ -119,7 +119,7 @@ wxppUploadMediaLBS atk mtype mime filename bs = do
                             & partContentType .~ Just mime
 
 wxppUploadMediaCached ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     c
     -> AccessToken
     -> WxppMediaType
@@ -144,7 +144,7 @@ wxppUploadMediaCached cache atk mtype fp = do
 
 -- | 这里有个问题：如果之前上传过的文件的 mime 发生变化，可能会使用旧的文件 media id
 wxppUploadMediaCachedBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     c
     -> AccessToken
     -> WxppMediaType
@@ -218,7 +218,7 @@ wxppUploadImageGetUrlBS atk mime filename bs = do
 -- 这个函数会抛出异常 见 tryWxppWsResult
 -- 下面还有个尽量不抛出异常的版本
 fromWxppOutMsgL ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheBackend c) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     NonEmpty FilePath
     -> c
     -> m AccessToken
@@ -257,7 +257,7 @@ fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
 
 
 fromWxppOutMsgL' ::
-    ( MonadIO m, MonadLogger m, MonadCatch m, WxppCacheBackend c) =>
+    ( MonadIO m, MonadLogger m, MonadCatch m, WxppCacheTokenReader c, WxppCacheTemp c) =>
     NonEmpty FilePath
     -> c
     -> m AccessToken

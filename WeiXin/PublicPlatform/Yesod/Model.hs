@@ -48,17 +48,7 @@ newtype WxppDbRunner = WxppDbRunner {
                                         ReaderT WxppDbBackend m a -> m a
                                 }
 
-instance WxppCacheBackend WxppDbRunner where
-    wxppCacheGetAccessToken (WxppDbRunner run_db) app_id = do
-        run_db $ do
-            fmap
-                (fmap $
-                    ((flip AccessToken app_id . wxppCachedAccessTokenData) &&& wxppCachedAccessTokenExpiryTime) . entityVal)
-                $
-                selectFirst
-                    [ WxppCachedAccessTokenApp ==. app_id ]
-                    [ Desc WxppCachedAccessTokenCreatedTime ]
-
+instance WxppCacheTokenUpdater WxppDbRunner where
     wxppCacheAddAccessToken (WxppDbRunner run_db) atk expiry = do
         now <- liftIO getCurrentTime
         run_db $ do
@@ -72,19 +62,31 @@ instance WxppCacheBackend WxppDbRunner where
         run_db $ do
             deleteWhere [ WxppCachedAccessTokenExpiryTime <=. expiry ]
 
-    wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
+    wxppCacheAddJsTicket (WxppDbRunner run_db) app_id (WxppJsTicket tk) expiry = do
         now <- liftIO getCurrentTime
         run_db $ do
-            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk state expiry now
-            insertMany_ $
-                map (\x -> WxppCachedOAuthTokenScope rec_id x) $ toList scopes
-        where
-            app_id    = oauthAtkPAppID atk_p
-            open_id   = oauthAtkPOpenID atk_p
-            atk       = oauthAtkPRaw atk_p
-            rtk       = oauthAtkPRtk atk_p
-            scopes    = oauthAtkPScopes atk_p
-            state   = oauthAtkPState atk_p
+            void $ upsert
+                    (WxppCachedJsTicket app_id tk expiry now)
+                    [ WxppCachedJsTicketData =. tk
+                    , WxppCachedJsTicketExpiryTime =. expiry
+                    , WxppCachedJsTicketCreatedTime =. now
+                    ]
+
+    wxppCachePurgeJsTicket (WxppDbRunner run_db) expiry = do
+        run_db $ do
+            deleteWhere [ WxppCachedJsTicketExpiryTime <=. expiry ]
+
+
+instance WxppCacheTokenReader WxppDbRunner where
+    wxppCacheGetAccessToken (WxppDbRunner run_db) app_id = do
+        run_db $ do
+            fmap
+                (fmap $
+                    ((flip AccessToken app_id . wxppCachedAccessTokenData) &&& wxppCachedAccessTokenExpiryTime) . entityVal)
+                $
+                selectFirst
+                    [ WxppCachedAccessTokenApp ==. app_id ]
+                    [ Desc WxppCachedAccessTokenCreatedTime ]
 
     wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes state = do
         now <- liftIO getCurrentTime
@@ -115,10 +117,18 @@ instance WxppCacheBackend WxppDbRunner where
                                 (wxppCachedOAuthTokenState rec)
                                 (wxppCachedOAuthTokenExpiryTime rec)
 
-    wxppCachePurgeOAuthAccessToken (WxppDbRunner run_db) expiry = do
-        run_db $
-            deleteWhere [ WxppCachedOAuthTokenExpiryTime <=. expiry ]
+    wxppCacheGetJsTicket (WxppDbRunner run_db) app_id = do
+        now <- liftIO getCurrentTime
+        run_db $ do
+            liftM (fmap $ ((WxppJsTicket . wxppCachedJsTicketData) &&& wxppCachedJsTicketExpiryTime) . entityVal) $
+                selectFirst
+                    [ WxppCachedJsTicketApp ==. app_id
+                    , WxppCachedJsTicketExpiryTime >. now
+                    ]
+                    [ Desc WxppCachedJsTicketId ]
 
+
+instance WxppCacheTemp WxppDbRunner where
     wxppCacheGetSnsUserInfo (WxppDbRunner run_db) app_id open_id lang = do
         runMaybeT $ do
             rec <- liftM entityVal $ MaybeT $ run_db $
@@ -168,31 +178,6 @@ instance WxppCacheBackend WxppDbRunner where
                         ]
 
 
-
-    wxppCacheAddJsTicket (WxppDbRunner run_db) app_id (WxppJsTicket tk) expiry = do
-        now <- liftIO getCurrentTime
-        run_db $ do
-            void $ upsert
-                    (WxppCachedJsTicket app_id tk expiry now)
-                    [ WxppCachedJsTicketData =. tk
-                    , WxppCachedJsTicketExpiryTime =. expiry
-                    , WxppCachedJsTicketCreatedTime =. now
-                    ]
-
-    wxppCacheGetJsTicket (WxppDbRunner run_db) app_id = do
-        now <- liftIO getCurrentTime
-        run_db $ do
-            liftM (fmap $ ((WxppJsTicket . wxppCachedJsTicketData) &&& wxppCachedJsTicketExpiryTime) . entityVal) $
-                selectFirst
-                    [ WxppCachedJsTicketApp ==. app_id
-                    , WxppCachedJsTicketExpiryTime >. now
-                    ]
-                    [ Desc WxppCachedJsTicketId ]
-
-    wxppCachePurgeJsTicket (WxppDbRunner run_db) expiry = do
-        run_db $ do
-            deleteWhere [ WxppCachedJsTicketExpiryTime <=. expiry ]
-
     wxppCacheLookupUserInfo (WxppDbRunner run_db) app_id open_id = do
         run_db $ do
             fmap
@@ -228,6 +213,24 @@ instance WxppCacheBackend WxppDbRunner where
         run_db $ do
             let rec = WxppCachedUploadedMedia app_id h mtype mid ctime
             insertBy rec >>= either (flip replace rec . entityKey) (const $ return ())
+
+    wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
+        now <- liftIO getCurrentTime
+        run_db $ do
+            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk state expiry now
+            insertMany_ $
+                map (\x -> WxppCachedOAuthTokenScope rec_id x) $ toList scopes
+        where
+            app_id    = oauthAtkPAppID atk_p
+            open_id   = oauthAtkPOpenID atk_p
+            atk       = oauthAtkPRaw atk_p
+            rtk       = oauthAtkPRtk atk_p
+            scopes    = oauthAtkPScopes atk_p
+            state   = oauthAtkPState atk_p
+
+    wxppCachePurgeOAuthAccessToken (WxppDbRunner run_db) expiry = do
+        run_db $
+            deleteWhere [ WxppCachedOAuthTokenExpiryTime <=. expiry ]
 
 
 fromWxppCachedUserInfoExt :: WxppCachedUserInfoExt -> EndUserQueryResult
