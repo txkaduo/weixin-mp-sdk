@@ -1515,4 +1515,4 @@ sha256HashBS = SHA256Hash . SHA256.hash
 
 -- | 上传得到的 media id 只能用一段时间
 usableUploadResult :: UTCTime -> NominalDiffTime -> UploadResult -> Bool
-usableUploadResult now dt ur = addUTCTime dt (urCreateTime ur) < now
+usableUploadResult now dt ur = addUTCTime dt (urCreateTime ur) > now
