@@ -9,13 +9,14 @@ import qualified Data.Text                  as T
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
-import Network.Mime                         (MimeType)
+import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:))
 import Network.HTTP                         (urlEncodeVars)
+import System.FilePath                      (takeFileName)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
@@ -89,7 +90,9 @@ wxppUploadMedia ::
     -> FilePath
     -> m UploadResult
 wxppUploadMedia atk mtype fp = do
-    wxppUploadMediaInternal atk mtype $ partFileSource "media" fp
+    wxppUploadMediaInternal atk mtype $
+        partFileSource "media" fp
+            & partContentType .~ Just (defaultMimeLookup $ fromString $ takeFileName fp)
 
 -- | 上传已在内存中的 ByteString
 wxppUploadMediaBS ::
