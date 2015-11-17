@@ -129,14 +129,18 @@ wxppUploadMediaCached cache atk mtype fp = do
     h <- liftIO $ sha256HashFile fp
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
-    u_res <- maybe (wxppUploadMedia atk mtype fp) return $
-        join $ flip fmap m_res $
-                \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
-                            then Just x
-                            else Nothing
+    let m_res' = join $ flip fmap m_res $
+                    \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
+                                then Just x
+                                else Nothing
+    case m_res' of
+        Nothing -> do
+            u_res <- wxppUploadMedia atk mtype fp
+            liftIO $ wxppCacheSaveUploadedMediaID cache app_id h u_res
+            return u_res
 
-    liftIO $ wxppCacheSaveUploadedMediaID cache app_id h u_res
-    return u_res
+        Just x -> return x
+
     where
         dt = fromIntegral (60 * 60 * 24 :: Int)
         app_id = accessTokenApp atk
