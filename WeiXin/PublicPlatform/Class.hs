@@ -173,13 +173,13 @@ instance WxppCacheTokenReader SomeWxppCacheClient where
     wxppCacheGetJsTicket (SomeWxppCacheClient x)         = wxppCacheGetJsTicket x
 
 
-data SomeWxppCacheTokenUpdater = forall a. (WxppCacheTokenUpdater a) => SomeWxppCacheTokenUpdater a
+data SomeWxppCacheTokenManager = forall a. (WxppCacheTokenUpdater a, WxppCacheTokenReader a) => SomeWxppCacheTokenManager a
 
-instance WxppCacheTokenUpdater SomeWxppCacheTokenUpdater where
-    wxppCacheAddAccessToken (SomeWxppCacheTokenUpdater x)   = wxppCacheAddAccessToken x
-    wxppCachePurgeAccessToken (SomeWxppCacheTokenUpdater x) = wxppCachePurgeAccessToken x
-    wxppCacheAddJsTicket (SomeWxppCacheTokenUpdater x)      = wxppCacheAddJsTicket x
-    wxppCachePurgeJsTicket (SomeWxppCacheTokenUpdater x)    = wxppCachePurgeJsTicket x
+instance WxppCacheTokenUpdater SomeWxppCacheTokenManager where
+    wxppCacheAddAccessToken (SomeWxppCacheTokenManager x)   = wxppCacheAddAccessToken x
+    wxppCachePurgeAccessToken (SomeWxppCacheTokenManager x) = wxppCachePurgeAccessToken x
+    wxppCacheAddJsTicket (SomeWxppCacheTokenManager x)      = wxppCacheAddJsTicket x
+    wxppCachePurgeJsTicket (SomeWxppCacheTokenManager x)    = wxppCachePurgeJsTicket x
 
 
 class HasWxppAppID a where
