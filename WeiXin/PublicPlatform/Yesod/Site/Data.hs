@@ -48,7 +48,7 @@ data WxppSub =
         WxppSub {
                 wxppSubAppConfig        :: WxppAppConfig
                     -- ^ 所有配置信息
-                , wxppSubCacheBackend   :: SomeWxppCacheBackend
+                , wxppSubCacheBackend   :: SomeWxppCacheClient
                 , wxppSubRunDBAction    :: WxppDbRunner -- ^ execute any DB actions
                 , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
                     -- ^ a computation to send outgoing messages

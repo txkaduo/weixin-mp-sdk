@@ -18,7 +18,7 @@ import WeiXin.PublicPlatform.Class
 
 
 data CommonTalkEnv = CommonTalkEnv
-                        SomeWxppCacheBackend
+                        SomeWxppCacheClient
                         WxppAppID
                         (NonEmpty FilePath)     -- ^ base dir of message files
 

@@ -115,7 +115,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
         middlewares <- liftIO $ get_middleware app_id
         return $ WxppSub
                     wac
-                    (SomeWxppCacheBackend cache)
+                    (SomeWxppCacheClient cache)
                     (WxppDbRunner $ runDBWith foundation)
                     (send_msg app_id)
                     (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)

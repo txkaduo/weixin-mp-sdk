@@ -153,24 +153,24 @@ wxppGetSnsUserInfoCached cache ttl app_id open_id lang = runMaybeT $ do
     return info
 
 
-data SomeWxppCacheBackend = forall a. (WxppCacheTokenReader a, WxppCacheTemp a) => SomeWxppCacheBackend a
+data SomeWxppCacheClient = forall a. (WxppCacheTokenReader a, WxppCacheTemp a) => SomeWxppCacheClient a
 
-instance WxppCacheTemp SomeWxppCacheBackend where
-    wxppCacheAddSnsUserInfo (SomeWxppCacheBackend x)    = wxppCacheAddSnsUserInfo x
-    wxppCacheSaveUserInfo   (SomeWxppCacheBackend x)    = wxppCacheSaveUserInfo x
-    wxppCacheLookupUserInfo (SomeWxppCacheBackend x)    = wxppCacheLookupUserInfo x
-    wxppCacheGetSnsUserInfo (SomeWxppCacheBackend x)  = wxppCacheGetSnsUserInfo x
+instance WxppCacheTemp SomeWxppCacheClient where
+    wxppCacheAddSnsUserInfo (SomeWxppCacheClient x)        = wxppCacheAddSnsUserInfo x
+    wxppCacheSaveUserInfo   (SomeWxppCacheClient x)        = wxppCacheSaveUserInfo x
+    wxppCacheLookupUserInfo (SomeWxppCacheClient x)        = wxppCacheLookupUserInfo x
+    wxppCacheGetSnsUserInfo (SomeWxppCacheClient x)        = wxppCacheGetSnsUserInfo x
     wxppCacheSaveUploadedMediaID
-                            (SomeWxppCacheBackend x)    = wxppCacheSaveUploadedMediaID x
+                            (SomeWxppCacheClient x)        = wxppCacheSaveUploadedMediaID x
     wxppCacheLookupUploadedMediaIDByHash
-                            (SomeWxppCacheBackend x)    = wxppCacheLookupUploadedMediaIDByHash x
-    wxppCacheAddOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheAddOAuthAccessToken x
-    wxppCachePurgeOAuthAccessToken (SomeWxppCacheBackend x) = wxppCachePurgeOAuthAccessToken x
+                            (SomeWxppCacheClient x)        = wxppCacheLookupUploadedMediaIDByHash x
+    wxppCacheAddOAuthAccessToken (SomeWxppCacheClient x)   = wxppCacheAddOAuthAccessToken x
+    wxppCachePurgeOAuthAccessToken (SomeWxppCacheClient x) = wxppCachePurgeOAuthAccessToken x
 
-instance WxppCacheTokenReader SomeWxppCacheBackend where
-    wxppCacheGetAccessToken (SomeWxppCacheBackend x)    = wxppCacheGetAccessToken x
-    wxppCacheGetOAuthAccessToken (SomeWxppCacheBackend x) = wxppCacheGetOAuthAccessToken x
-    wxppCacheGetJsTicket (SomeWxppCacheBackend x)       = wxppCacheGetJsTicket x
+instance WxppCacheTokenReader SomeWxppCacheClient where
+    wxppCacheGetAccessToken (SomeWxppCacheClient x)      = wxppCacheGetAccessToken x
+    wxppCacheGetOAuthAccessToken (SomeWxppCacheClient x) = wxppCacheGetOAuthAccessToken x
+    wxppCacheGetJsTicket (SomeWxppCacheClient x)         = wxppCacheGetJsTicket x
 
 
 data SomeWxppCacheTokenUpdater = forall a. (WxppCacheTokenUpdater a) => SomeWxppCacheTokenUpdater a
@@ -202,9 +202,9 @@ instance HasWxppOpenID a => HasWxppOpenID (a,b) where
 
 
 class HasSomeWxppCacheBackend a where
-    getSomeWxppCacheBackend :: a -> SomeWxppCacheBackend
+    getSomeWxppCacheBackend :: a -> SomeWxppCacheClient
 
-instance HasSomeWxppCacheBackend SomeWxppCacheBackend where
+instance HasSomeWxppCacheBackend SomeWxppCacheClient where
     getSomeWxppCacheBackend = id
 
 instance HasSomeWxppCacheBackend a => HasSomeWxppCacheBackend (a,b) where
