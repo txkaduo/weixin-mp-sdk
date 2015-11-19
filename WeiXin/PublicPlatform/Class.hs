@@ -48,14 +48,6 @@ class WxppCacheTokenReader a where
         -> IO (Maybe (AccessToken, UTCTime))
                 -- ^ access toke and expiry time
 
-    -- | lookup oauth access-token from cache
-    wxppCacheGetOAuthAccessToken :: a
-                                -> WxppAppID
-                                -> WxppOpenID
-                                -> Set OAuthScope
-                                -> Text   -- ^ state
-                                -> IO (Maybe OAuthTokenInfo)
-
 
     -- | 与 wxppCacheGetAccessToken, 如果 ticket 已过期，则返回 Nothing
     wxppCacheGetJsTicket :: a
@@ -66,6 +58,14 @@ class WxppCacheTokenReader a where
 -- | 用户相关的信息的缓存接口
 -- 这种数据来源于用户与系统的交互过程中
 class WxppCacheTemp a where
+    -- | lookup oauth access-token from cache
+    wxppCacheGetOAuthAccessToken :: a
+                                -> WxppAppID
+                                -> WxppOpenID
+                                -> Set OAuthScope
+                                -> Text   -- ^ state
+                                -> IO (Maybe OAuthTokenInfo)
+
 
     -- | add access-token of oauth to cache
     wxppCacheAddOAuthAccessToken :: a
@@ -164,23 +164,44 @@ instance WxppCacheTemp SomeWxppCacheClient where
                             (SomeWxppCacheClient x)        = wxppCacheSaveUploadedMediaID x
     wxppCacheLookupUploadedMediaIDByHash
                             (SomeWxppCacheClient x)        = wxppCacheLookupUploadedMediaIDByHash x
+    wxppCacheGetOAuthAccessToken (SomeWxppCacheClient x) = wxppCacheGetOAuthAccessToken x
     wxppCacheAddOAuthAccessToken (SomeWxppCacheClient x)   = wxppCacheAddOAuthAccessToken x
     wxppCachePurgeOAuthAccessToken (SomeWxppCacheClient x) = wxppCachePurgeOAuthAccessToken x
 
 instance WxppCacheTokenReader SomeWxppCacheClient where
     wxppCacheGetAccessToken (SomeWxppCacheClient x)      = wxppCacheGetAccessToken x
-    wxppCacheGetOAuthAccessToken (SomeWxppCacheClient x) = wxppCacheGetOAuthAccessToken x
     wxppCacheGetJsTicket (SomeWxppCacheClient x)         = wxppCacheGetJsTicket x
 
 
-data SomeWxppCacheTokenManager = forall a. (WxppCacheTokenUpdater a, WxppCacheTokenReader a) => SomeWxppCacheTokenManager a
+data SomeWxppCacheFull = forall a.
+                                    ( WxppCacheTokenUpdater a
+                                    , WxppCacheTokenReader a
+                                    , WxppCacheTemp a
+                                    )
+                                    => SomeWxppCacheFull a
 
-instance WxppCacheTokenUpdater SomeWxppCacheTokenManager where
-    wxppCacheAddAccessToken (SomeWxppCacheTokenManager x)   = wxppCacheAddAccessToken x
-    wxppCachePurgeAccessToken (SomeWxppCacheTokenManager x) = wxppCachePurgeAccessToken x
-    wxppCacheAddJsTicket (SomeWxppCacheTokenManager x)      = wxppCacheAddJsTicket x
-    wxppCachePurgeJsTicket (SomeWxppCacheTokenManager x)    = wxppCachePurgeJsTicket x
+instance WxppCacheTokenUpdater SomeWxppCacheFull where
+    wxppCacheAddAccessToken (SomeWxppCacheFull x)   = wxppCacheAddAccessToken x
+    wxppCachePurgeAccessToken (SomeWxppCacheFull x) = wxppCachePurgeAccessToken x
+    wxppCacheAddJsTicket (SomeWxppCacheFull x)      = wxppCacheAddJsTicket x
+    wxppCachePurgeJsTicket (SomeWxppCacheFull x)    = wxppCachePurgeJsTicket x
 
+instance WxppCacheTokenReader SomeWxppCacheFull where
+    wxppCacheGetAccessToken (SomeWxppCacheFull x)      = wxppCacheGetAccessToken x
+    wxppCacheGetJsTicket (SomeWxppCacheFull x)         = wxppCacheGetJsTicket x
+
+instance WxppCacheTemp SomeWxppCacheFull where
+    wxppCacheAddSnsUserInfo (SomeWxppCacheFull x)        = wxppCacheAddSnsUserInfo x
+    wxppCacheSaveUserInfo   (SomeWxppCacheFull x)        = wxppCacheSaveUserInfo x
+    wxppCacheLookupUserInfo (SomeWxppCacheFull x)        = wxppCacheLookupUserInfo x
+    wxppCacheGetSnsUserInfo (SomeWxppCacheFull x)        = wxppCacheGetSnsUserInfo x
+    wxppCacheSaveUploadedMediaID
+                            (SomeWxppCacheFull x)        = wxppCacheSaveUploadedMediaID x
+    wxppCacheLookupUploadedMediaIDByHash
+                            (SomeWxppCacheFull x)        = wxppCacheLookupUploadedMediaIDByHash x
+    wxppCacheGetOAuthAccessToken (SomeWxppCacheFull x) = wxppCacheGetOAuthAccessToken x
+    wxppCacheAddOAuthAccessToken (SomeWxppCacheFull x)   = wxppCacheAddOAuthAccessToken x
+    wxppCachePurgeOAuthAccessToken (SomeWxppCacheFull x) = wxppCachePurgeOAuthAccessToken x
 
 class HasWxppAppID a where
     getWxppAppID :: a -> WxppAppID

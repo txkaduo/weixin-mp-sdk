@@ -332,7 +332,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数
 -- 否则重定向至微信授权页面，待用户授权成功后再重定向回到当前页面
 wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
-                , WxppCacheTokenReader c)
+                , WxppCacheTokenReader c, WxppCacheTemp c)
                 => c
                 -> (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                 -> WxppAppID
@@ -356,7 +356,7 @@ wxppOAuthHandler cache render_url_io app_id scope state f = do
 
 
 wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
-                                    , WxppCacheTokenReader c)
+                                    , WxppCacheTokenReader c, WxppCacheTemp c)
                                     => c
                                     -> WxppAppID
                                     -> OAuthScope

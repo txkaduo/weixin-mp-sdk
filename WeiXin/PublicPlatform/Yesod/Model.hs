@@ -88,35 +88,6 @@ instance WxppCacheTokenReader WxppDbRunner where
                     [ WxppCachedAccessTokenApp ==. app_id ]
                     [ Desc WxppCachedAccessTokenCreatedTime ]
 
-    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes state = do
-        now <- liftIO getCurrentTime
-        runResourceT $ run_db $ do
-            selectSource
-                    [ WxppCachedOAuthTokenApp ==. app_id
-                    , WxppCachedOAuthTokenOpenId ==. open_id
-                    , WxppCachedOAuthTokenState ==. state
-                    , WxppCachedOAuthTokenExpiryTime >. now
-                    ]
-                    [ Desc WxppCachedOAuthTokenId ]
-                =$= check_scopes
-                $$ CL.head
-        where
-            check_scopes = awaitForever $ \(Entity rec_id rec) -> do
-                has_scopes <- lift $
-                                liftM (Set.fromList .
-                                        (map $  wxppCachedOAuthTokenScopeScope . entityVal)
-                                    ) $
-                                    selectList [ WxppCachedOAuthTokenScopeToken ==. rec_id ] []
-                when ( Set.isSubsetOf req_scopes has_scopes ) $ do
-                    yield $ mk_p rec has_scopes
-
-            mk_p rec scopes = OAuthTokenInfo
-                                (wxppCachedOAuthTokenAccess rec)
-                                (wxppCachedOAuthTokenRefresh rec)
-                                scopes
-                                (wxppCachedOAuthTokenState rec)
-                                (wxppCachedOAuthTokenExpiryTime rec)
-
     wxppCacheGetJsTicket (WxppDbRunner run_db) app_id = do
         now <- liftIO getCurrentTime
         run_db $ do
@@ -213,6 +184,35 @@ instance WxppCacheTemp WxppDbRunner where
         run_db $ do
             let rec = WxppCachedUploadedMedia app_id h mtype mid ctime
             insertBy rec >>= either (flip replace rec . entityKey) (const $ return ())
+
+    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes state = do
+        now <- liftIO getCurrentTime
+        runResourceT $ run_db $ do
+            selectSource
+                    [ WxppCachedOAuthTokenApp ==. app_id
+                    , WxppCachedOAuthTokenOpenId ==. open_id
+                    , WxppCachedOAuthTokenState ==. state
+                    , WxppCachedOAuthTokenExpiryTime >. now
+                    ]
+                    [ Desc WxppCachedOAuthTokenId ]
+                =$= check_scopes
+                $$ CL.head
+        where
+            check_scopes = awaitForever $ \(Entity rec_id rec) -> do
+                has_scopes <- lift $
+                                liftM (Set.fromList .
+                                        (map $  wxppCachedOAuthTokenScopeScope . entityVal)
+                                    ) $
+                                    selectList [ WxppCachedOAuthTokenScopeToken ==. rec_id ] []
+                when ( Set.isSubsetOf req_scopes has_scopes ) $ do
+                    yield $ mk_p rec has_scopes
+
+            mk_p rec scopes = OAuthTokenInfo
+                                (wxppCachedOAuthTokenAccess rec)
+                                (wxppCachedOAuthTokenRefresh rec)
+                                scopes
+                                (wxppCachedOAuthTokenState rec)
+                                (wxppCachedOAuthTokenExpiryTime rec)
 
     wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
         now <- liftIO getCurrentTime
