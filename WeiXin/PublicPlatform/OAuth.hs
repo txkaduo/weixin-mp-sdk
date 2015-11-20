@@ -119,7 +119,7 @@ wxppOAuthGetUserInfoCached cache ttl lang atk_p = do
         Nothing -> do
             info <- wxppOAuthGetUserInfo lang atk_p
             now <- liftIO getCurrentTime
-            liftIO $ wxppCacheAddSnsUserInfo cache app_id open_id lang info now
+            liftIO $ wxppCacheAddSnsUserInfo cache app_id lang info now
             return info
     where
         app_id = oauthAtkPAppID atk_p

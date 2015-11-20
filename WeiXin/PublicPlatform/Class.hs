@@ -79,7 +79,6 @@ class WxppCacheTemp a where
 
     wxppCacheAddSnsUserInfo :: a
                             -> WxppAppID
-                            -> WxppOpenID
                             -> Lang
                             -> OAuthGetUserInfoResult
                             -> UTCTime

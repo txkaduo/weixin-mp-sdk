@@ -168,14 +168,15 @@ wxppAcidGetCachedSnsUserInfo app_id open_id lang =
 
 wxppAcidAddCachedSnsUserInfo ::
     WxppAppID
-    -> WxppOpenID
     -> Lang
     -> OAuthGetUserInfoResult
     -> UTCTime
     -> Update WxppAcidState ()
-wxppAcidAddCachedSnsUserInfo app_id open_id lang info now = do
+wxppAcidAddCachedSnsUserInfo app_id lang info now = do
     modify $ over wxppAcidStateCachedSnsUserInfo $
                 Map.union (Map.singleton ((open_id, app_id), lang) (TimeTagged now info))
+    where
+        open_id = oauthUserInfoOpenID info
 
 -- | 查找 UnionID 缓存
 wxppAcidLookupCachedUnionID ::
@@ -240,8 +241,8 @@ instance WxppCacheTemp WxppCacheByAcid where
         tt_info <- MaybeT $ query acid $ WxppAcidGetCachedSnsUserInfo app_id open_id lang
         return (_unTimeTag tt_info, _ttTime tt_info)
 
-    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id open_id lang info now = do
-        update acid $ WxppAcidAddCachedSnsUserInfo app_id open_id lang info now
+    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id lang info now = do
+        update acid $ WxppAcidAddCachedSnsUserInfo app_id lang info now
 
     wxppCacheLookupUserInfo (WxppCacheByAcid acid) app_id open_id = do
         fmap (fmap $ _unTimeTag &&& _ttTime) $

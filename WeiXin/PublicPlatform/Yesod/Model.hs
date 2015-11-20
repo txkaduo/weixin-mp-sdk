@@ -116,7 +116,7 @@ instance WxppCacheTemp WxppDbRunner where
                         (wxppCachedSnsUserInfoUnionId rec)
             return (info, wxppCachedSnsUserInfoUpdatedTime rec)
 
-    wxppCacheAddSnsUserInfo (WxppDbRunner run_db) app_id open_id lang info now = do
+    wxppCacheAddSnsUserInfo (WxppDbRunner run_db) app_id lang info now = do
         let rec = WxppCachedSnsUserInfo
                     app_id
                     open_id
@@ -147,6 +147,8 @@ instance WxppCacheTemp WxppDbRunner where
                         , WxppCachedSnsUserInfoPrivileges =. oauthUserInfoPrivileges info
                         , WxppCachedSnsUserInfoUpdatedTime =. now
                         ]
+        where
+            open_id = oauthUserInfoOpenID info
 
 
     wxppCacheLookupUserInfo (WxppDbRunner run_db) app_id open_id = do
