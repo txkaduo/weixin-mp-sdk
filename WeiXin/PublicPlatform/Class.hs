@@ -84,19 +84,19 @@ class WxppCacheTemp a where
                             -> UTCTime
                             -> IO ()
 
-
-    wxppCacheSaveUserInfo ::
-        a
-        -> WxppAppID
-        -> EndUserQueryResult
-        -> IO ()
-
     -- | User info from SNS api
     wxppCacheGetSnsUserInfo :: a
                             -> WxppAppID
                             -> WxppOpenID
                             -> Lang
                             -> IO (Maybe (OAuthGetUserInfoResult, UTCTime))
+
+
+    wxppCacheSaveUserInfo ::
+        a
+        -> WxppAppID
+        -> EndUserQueryResult
+        -> IO ()
 
     wxppCacheLookupUserInfo ::
         a
@@ -105,19 +105,18 @@ class WxppCacheTemp a where
         -> IO (Maybe (EndUserQueryResult, UTCTime))
 
 
-    wxppCacheLookupUploadedMediaIDByHash ::
-        a
-        -> WxppAppID
-        -> SHA256Hash
-        -> IO (Maybe UploadResult)
-
-
     wxppCacheSaveUploadedMediaID ::
         a
         -> WxppAppID
         -> SHA256Hash
         -> UploadResult
         -> IO ()
+
+    wxppCacheLookupUploadedMediaIDByHash ::
+        a
+        -> WxppAppID
+        -> SHA256Hash
+        -> IO (Maybe UploadResult)
 
 
 
