@@ -119,6 +119,38 @@ class WxppCacheTemp a where
         -> IO (Maybe UploadResult)
 
 
+-- | 用于实现中心缓存服务器
+-- 此服务器主要责任是自动更新 access token 之类的数据
+class WxppCacheAppRegistry a where
+    wxppCacheRegistryAdd :: a
+                            -> WxppAppID
+                            -> WxppAppSecret
+                            -> Token
+                            -> IO ()
+
+    wxppCacheRegistryDel :: a
+                            -> WxppAppID
+                            -> IO ()
+
+    -- | 禁用的 App 不再会自动更新 access token 及其它 token
+    -- 但已有数据还保留
+    wxppCacheRegistryDisable :: a
+                                -> WxppAppID
+                                -> IO ()
+
+    wxppCacheRegistryEnable :: a
+                            -> WxppAppID
+                            -> IO ()
+
+
+data SomeWxppCacheAppRegistry = forall a. WxppCacheAppRegistry a => SomeWxppCacheAppRegistry a
+
+instance WxppCacheAppRegistry SomeWxppCacheAppRegistry where
+    wxppCacheRegistryAdd (SomeWxppCacheAppRegistry x)     = wxppCacheRegistryAdd x
+    wxppCacheRegistryDel (SomeWxppCacheAppRegistry x)     = wxppCacheRegistryDel x
+    wxppCacheRegistryDisable (SomeWxppCacheAppRegistry x) = wxppCacheRegistryDisable x
+    wxppCacheRegistryEnable (SomeWxppCacheAppRegistry x)  = wxppCacheRegistryEnable x
+
 
 class HasAccessToken a where
     wxppGetAccessToken :: a -> IO (Maybe (AccessToken, UTCTime))
