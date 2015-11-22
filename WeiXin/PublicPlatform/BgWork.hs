@@ -101,23 +101,10 @@ refreshJsTicketIfNeeded cache app_id dt = do
     where
         inner = do
             now <- liftIO getCurrentTime
-            m_atk_info <- wxppGetUsableAccessToken cache app_id
-            case m_atk_info of
-                Nothing -> do
-                    $logErrorS wxppLogSource $
-                        "cannot refresh js ticket because no access token is available, app_id="
-                        <> unWxppAppID app_id
-
-                Just (atk, _) -> do
-                    let t = addUTCTime (abs dt) now
-                    expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
-                                        liftIO $ wxppCacheGetJsTicket cache app_id
-                    when (expired) $ do
-                        JsTicketResult ticket ttl <- wxppGetJsTicket atk
-                        let expiry = addUTCTime ttl now
-                        liftIO $ wxppCacheAddJsTicket cache app_id ticket expiry
-                        $logDebugS wxppLogSource $
-                            "JS ticket refreshed, app_id=" <> unWxppAppID app_id
+            let t = addUTCTime (abs dt) now
+            expired <- liftM (fromMaybe True . fmap ((<= t) . snd)) $
+                                liftIO $ wxppCacheGetJsTicket cache app_id
+            when expired $ wxppAcquireAndSaveJsApiTicket cache app_id
 
 -- | infinite loop to refresh access token
 -- Create a backgroup thread to call this, so that access token can be keep fresh.

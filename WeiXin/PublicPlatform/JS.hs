@@ -8,12 +8,12 @@ import qualified Data.Text                  as T
 import Network.Wreq
 import Control.Lens
 import Data.Aeson
-import Data.Time                            (NominalDiffTime)
+import Data.Time                            (NominalDiffTime, addUTCTime)
 import Data.Time.Clock.POSIX                (getPOSIXTime)
 import Text.Julius                          (julius, JavascriptUrl)
--- import Control.Monad.Logger
+import Control.Monad.Logger
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
 
@@ -105,6 +105,29 @@ wxppJsApiConfig app_id ticket debug url api_list = do
             signature: #{toJSON $ T.toLower $ fromString $ C8.unpack $ B16.encode sign},// 必填，签名，见附录1
             jsApiList: #{toJSON api_list} // 必填，需要使用的JS接口列表，所有JS接口列表见附录2
         });|]
+
+
+wxppAcquireAndSaveJsApiTicket :: ( MonadIO m, MonadLogger m, MonadCatch m
+                                , WxppCacheTokenUpdater c, WxppCacheTokenReader c
+                                )
+                                => c
+                                -> WxppAppID
+                                -> m ()
+wxppAcquireAndSaveJsApiTicket cache app_id = do
+    now <- liftIO getCurrentTime
+    m_atk_info <- wxppGetUsableAccessToken cache app_id
+    case m_atk_info of
+        Nothing -> do
+            $logErrorS wxppLogSource $
+                "cannot refresh js ticket because no access token is available, app_id="
+                <> unWxppAppID app_id
+
+        Just (atk, _) -> do
+            JsTicketResult ticket ttl <- wxppGetJsTicket atk
+            let expiry = addUTCTime ttl now
+            liftIO $ wxppCacheAddJsTicket cache app_id ticket expiry
+            $logDebugS wxppLogSource $
+                "JS ticket refreshed, app_id=" <> unWxppAppID app_id
 
 
 wxppJsSDKUrl :: UrlText
