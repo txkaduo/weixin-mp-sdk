@@ -128,6 +128,10 @@ class WxppCacheAppRegistry a where
                             -> Token
                             -> IO ()
 
+    wxppCacheRegistryGet :: a
+                            -> WxppAppID
+                            -> IO (Maybe (WxppAppSecret, Token))
+
     wxppCacheRegistryDel :: a
                             -> WxppAppID
                             -> IO ()
@@ -147,6 +151,7 @@ data SomeWxppCacheAppRegistry = forall a. WxppCacheAppRegistry a => SomeWxppCach
 
 instance WxppCacheAppRegistry SomeWxppCacheAppRegistry where
     wxppCacheRegistryAdd (SomeWxppCacheAppRegistry x)     = wxppCacheRegistryAdd x
+    wxppCacheRegistryGet (SomeWxppCacheAppRegistry x)     = wxppCacheRegistryGet x
     wxppCacheRegistryDel (SomeWxppCacheAppRegistry x)     = wxppCacheRegistryDel x
     wxppCacheRegistryDisable (SomeWxppCacheAppRegistry x) = wxppCacheRegistryDisable x
     wxppCacheRegistryEnable (SomeWxppCacheAppRegistry x)  = wxppCacheRegistryEnable x
