@@ -15,7 +15,6 @@ import Control.Concurrent                   (threadDelay)
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
-import Control.Monad.Catch
 import Data.Char
 import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
@@ -195,7 +194,7 @@ defaultInMsgProcMiddlewares db_runner app_id down_media =
 -- | 如果要计算的操作有异常，记日志并重试
 -- 注意：重试如果失败，还会不断重试
 -- 所以只适合用于 f 本身就是一个大循环的情况
-logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m) =>
+logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m, MonadBaseControl IO m) =>
     String      -- ^ 仅用作日志标识
     -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
     -> m ()
@@ -204,7 +203,7 @@ logWxppWsExcAndRetryLoop op_name f = go
         go = logWxppWsExcThen op_name (const $ liftIO (threadDelay 5000000) >> go) (const $ return ()) f
 
 
-logWxppWsExcThen :: (MonadLogger m, MonadCatch m) =>
+logWxppWsExcThen :: (MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
     String
     -> (SomeException -> m a)
                         -- ^ retry when error
@@ -212,11 +211,11 @@ logWxppWsExcThen :: (MonadLogger m, MonadCatch m) =>
     -> m b              -- ^ original op
     -> m a
 logWxppWsExcThen op_name on_err on_ok f = do
-    err_or <- try $ tryWxppWsResult f
+    err_or <- tryAny $ tryWxppWsResult f
     case err_or of
         Left err -> do
             $logErrorS wxppLogSource $ fromString $
-                op_name <> " failed: " <> show (err :: IOError)
+                op_name <> " failed: " <> show err
             on_err $ toException err
 
         Right (Left err) -> do
@@ -228,7 +227,7 @@ logWxppWsExcThen op_name on_err on_ok f = do
 
 
 -- | 这个函数用于创建一个长期运行的线程
-loopCleanupTimedOutForwardUrl :: (MonadIO m, MonadLogger m, MonadCatch m) =>
+loopCleanupTimedOutForwardUrl :: (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
     (WxppAppID -> IO (Maybe AccessToken))
     -> MVar ForwardUrlMap
     -> m ()

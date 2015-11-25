@@ -1,11 +1,11 @@
 module WeiXin.PublicPlatform.BgWork where
 
 import ClassyPrelude hiding (catch)
-import Control.Monad.Catch                  ( catch )
 import Data.Time                            (addUTCTime, NominalDiffTime)
 import Control.Monad.Logger
 import System.Timeout                       (timeout)
 import Control.Exception                    (evaluate)
+import Control.Monad.Trans.Control          (MonadBaseControl)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Security
@@ -160,17 +160,16 @@ loopRunBgJob chk_abort intv job = loop
 
 -- | 重复执行计算，并记录出现的异常
 runRepeatlyLogExc ::
-    (MonadIO m, MonadLogger m, MonadCatch m) =>
+    (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
     MVar a
     -> Int      -- ^ ms
     -> m () -> m ()
 runRepeatlyLogExc exit_mvar interval f = go
     where
         go = do
-            f `catch` h
+            f `catchAny` h
             liftIO (timeout interval $ readMVar exit_mvar)
                 >>= maybe go (const $ return ())
         h e = do
             $(logErrorS) wxppLogSource $
-                "Got exception in loop: "
-                    <> fromString (show (e :: SomeException))
+                "Got exception in loop: " <> tshow e

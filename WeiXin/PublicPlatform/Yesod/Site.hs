@@ -162,11 +162,8 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
             Right (Just (decrypted_xml, m_ime)) -> do
                 let handle_msg      = wxppSubMsgHandler foundation
                 out_res <- ExceptT $
-                        (try $ liftIO $ handle_msg decrypted_xml m_ime)
-                            >>= return
-                                    . either
-                                        (Left . (show :: SomeException -> String))
-                                        id
+                        (tryAny $ liftIO $ handle_msg decrypted_xml m_ime)
+                            >>= return . either (Left . show) id
 
                 case m_ime of
                     Nothing -> do
