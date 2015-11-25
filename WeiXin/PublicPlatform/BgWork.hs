@@ -162,11 +162,19 @@ runRepeatlyLogExc ::
     MVar a
     -> Int      -- ^ ms
     -> m () -> m ()
-runRepeatlyLogExc exit_mvar interval f = go
+runRepeatlyLogExc exit_mvar = runRepeatlyLogExc2 (readMVar exit_mvar >> return True)
+
+runRepeatlyLogExc2 ::
+    (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m)
+    => IO Bool     -- ^ This function should be a blocking op,
+                -- return True if the infinite should be aborted.
+    -> Int      -- ^ ms
+    -> m () -> m ()
+runRepeatlyLogExc2 block_check_exit interval f = go
     where
         go = do
             f `catchAny` h
-            liftIO (timeout interval $ readMVar exit_mvar)
+            liftIO (timeout interval block_check_exit)
                 >>= maybe go (const $ return ())
         h e = do
             $(logErrorS) wxppLogSource $
