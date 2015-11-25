@@ -9,13 +9,14 @@ import qualified Data.Text                  as T
 import Network.Wreq
 import Control.Lens
 import Control.Monad.Logger
-import Network.Mime                         (MimeType)
+import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:))
 import Network.HTTP                         (urlEncodeVars)
+import System.FilePath                      (takeFileName)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
@@ -89,7 +90,9 @@ wxppUploadMedia ::
     -> FilePath
     -> m UploadResult
 wxppUploadMedia atk mtype fp = do
-    wxppUploadMediaInternal atk mtype $ partFileSource "media" fp
+    wxppUploadMediaInternal atk mtype $
+        partFileSource "media" fp
+            & partContentType .~ Just (defaultMimeLookup $ fromString $ takeFileName fp)
 
 -- | 上传已在内存中的 ByteString
 wxppUploadMediaBS ::
@@ -129,14 +132,18 @@ wxppUploadMediaCached cache atk mtype fp = do
     h <- liftIO $ sha256HashFile fp
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
     now <- liftIO getCurrentTime
-    u_res <- maybe (wxppUploadMedia atk mtype fp) return $
-        join $ flip fmap m_res $
-                \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
-                            then Just x
-                            else Nothing
+    let m_res' = join $ flip fmap m_res $
+                    \x -> if (usableUploadResult now dt x && urMediaType x == mtype)
+                                then Just x
+                                else Nothing
+    case m_res' of
+        Nothing -> do
+            u_res <- wxppUploadMedia atk mtype fp
+            liftIO $ wxppCacheSaveUploadedMediaID cache app_id h u_res
+            return u_res
 
-    liftIO $ wxppCacheSaveUploadedMediaID cache app_id h u_res
-    return u_res
+        Just x -> return x
+
     where
         dt = fromIntegral (60 * 60 * 24 :: Int)
         app_id = accessTokenApp atk
