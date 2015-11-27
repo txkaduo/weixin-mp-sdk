@@ -12,6 +12,7 @@ import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.JS
 import WeiXin.PublicPlatform.WS
 
+import Yesod.Helpers.Utils                  (foreverLogExc)
 
 -- | 检查最新的 access token 是否已接近过期
 -- 如是，则向服务器请求更新
@@ -162,20 +163,4 @@ runRepeatlyLogExc ::
     MVar a
     -> Int      -- ^ ms
     -> m () -> m ()
-runRepeatlyLogExc exit_mvar = runRepeatlyLogExc2 (readMVar exit_mvar >> return True)
-
-runRepeatlyLogExc2 ::
-    (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m)
-    => IO Bool     -- ^ This function should be a blocking op,
-                -- return True if the infinite should be aborted.
-    -> Int      -- ^ ms
-    -> m () -> m ()
-runRepeatlyLogExc2 block_check_exit interval f = go
-    where
-        go = do
-            f `catchAny` h
-            liftIO (timeout interval block_check_exit)
-                >>= maybe go (const $ return ())
-        h e = do
-            $(logErrorS) wxppLogSource $
-                "Got exception in loop: " <> tshow e
+runRepeatlyLogExc exit_mvar = foreverLogExc (readMVar exit_mvar >> return True)

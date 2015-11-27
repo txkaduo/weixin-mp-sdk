@@ -92,7 +92,7 @@ library
                      , yesod-core
                      , yesod-form
                      , shakespeare
-                     , yesod-helpers >= 0.8.8
+                     , yesod-helpers >= 0.10.1
                      , text
                      , aeson
                      , bytestring
