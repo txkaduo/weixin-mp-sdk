@@ -7,7 +7,7 @@ module WeiXin.PublicPlatform.Types
     , UrlText(..)
     ) where
 
-import ClassyPrelude hiding (try)
+import ClassyPrelude hiding (try, optional)
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
