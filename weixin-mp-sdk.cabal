@@ -149,6 +149,7 @@ library
                      , HTTP
                      , vector
                      , cereal
+                     , servant
 
   if flag(parsec3)
       build-depends:   parsec3
