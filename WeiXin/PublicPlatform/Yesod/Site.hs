@@ -263,6 +263,9 @@ sessionMarkWxppUser app_id open_id state m_union_id = do
     if T.null state
         then deleteSession st_key
         else setSession st_key state
+
+    -- XXX: union id 目前设在一个指定的键下面。
+    -- 下面的做法不能支持多个系统的union id
     case fmap unWxppUnionID m_union_id of
         Just union_id | not (null union_id) -> setSession sessionKeyWxppUnionId union_id
         _                                   -> deleteSession sessionKeyWxppUnionId
