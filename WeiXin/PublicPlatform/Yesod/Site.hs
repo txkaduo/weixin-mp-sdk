@@ -243,10 +243,10 @@ wxppOAuthLoginRedirectUrl url_render_io app_id scope state return_url = do
     return auth_url
 
 sessionKeyWxppUser :: WxppAppID -> Text
-sessionKeyWxppUser app_id = "wxpp|" <> unWxppAppID app_id
+sessionKeyWxppUser app_id = "wx|" <> unWxppAppID app_id
 
 sessionKeyWxppOAuthState :: WxppAppID -> Text
-sessionKeyWxppOAuthState app_id = "wxpp-oauth-st|" <> unWxppAppID app_id
+sessionKeyWxppOAuthState app_id = "wx-oauth-st|" <> unWxppAppID app_id
 
 sessionKeyWxppUnionId :: Text
 sessionKeyWxppUnionId = "wx-union-id"
