@@ -248,17 +248,24 @@ sessionKeyWxppUser app_id = "wxpp|" <> unWxppAppID app_id
 sessionKeyWxppOAuthState :: WxppAppID -> Text
 sessionKeyWxppOAuthState app_id = "wxpp-oauth-st|" <> unWxppAppID app_id
 
+sessionKeyWxppUnionId :: Text
+sessionKeyWxppUnionId = "wx-union-id"
+
 sessionMarkWxppUser :: MonadHandler m
                     => WxppAppID
                     -> WxppOpenID
                     -> Text
+                    -> Maybe WxppUnionID
                     -> m ()
-sessionMarkWxppUser app_id open_id state = do
+sessionMarkWxppUser app_id open_id state m_union_id = do
     setSession (sessionKeyWxppUser app_id) (unWxppOpenID open_id)
     let st_key = sessionKeyWxppOAuthState app_id
     if T.null state
         then deleteSession st_key
         else setSession st_key state
+    case fmap unWxppUnionID m_union_id of
+        Just union_id | not (null union_id) -> setSession sessionKeyWxppUnionId union_id
+        _                                   -> deleteSession sessionKeyWxppUnionId
 
 sessionGetWxppUser :: MonadHandler m
                     => WxppAppID
@@ -291,6 +298,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
             now <- liftIO getCurrentTime
             let expiry  = addUTCTime (oauthAtkTTL atk_info) now
                 open_id = oauthAtkOpenID atk_info
+                m_union_id = oauthAtkUnionID atk_info
                 atk_p   = OAuthAccessTokenPkg
                             (oauthAtkToken atk_info)
                             (oauthAtkRefreshToken atk_info)
@@ -301,7 +309,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
             liftIO $ wxppCacheAddOAuthAccessToken cache atk_p expiry
 
-            sessionMarkWxppUser app_id open_id state
+            sessionMarkWxppUser app_id open_id state m_union_id
 
             let rdr_url = case parseURI return_url of
                     Just uri ->
