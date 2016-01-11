@@ -8,6 +8,7 @@ module WeiXin.PublicPlatform.OAuth
     , OAuthRefreshAccessTokenResult(..)
     , OAuthGetUserInfoResult(..)
     , wxppOAuthRequestAuthInsideWx
+    , wxppOAuthRequestAuthOutsideWx
     , wxppOAuthGetAccessToken
     , wxppOAuthRefreshAccessToken
     , wxppOAuthGetUserInfo
@@ -34,17 +35,35 @@ import WeiXin.PublicPlatform.WS
 
 
 
--- | 获取用户授权
+-- | 获取用户授权: 仅用于微信内打开
 wxppOAuthRequestAuthInsideWx :: WxppAppID
                             -> OAuthScope
                             -> UrlText      -- ^ return to this url
                             -> Text -- ^ state to return
                             -> UrlText
-wxppOAuthRequestAuthInsideWx app_id scope return_url state =
+wxppOAuthRequestAuthInsideWx =
+    wxppOAuthRequestAuthImpl "https://open.weixin.qq.com/connect/oauth2/authorize"
+
+
+-- | 获取用户授权: 用于微信外游览器
+wxppOAuthRequestAuthOutsideWx :: WxppAppID
+                                -> UrlText      -- ^ return to this url
+                                -> Text -- ^ state to return
+                                -> UrlText
+wxppOAuthRequestAuthOutsideWx app_id =
+    wxppOAuthRequestAuthImpl "https://open.weixin.qq.com/connect/qrconnect" app_id AS_SnsApiLogin
+
+wxppOAuthRequestAuthImpl :: String
+                        -> WxppAppID
+                        -> OAuthScope
+                        -> UrlText      -- ^ return to this url
+                        -> Text -- ^ state to return
+                        -> UrlText
+wxppOAuthRequestAuthImpl api_url app_id scope return_url state =
     UrlText $ fromString $ uriToString id uri ""
     where
         base_uri = fromMaybe (error "cannot parse uri") $
-                    parseAbsoluteURI "https://open.weixin.qq.com/connect/oauth2/authorize"
+                    parseAbsoluteURI api_url
 
         vars =  [ ("appid",         T.unpack (unWxppAppID app_id))
                 , ("redirect_uri",  T.unpack (unUrlText return_url))
