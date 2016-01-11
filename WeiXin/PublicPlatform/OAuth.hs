@@ -7,7 +7,7 @@ module WeiXin.PublicPlatform.OAuth
     , OAuthAccessTokenResult(..)
     , OAuthRefreshAccessTokenResult(..)
     , OAuthGetUserInfoResult(..)
-    , wxppOAuthRequestAuth
+    , wxppOAuthRequestAuthInsideWx
     , wxppOAuthGetAccessToken
     , wxppOAuthRefreshAccessToken
     , wxppOAuthGetUserInfo
@@ -35,12 +35,12 @@ import WeiXin.PublicPlatform.WS
 
 
 -- | 获取用户授权
-wxppOAuthRequestAuth :: WxppAppID
-                    -> OAuthScope
-                    -> UrlText      -- ^ return to this url
-                    -> Text -- ^ state to return
-                    -> UrlText
-wxppOAuthRequestAuth app_id scope return_url state =
+wxppOAuthRequestAuthInsideWx :: WxppAppID
+                            -> OAuthScope
+                            -> UrlText      -- ^ return to this url
+                            -> Text -- ^ state to return
+                            -> UrlText
+wxppOAuthRequestAuthInsideWx app_id scope return_url state =
     UrlText $ fromString $ uriToString id uri ""
     where
         base_uri = fromMaybe (error "cannot parse uri") $

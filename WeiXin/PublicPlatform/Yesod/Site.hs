@@ -237,7 +237,7 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
 wxppOAuthLoginRedirectUrl url_render_io app_id scope state return_url = do
     oauth_retrurn_url <- liftIO $ liftM UrlText $
                             url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
-    let auth_url = wxppOAuthRequestAuth app_id scope
+    let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
                         oauth_retrurn_url
                         state
     return auth_url
