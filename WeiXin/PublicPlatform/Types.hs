@@ -1364,7 +1364,6 @@ data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
                             oauthAtkPRaw        :: OAuthAccessToken
                             , oauthAtkPRtk      :: OAuthRefreshToken
                             , oauthAtkPScopes   :: Set OAuthScope
-                            , oauthAtkPState    :: Text
                             , oauthAtkPOpenID   :: WxppOpenID
                             , oauthAtkPAppID    :: WxppAppID
                             }
@@ -1376,7 +1375,6 @@ data OAuthTokenInfo = OAuthTokenInfo
                         !OAuthAccessToken
                         !OAuthRefreshToken
                         !(Set OAuthScope)
-                        !Text   -- ^ state
                         !UTCTime
                         deriving (Show, Typeable, Eq, Ord)
 $(deriveSafeCopy 0 'base ''OAuthTokenInfo)
@@ -1385,8 +1383,8 @@ packOAuthTokenInfo :: WxppAppID
                     -> WxppOpenID
                     -> OAuthTokenInfo
                     -> OAuthAccessTokenPkg
-packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes m_state _expiry) =
-    OAuthAccessTokenPkg atk rtk scopes m_state open_id app_id
+packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes _expiry) =
+    OAuthAccessTokenPkg atk rtk scopes open_id app_id
 
 
 data OAuthAccessTokenResult = OAuthAccessTokenResult {

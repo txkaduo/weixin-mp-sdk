@@ -187,13 +187,12 @@ instance WxppCacheTemp WxppDbRunner where
             let rec = WxppCachedUploadedMedia app_id h mtype mid ctime
             insertBy rec >>= either (flip replace rec . entityKey) (const $ return ())
 
-    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes state = do
+    wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes = do
         now <- liftIO getCurrentTime
         runResourceT $ run_db $ do
             selectSource
                     [ WxppCachedOAuthTokenApp ==. app_id
                     , WxppCachedOAuthTokenOpenId ==. open_id
-                    , WxppCachedOAuthTokenState ==. state
                     , WxppCachedOAuthTokenExpiryTime >. now
                     ]
                     [ Desc WxppCachedOAuthTokenId ]
@@ -213,13 +212,12 @@ instance WxppCacheTemp WxppDbRunner where
                                 (wxppCachedOAuthTokenAccess rec)
                                 (wxppCachedOAuthTokenRefresh rec)
                                 scopes
-                                (wxppCachedOAuthTokenState rec)
                                 (wxppCachedOAuthTokenExpiryTime rec)
 
     wxppCacheAddOAuthAccessToken (WxppDbRunner run_db) atk_p expiry = do
         now <- liftIO getCurrentTime
         run_db $ do
-            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk state expiry now
+            rec_id <- insert $ WxppCachedOAuthToken app_id open_id atk rtk expiry now
             insertMany_ $
                 map (\x -> WxppCachedOAuthTokenScope rec_id x) $ toList scopes
         where
@@ -228,7 +226,6 @@ instance WxppCacheTemp WxppDbRunner where
             atk       = oauthAtkPRaw atk_p
             rtk       = oauthAtkPRtk atk_p
             scopes    = oauthAtkPScopes atk_p
-            state   = oauthAtkPState atk_p
 
     wxppCachePurgeOAuthAccessToken (WxppDbRunner run_db) expiry = do
         run_db $
