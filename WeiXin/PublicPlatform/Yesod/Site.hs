@@ -238,7 +238,7 @@ wxppOAuthLoginRedirectUrl url_render_io app_id scope return_url = do
     setSession (sessionKeyWxppOAuthState app_id) random_state
     oauth_retrurn_url <- liftIO $ liftM UrlText $
                             url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
-    let auth_url = wxppOAuthRequestAuth app_id scope
+    let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
                         oauth_retrurn_url
                         random_state
     return auth_url
@@ -287,7 +287,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
         throwM $ HCError NotAuthenticated
 
     case fmap OAuthCode m_code of
-        Just code -> do
+        Just code | not (null $ unOAuthCode code) -> do
             -- 用户同意授权
             err_or_atk_info <- tryWxppWsResult $ wxppOAuthGetAccessToken app_id secret code
             atk_info <- case err_or_atk_info of
@@ -330,7 +330,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
             -- $logDebugS wxppLogSource $ "redirecting to: " <> T.pack rdr_url
             redirect rdr_url
 
-        Nothing -> do
+        _ -> do
             -- 授权失败
             defaultLayoutSub $ do
                 $(widgetFileReload def "oauth/user_denied")
