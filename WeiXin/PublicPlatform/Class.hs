@@ -63,7 +63,6 @@ class WxppCacheTemp a where
                                 -> WxppAppID
                                 -> WxppOpenID
                                 -> Set OAuthScope
-                                -> Text   -- ^ state
                                 -> IO (Maybe OAuthTokenInfo)
 
 

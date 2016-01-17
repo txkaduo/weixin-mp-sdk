@@ -9,6 +9,7 @@ module WeiXin.PublicPlatform.Yesod.Site
 
 import ClassyPrelude
 import Yesod
+import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.ByteString.Base64.URL as B64L
@@ -18,11 +19,11 @@ import qualified Data.Set                   as Set
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
-import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
 import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
+import System.Random                        (randomIO)
 
 import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , reqGetParamE'
@@ -31,6 +32,7 @@ import Yesod.Helpers.Handler                ( httpErrorWhenParamError
                                             , reqPathPieceParamPostGet
                                             , getCurrentUrl
                                             )
+import Yesod.Helpers.Types                  (B64UByteStringPathPiece(..))
 import Yesod.Helpers.Logger
 import Control.Monad.Logger
 
@@ -229,17 +231,16 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
                         => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                         -> WxppAppID
                         -> OAuthScope
-                        -> Text             -- ^ optional state: 测试表达微信总是传回一个 state 参数
-                                            -- 就算我们我们不传给它 state 参数
-                                            -- 所以 state 参数不用 Maybe Text 表达
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOAuthLoginRedirectUrl url_render_io app_id scope state return_url = do
+wxppOAuthLoginRedirectUrl url_render_io app_id scope return_url = do
+    random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $ fmap B.pack $ replicateM 8 randomIO
+    setSession (sessionKeyWxppOAuthState app_id) random_state
     oauth_retrurn_url <- liftIO $ liftM UrlText $
                             url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
-    let auth_url = wxppOAuthRequestAuth app_id scope
+    let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
                         oauth_retrurn_url
-                        state
+                        random_state
     return auth_url
 
 sessionKeyWxppUser :: WxppAppID -> Text
@@ -254,16 +255,10 @@ sessionKeyWxppUnionId = "wx-union-id"
 sessionMarkWxppUser :: MonadHandler m
                     => WxppAppID
                     -> WxppOpenID
-                    -> Text
                     -> Maybe WxppUnionID
                     -> m ()
-sessionMarkWxppUser app_id open_id state m_union_id = do
+sessionMarkWxppUser app_id open_id m_union_id = do
     setSession (sessionKeyWxppUser app_id) (unWxppOpenID open_id)
-    let st_key = sessionKeyWxppOAuthState app_id
-    if T.null state
-        then deleteSession st_key
-        else setSession st_key state
-
     -- XXX: union id 目前设在一个指定的键下面。
     -- 下面的做法不能支持多个系统的union id
     case fmap unWxppUnionID m_union_id of
@@ -272,22 +267,27 @@ sessionMarkWxppUser app_id open_id state m_union_id = do
 
 sessionGetWxppUser :: MonadHandler m
                     => WxppAppID
-                    -> m (Maybe (WxppOpenID, Text))
-sessionGetWxppUser app_id = runMaybeT $ do
-    (,) <$> ( fmap WxppOpenID $ MaybeT $ lookupSession (sessionKeyWxppUser app_id) )
-        <*> ( liftM (fromMaybe "") $ lift $ lookupSession (sessionKeyWxppOAuthState app_id))
+                    -> m (Maybe WxppOpenID)
+sessionGetWxppUser app_id = fmap (fmap WxppOpenID) $ lookupSession (sessionKeyWxppUser app_id)
 
 getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
     return_url <- reqPathPieceParamPostGet "return"
-    state <- liftM (fromMaybe "") $ lookupGetParam "state"
     let wac    = wxppSubAppConfig sub
         app_id = wxppConfigAppID wac
         secret = wxppConfigAppSecret wac
         cache  = wxppSubCacheBackend sub
+
+    state <- liftM (fromMaybe "") $ lookupGetParam "state"
+    m_expected_state <- lookupSession (sessionKeyWxppOAuthState app_id)
+    unless (m_expected_state == Just state) $ do
+        $logErrorS wxppLogSource $
+            "OAuth state check failed, got: " <> state
+        throwM $ HCError NotAuthenticated
+
     case fmap OAuthCode m_code of
-        Just code -> do
+        Just code | not (null $ unOAuthCode code) -> do
             -- 用户同意授权
             err_or_atk_info <- tryWxppWsResult $ wxppOAuthGetAccessToken app_id secret code
             atk_info <- case err_or_atk_info of
@@ -306,13 +306,12 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
                             (oauthAtkToken atk_info)
                             (oauthAtkRefreshToken atk_info)
                             (oauthAtkScopes atk_info)
-                            state
                             open_id
                             app_id
 
             liftIO $ wxppCacheAddOAuthAccessToken cache atk_p expiry
 
-            sessionMarkWxppUser app_id open_id state m_union_id
+            sessionMarkWxppUser app_id open_id m_union_id
 
             let rdr_url = case parseURI return_url of
                     Just uri ->
@@ -331,7 +330,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
             -- $logDebugS wxppLogSource $ "redirecting to: " <> T.pack rdr_url
             redirect rdr_url
 
-        Nothing -> do
+        _ -> do
             -- 授权失败
             defaultLayoutSub $ do
                 $(widgetFileReload def "oauth/user_denied")
@@ -345,12 +344,9 @@ wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
                 -> (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                 -> WxppAppID
                 -> OAuthScope
-                -> Text         -- ^ 调用 oauth 接口的 state 参数（初始值）
-                                -- 但真正传给 'f' 的 state 在 OAuthAccessTokenPkg 里
-                                -- 未必与前者相同
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
-wxppOAuthHandler cache render_url_io app_id scope state f = do
+wxppOAuthHandler cache render_url_io app_id scope f = do
     m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
     case m_atk_p of
         Nothing -> do
@@ -358,7 +354,7 @@ wxppOAuthHandler cache render_url_io app_id scope state f = do
             unless is_wx $ do
                 permissionDenied "请用在微信里打开此网页"
             url <- getCurrentUrl
-            wxppOAuthLoginRedirectUrl render_url_io app_id scope state (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url_io app_id scope (UrlText url)
                 >>= redirect . unUrlText
         Just atk_p -> f atk_p
 
@@ -372,10 +368,10 @@ wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, MonadIO m, MonadBaseContro
 wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
     m_oauth_st <- sessionGetWxppUser app_id
     case m_oauth_st of
-        Nothing -> return Nothing
-        Just (open_id, state2) -> do
+        Nothing         -> return Nothing
+        Just open_id    -> do
             m_atk_info <- liftIO $ wxppCacheGetOAuthAccessToken cache
-                                        app_id open_id (Set.singleton scope) state2
+                                        app_id open_id (Set.singleton scope)
             case m_atk_info of
                 Nothing         -> return Nothing
                 Just atk_info   -> return $ Just (packOAuthTokenInfo app_id open_id atk_info)
@@ -387,10 +383,8 @@ getOAuthTestR = withWxppSubHandler $ \sub -> do
         app_id = wxppConfigAppID wac
     m_oauth_st <- sessionGetWxppUser app_id
     case m_oauth_st of
-        Nothing -> return "no open id, authorization failed"
-        Just (open_id, state) -> return $
-                            "Your open id is: " <> unWxppOpenID open_id
-                                <> ", state is: " <> state
+        Nothing      -> return "no open id, authorization failed"
+        Just open_id -> return $ "Your open id is: " <> unWxppOpenID open_id
 
 
 checkWaiReqThen :: Yesod master =>

@@ -1290,6 +1290,7 @@ instance FromJSON WxppForwardedEnv where
 
 data OAuthScope = AS_SnsApiBase
                 | AS_SnsApiUserInfo
+                | AS_SnsApiLogin
                 | AS_Unknown Text
                 deriving (Show, Eq, Ord)
 
@@ -1302,6 +1303,7 @@ instance SimpleStringRep OAuthScope where
     -- so they must be consistent with WX doc.
     simpleEncode AS_SnsApiBase      = "snsapi_base"
     simpleEncode AS_SnsApiUserInfo  = "snsapi_userinfo"
+    simpleEncode AS_SnsApiLogin     = "snsapi_login"
     simpleEncode (AS_Unknown s)     = T.unpack s
 
     simpleParser = try p Text.Parsec.<|> parse_unknown
@@ -1309,6 +1311,7 @@ instance SimpleStringRep OAuthScope where
             p = makeSimpleParserByTable
                     [ ("snsapi_base", AS_SnsApiBase)
                     , ("snsapi_userinfo", AS_SnsApiUserInfo)
+                    , ("snsapi_login", AS_SnsApiLogin)
                     ]
 
             parse_unknown = fmap (AS_Unknown . fromString) $
@@ -1362,7 +1365,6 @@ data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
                             oauthAtkPRaw        :: OAuthAccessToken
                             , oauthAtkPRtk      :: OAuthRefreshToken
                             , oauthAtkPScopes   :: Set OAuthScope
-                            , oauthAtkPState    :: Text
                             , oauthAtkPOpenID   :: WxppOpenID
                             , oauthAtkPAppID    :: WxppAppID
                             }
@@ -1374,7 +1376,6 @@ data OAuthTokenInfo = OAuthTokenInfo
                         !OAuthAccessToken
                         !OAuthRefreshToken
                         !(Set OAuthScope)
-                        !Text   -- ^ state
                         !UTCTime
                         deriving (Show, Typeable, Eq, Ord)
 $(deriveSafeCopy 0 'base ''OAuthTokenInfo)
@@ -1383,8 +1384,8 @@ packOAuthTokenInfo :: WxppAppID
                     -> WxppOpenID
                     -> OAuthTokenInfo
                     -> OAuthAccessTokenPkg
-packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes m_state _expiry) =
-    OAuthAccessTokenPkg atk rtk scopes m_state open_id app_id
+packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes _expiry) =
+    OAuthAccessTokenPkg atk rtk scopes open_id app_id
 
 
 data OAuthAccessTokenResult = OAuthAccessTokenResult {
