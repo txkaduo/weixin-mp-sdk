@@ -231,16 +231,26 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
                         => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                         -> WxppAppID
                         -> OAuthScope
+                        -> Text             -- ^ oauth's state param
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOAuthLoginRedirectUrl url_render_io app_id scope return_url = do
-    random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $ fmap B.pack $ replicateM 8 randomIO
-    setSession (sessionKeyWxppOAuthState app_id) random_state
+wxppOAuthLoginRedirectUrl url_render_io app_id scope user_st return_url = do
+    m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
+    random_state <- case m_oauth_random_st of
+                        Just x | not (null x) -> do
+                            return x
+                        _   -> do
+                            random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $ fmap B.pack $ replicateM 8 randomIO
+                            setSession (sessionKeyWxppOAuthState app_id) random_state
+                            return random_state
+
+    let state = random_state <> ":" <> user_st
+
     oauth_retrurn_url <- liftIO $ liftM UrlText $
                             url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
                         oauth_retrurn_url
-                        random_state
+                        state
     return auth_url
 
 sessionKeyWxppUser :: WxppAppID -> Text
@@ -279,12 +289,15 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
         secret = wxppConfigAppSecret wac
         cache  = wxppSubCacheBackend sub
 
-    state <- liftM (fromMaybe "") $ lookupGetParam "state"
+    oauth_state <- liftM (fromMaybe "") $ lookupGetParam "state"
+    let (expected_st, state') = T.breakOn ":" oauth_state
     m_expected_state <- lookupSession (sessionKeyWxppOAuthState app_id)
-    unless (m_expected_state == Just state) $ do
+    unless (m_expected_state == Just expected_st) $ do
         $logErrorS wxppLogSource $
-            "OAuth state check failed, got: " <> state
+            "OAuth state check failed, got: " <> oauth_state
         throwM $ HCError NotAuthenticated
+
+    let state = fromMaybe state' $ T.stripPrefix ":" state'
 
     case fmap OAuthCode m_code of
         Just code | not (null $ unOAuthCode code) -> do
@@ -354,7 +367,7 @@ wxppOAuthHandler cache render_url_io app_id scope f = do
             unless is_wx $ do
                 permissionDenied "请用在微信里打开此网页"
             url <- getCurrentUrl
-            wxppOAuthLoginRedirectUrl render_url_io app_id scope (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url_io app_id scope "" (UrlText url)
                 >>= redirect . unUrlText
         Just atk_p -> f atk_p
 
