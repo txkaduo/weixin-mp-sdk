@@ -173,6 +173,7 @@ parseInputOrLoadErrorMsg prep env err_msg_file p ime = do
     where
         p' = p <* eof
 
+
 parseInputThenOrLoadErrorMsg :: forall a m r s.
     (LoadMsgEnv r, LoadMsgMonad m) =>
     (Text -> Text)      -- ^ function to apply before parsing
@@ -200,6 +201,68 @@ parseInputThenOrLoadErrorMsgT :: forall a m r s.
 parseInputThenOrLoadErrorMsgT prep err_msg_file p ime f = do
     env <- lift ask
     msg_or_x <- lift $ lift $ parseInputOrLoadErrorMsg prep env err_msg_file p ime
+    case msg_or_x of
+        Left msg -> return $ [msg]
+        Right x -> f x
+
+
+-- | 类似于 parseInputOrLoadErrorMsg，但加载消息的函数由调用者提供（而不仅仅是一个路径）
+-- 输入的消息类型变成 Text，不用处理非文字信息的情况
+parseInputOrLoadErrorMsg2 :: forall a m.
+    (MonadLogger m, Monad m) =>
+    (Text -> Text)      -- ^ function to apply before parsing
+    -> m (Either String WxppOutMsg)     -- ^ function to load error message
+    -> ParsecT String () Identity a     -- ^ the text parser
+    -> Text
+    -> ExceptT String m (Either WxppOutMsg a)
+parseInputOrLoadErrorMsg2 prep load_err_msg_file p t = do
+    let err_or_x = case runTextParser p' (prep t) of
+                    Left (_err :: Text) -> runTextParser p' t
+                    Right x -> Right x
+    case err_or_x of
+        Left err -> do
+            $logWarn $ T.unlines $
+                        [ "cannot parse text: " <> t
+                        , "error was: " <> err
+                        ]
+            liftM Left $ ExceptT $ load_err_msg_file
+
+        Right x -> return $ Right x
+
+    where
+        p' = p <* eof
+
+
+-- | 类似于 parseInputThenOrLoadErrorMsg，但加载消息的函数由调用者提供（而不仅仅是一个路径）
+-- 输入的消息类型变成 Text，不用处理非文字信息的情况
+parseInputThenOrLoadErrorMsg2 :: forall a m s.
+    (Monad m, MonadLogger m) =>
+    (Text -> Text)      -- ^ function to apply before parsing
+    -> m (Either String WxppOutMsg)     -- ^ function to load error message
+    -> ParsecT String () Identity a     -- ^ the text parser
+    -> Text
+    -> s                -- ^ old state
+    -> (a -> ExceptT String m ([WxppOutMsg], s))
+    -> ExceptT String m ([WxppOutMsg], s)
+parseInputThenOrLoadErrorMsg2 prep load_err_msg_file p t old_st f = do
+    msg_or_x <- parseInputOrLoadErrorMsg2 prep load_err_msg_file p t
+    case msg_or_x of
+        Left msg -> return $ ([msg], old_st)
+        Right x -> f x
+
+
+-- | 类似于 parseInputThenOrLoadErrorMsgT，但加载消息的函数由调用者提供（而不仅仅是一个路径）
+-- 输入的消息类型变成 Text，不用处理非文字信息的情况
+parseInputThenOrLoadErrorMsgT2 :: forall a m r s.
+    (Monad m, MonadLogger m) =>
+    (Text -> Text)      -- ^ function to apply before parsing
+    -> m (Either String WxppOutMsg)     -- ^ function to load error message
+    -> ParsecT String () Identity a     -- ^ the text parser
+    -> Text
+    -> (a -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg])
+    -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg]
+parseInputThenOrLoadErrorMsgT2 prep load_err_msg_file p t f = do
+    msg_or_x <- lift $ lift $ parseInputOrLoadErrorMsg2 prep load_err_msg_file p t
     case msg_or_x of
         Left msg -> return $ [msg]
         Right x -> f x
