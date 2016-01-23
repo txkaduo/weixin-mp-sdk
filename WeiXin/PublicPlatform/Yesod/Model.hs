@@ -8,6 +8,7 @@ import qualified Data.Set                   as Set
 import Database.Persist.Quasi
 import Database.Persist.Sql                 (Migration)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
+import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
 
 import WeiXin.PublicPlatform.Types

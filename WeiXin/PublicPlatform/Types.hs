@@ -14,7 +14,7 @@ import qualified Data.Text                  as T
 import Data.Aeson.Types                     (Parser, Pair, typeMismatch)
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
-import qualified Data.ByteString.Lazy       as LB
+-- import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
 import Data.Byteable                        (toBytes)
 import Data.Char                            (isSpace)
@@ -23,8 +23,6 @@ import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
 import Data.Scientific                      (toBoundedInteger)
 import Text.Read                            (reads)
-import qualified Crypto.Hash.MD5            as MD5
-import qualified Crypto.Hash.SHA256         as SHA256
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(..))
 import Database.Persist                     (PersistValue)
@@ -40,10 +38,10 @@ import Yesod.Helpers.Parsec                 ( SimpleStringRep(..), natural
                                             , derivePersistFieldS, makeSimpleParserByTable
                                             , deriveJsonS, derivePathPieceS
                                             )
-import Data.Byteable                        (Byteable(..))
 import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
 import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
+
 
 import WeiXin.PublicPlatform.Utils
 
@@ -1205,47 +1203,6 @@ genderToInt Nothing         = 0
 genderToInt (Just Male)     = 1
 genderToInt (Just Female)   = 2
 
-newtype MD5Hash = MD5Hash { unMD5Hash :: ByteString }
-                deriving (Show, Eq, Ord)
-
-instance SafeCopy MD5Hash where
-    getCopy             = contain $ MD5Hash <$> safeGet
-    putCopy (MD5Hash x) = contain $ safePut x
-    errorTypeName _     = "MD5Hash"
-
-instance PersistField MD5Hash where
-    toPersistValue      = toPersistValue . unMD5Hash
-    fromPersistValue    = fmap MD5Hash . fromPersistValue
-
-instance PersistFieldSql MD5Hash where
-    sqlType _ = SqlBlob
-
-instance Byteable MD5Hash where
-    toBytes (MD5Hash x) = toBytes x
-    byteableLength (MD5Hash x) = byteableLength x
-    withBytePtr (MD5Hash x) f = withBytePtr x f
-
-
-newtype SHA256Hash = SHA256Hash { unSHA256Hash :: ByteString }
-                deriving (Show, Eq, Ord)
-
-instance SafeCopy SHA256Hash where
-    getCopy             = contain $ SHA256Hash <$> safeGet
-    putCopy (SHA256Hash x) = contain $ safePut x
-    errorTypeName _     = "SHA256Hash"
-
-instance PersistField SHA256Hash where
-    toPersistValue      = toPersistValue . unSHA256Hash
-    fromPersistValue    = fmap SHA256Hash . fromPersistValue
-
-instance PersistFieldSql SHA256Hash where
-    sqlType _ = SqlBlob
-
-instance Byteable SHA256Hash where
-    toBytes (SHA256Hash x) = toBytes x
-    byteableLength (SHA256Hash x) = byteableLength x
-    withBytePtr (SHA256Hash x) f = withBytePtr x f
-
 -- | 上传媒体文件的结果
 data UploadResult = UploadResult {
                         urMediaType     :: WxppMediaType
@@ -1495,24 +1452,6 @@ data WxppSignal = WxppSignalNewApp WxppAppID
 
 wxppLogSource :: IsString a => a
 wxppLogSource = "WXPP"
-
-md5HashFile :: FilePath -> IO MD5Hash
-md5HashFile = fmap md5HashLBS . LB.readFile
-
-md5HashLBS :: LB.ByteString -> MD5Hash
-md5HashLBS = MD5Hash . MD5.hashlazy
-
-md5HashBS :: ByteString -> MD5Hash
-md5HashBS = MD5Hash . MD5.hash
-
-sha256HashFile :: FilePath -> IO SHA256Hash
-sha256HashFile = fmap sha256HashLBS . LB.readFile
-
-sha256HashLBS :: LB.ByteString -> SHA256Hash
-sha256HashLBS = SHA256Hash . SHA256.hashlazy
-
-sha256HashBS :: ByteString -> SHA256Hash
-sha256HashBS = SHA256Hash . SHA256.hash
 
 -- | 上传得到的 media id 只能用一段时间
 usableUploadResult :: UTCTime -> NominalDiffTime -> UploadResult -> Bool

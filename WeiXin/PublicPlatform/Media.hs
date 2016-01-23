@@ -17,6 +17,7 @@ import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:))
 import Network.HTTP                         (urlEncodeVars)
 import System.FilePath                      (takeFileName)
+import Crypto.Hash.TX.Utils                 (sha256HashFile, sha256HashBS)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS

@@ -14,6 +14,7 @@ import Control.Monad.State                  (modify)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Text.Shakespeare.I18N                (Lang)
 import qualified Data.Map.Strict            as Map
+import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
 import Yesod.Helpers.SafeCopy
 import WeiXin.PublicPlatform.Class
