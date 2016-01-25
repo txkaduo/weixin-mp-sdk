@@ -34,10 +34,11 @@ import Language.Haskell.TH.Lift             (deriveLift)
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
 import Yesod.Helpers.Utils                  (emptyTextToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
-import Yesod.Helpers.Parsec                 ( SimpleStringRep(..), natural
+import Text.Parsec.TX.Utils                 ( SimpleStringRep(..), natural
                                             , derivePersistFieldS, makeSimpleParserByTable
-                                            , deriveJsonS, derivePathPieceS
+                                            , deriveJsonS
                                             )
+import Yesod.Helpers.Parsec                 ( derivePathPieceS )
 import Text.Parsec
 import qualified Data.HashMap.Strict        as HM
 import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)

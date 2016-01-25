@@ -92,7 +92,7 @@ library
                      , yesod-core
                      , yesod-form
                      , shakespeare
-                     , yesod-helpers >= 0.10.1
+                     , yesod-helpers >= 0.11
                      , text
                      , aeson
                      , bytestring
@@ -149,7 +149,8 @@ library
                      , HTTP
                      , vector
                      , cereal
-                     , hash-utils
+                     , hash-tx-utils
+                     , parsec-tx-utils
 
   if flag(parsec3)
       build-depends:   parsec3
