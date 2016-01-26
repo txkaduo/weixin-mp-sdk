@@ -112,12 +112,12 @@ mkDelayedYamlLoader fp = do
 
                 go (LNE.tail base_dir_list) first_err
 
-runDelayedYamlLoaderL' :: (MonadIO m, FromJSON a) =>
+-- | May throw IOError
+runDelayedYamlLoaderL_IOE :: (MonadIO m, FromJSON a) =>
     NonEmpty FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m (Either YamlFileParseException a)
-runDelayedYamlLoaderL' base_dirs f = liftIO $ do
-    runReaderT f base_dirs
+runDelayedYamlLoaderL_IOE base_dirs f = liftIO $ runReaderT f base_dirs
 
 runDelayedYamlLoaderL :: (MonadIO m, FromJSON a) =>
     NonEmpty FilePath    -- ^ 消息文件存放目录

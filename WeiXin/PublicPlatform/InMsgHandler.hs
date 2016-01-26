@@ -201,8 +201,8 @@ readWxppInMsgHandlers ::
     -> FilePath
     -> IO (Either YamlFileParseException [SomeWxppInMsgHandler m])
 readWxppInMsgHandlers tmps data_dirs fp = runExceptT $ do
-    (ExceptT $ runDelayedYamlLoaderL' data_dirs $ mkDelayedYamlLoader fp)
-        >>= either(throwE . YamlFileParseException fp . AesonException) return
+    (ExceptT $ runDelayedYamlLoaderL_IOE data_dirs $ mkDelayedYamlLoader fp)
+        >>= either (throwE . YamlFileParseException fp . AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
 
 
