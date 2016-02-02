@@ -367,7 +367,15 @@ instance
 
         st_type <- maybe (throwError []) return $ T.stripPrefix "initiate-talk:" evtkey
         let match_st_type (WxppTalkerFreshStateEntry px _) = getStateType px == st_type
-        WxppTalkerFreshStateEntry st_px extra_env <- maybe (throwError []) return $ find match_st_type entries
+        WxppTalkerFreshStateEntry st_px extra_env <-
+            case find match_st_type entries of
+                Nothing -> do
+                    $logWarnS wxppLogSource $
+                            "Failed to initiate talk from menu click,"
+                            <> " because talk state type is unknown to me: "
+                            <> st_type
+                    throwError []
+                Just x  -> return x
         let from_open_id = wxppInFromUserName ime
             app_id = getWxppAppID env
         mapExceptT (runWxppDB db_runner) $ do
@@ -375,6 +383,8 @@ instance
             case msgs_or_state of
                 Left msgs -> do
                             -- cannot create conversation
+                            $logErrorS wxppLogSource $
+                                "Couldn't create talk, providing error output messages: " <> tshow msgs
                             return $ map ((False,) . Just) $ msgs
 
                 Right state -> do
