@@ -995,6 +995,36 @@ instance (Monad m) =>
         liftM (all id) $ forM preds $ \p -> ExceptT $ processInMsg p cache bs m_ime
 
 
+-- | Predictor: Logical OR of some predictors
+data WxppInMsgLogicalOrPred m = WxppInMsgLogicalOrPred [ SomeWxppInMsgPredictor m ]
+
+instance JsonConfigable (WxppInMsgLogicalOrPred m) where
+    type JsonConfigableUnconfigData (WxppInMsgLogicalOrPred m) = [WxppInMsgPredictorPrototype m]
+
+    isNameOfInMsgHandler _ x = x == "logical-or"
+
+    parseWithExtraData _ proto_pred obj = do
+        fmap WxppInMsgLogicalOrPred $
+            obj .: "predictors"
+                >>= parseArray "predictors"
+                        (withObject "predictor" $ parseWxppInMsgProcessor proto_pred)
+
+type instance WxppInMsgProcessResult (WxppInMsgLogicalOrPred m) = Bool
+
+instance (Monad m) =>
+    IsWxppInMsgProcessor m (WxppInMsgLogicalOrPred m)
+    where
+
+    processInMsg (WxppInMsgLogicalOrPred preds) cache bs m_ime = runExceptT $ go preds
+        where
+            go []       = return False
+            go (p:ps)   = do
+                            b <- ExceptT $ processInMsg p cache bs m_ime
+                            if b
+                                then return True
+                                else go ps
+
+
 -- | Handler: 固定地返回一个某个信息
 data ConstResponse = ConstResponse WxppAppID (NonEmpty FilePath) Bool WxppOutMsgLoader
                     deriving (Typeable)
