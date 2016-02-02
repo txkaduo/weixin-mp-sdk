@@ -162,10 +162,25 @@ parseInputOrLoadErrorMsg :: forall a m r.
     -> FilePath         -- ^ error message
     -> ParsecT String () Identity a     -- ^ the text parser
     -> WxppInMsgEntity
-    -> ExceptT String m (Either WxppOutMsg a)
+    -> ExceptT String m (Maybe (Either WxppOutMsg a))
+        -- ^ Nothing 表示拒绝处理这个消息
+        -- Just (Left x) 是输入无效
+        -- Just (Right x) 是输入的解释结果
 parseInputOrLoadErrorMsg prep env err_msg_file p ime = do
     case wxppInMessage ime of
-        WxppInMsgText t -> do
+        WxppInMsgText t -> Just <$> handle_txt t
+
+        WxppInMsgVoice _ _ (Just t) -> Just <$> handle_txt t
+
+        WxppInMsgVoice _ _ Nothing -> do
+            liftM (Just . Left) $ ExceptT $ loadTalkMessage env ("common" </> "text_only")
+
+        _ -> return Nothing
+
+    where
+        p' = p <* eof
+
+        handle_txt t = do
             let err_or_x = case runTextParser p' (prep t) of
                             Left (_err :: Text) -> runTextParser p' t
                             Right x -> Right x
@@ -179,12 +194,6 @@ parseInputOrLoadErrorMsg prep env err_msg_file p ime = do
 
                 Right x -> return $ Right x
 
-        _ -> do
-            liftM Left $ ExceptT $ loadTalkMessage env ("common" </> "text_only")
-
-    where
-        p' = p <* eof
-
 
 parseInputThenOrLoadErrorMsg :: forall a m r s.
     (LoadMsgEnv r, LoadMsgMonad m) =>
@@ -194,13 +203,14 @@ parseInputThenOrLoadErrorMsg :: forall a m r s.
     -> ParsecT String () Identity a     -- ^ the text parser
     -> WxppInMsgEntity
     -> s                -- ^ old state
-    -> (a -> ExceptT String m ([WxppOutMsg], s))
-    -> ExceptT String m ([WxppOutMsg], s)
+    -> (a -> ExceptT String m ([Maybe WxppOutMsg], s))
+    -> ExceptT String m ([Maybe WxppOutMsg], s)
 parseInputThenOrLoadErrorMsg prep env err_msg_file p ime old_st f = do
     msg_or_x <- parseInputOrLoadErrorMsg prep env err_msg_file p ime
     case msg_or_x of
-        Left msg -> return $ ([msg], old_st)
-        Right x -> f x
+        Nothing         -> return ([], old_st)
+        Just (Left msg) -> return $ ([Just msg], old_st)
+        Just (Right x)  -> f x
 
 parseInputThenOrLoadErrorMsgT :: forall a m r s.
     (LoadMsgEnv r, LoadMsgMonad m) =>
@@ -208,14 +218,15 @@ parseInputThenOrLoadErrorMsgT :: forall a m r s.
     -> FilePath         -- ^ error message
     -> ParsecT String () Identity a     -- ^ the text parser
     -> WxppInMsgEntity
-    -> (a -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg])
-    -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg]
+    -> (a -> StateT s (ReaderT r (ExceptT String m)) [Maybe WxppOutMsg])
+    -> StateT s (ReaderT r (ExceptT String m)) [Maybe WxppOutMsg]
 parseInputThenOrLoadErrorMsgT prep err_msg_file p ime f = do
     env <- lift ask
     msg_or_x <- lift $ lift $ parseInputOrLoadErrorMsg prep env err_msg_file p ime
     case msg_or_x of
-        Left msg -> return $ [msg]
-        Right x -> f x
+        Nothing         -> return []
+        Just (Left msg) -> return [Just msg]
+        Just (Right x)  -> f x
 
 
 -- | 类似于 parseInputOrLoadErrorMsg，但加载消息的函数由调用者提供（而不仅仅是一个路径）
@@ -254,12 +265,12 @@ parseInputThenOrLoadErrorMsg2 :: forall a m s.
     -> ParsecT String () Identity a     -- ^ the text parser
     -> Text
     -> s                -- ^ old state
-    -> (a -> ExceptT String m ([WxppOutMsg], s))
-    -> ExceptT String m ([WxppOutMsg], s)
+    -> (a -> ExceptT String m ([Maybe WxppOutMsg], s))
+    -> ExceptT String m ([Maybe WxppOutMsg], s)
 parseInputThenOrLoadErrorMsg2 prep load_err_msg_file p t old_st f = do
     msg_or_x <- parseInputOrLoadErrorMsg2 prep load_err_msg_file p t
     case msg_or_x of
-        Left msg -> return $ ([msg], old_st)
+        Left msg -> return $ ([Just msg], old_st)
         Right x -> f x
 
 
@@ -271,12 +282,12 @@ parseInputThenOrLoadErrorMsgT2 :: forall a m r s.
     -> m (Either String WxppOutMsg)     -- ^ function to load error message
     -> ParsecT String () Identity a     -- ^ the text parser
     -> Text
-    -> (a -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg])
-    -> StateT s (ReaderT r (ExceptT String m)) [WxppOutMsg]
+    -> (a -> StateT s (ReaderT r (ExceptT String m)) [Maybe WxppOutMsg])
+    -> StateT s (ReaderT r (ExceptT String m)) [Maybe WxppOutMsg]
 parseInputThenOrLoadErrorMsgT2 prep load_err_msg_file p t f = do
     msg_or_x <- lift $ lift $ parseInputOrLoadErrorMsg2 prep load_err_msg_file p t
     case msg_or_x of
-        Left msg -> return $ [msg]
+        Left msg -> return [Just msg]
         Right x -> f x
 
 
