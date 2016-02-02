@@ -316,6 +316,8 @@ instance
                                 ExceptT $ processJustInitedWxTalk
                                             (Proxy :: Proxy s) (env, extra_env) e_state
 
+
+-- | 与 WxppTalkerStateEntry 的区别只是多了 WxTalkerFreshState 的要求
 data WxppTalkerFreshStateEntry r0 m = forall s r.
                                 (Eq s, ToJSON s, FromJSON s, HasStateType s
                                 , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
@@ -323,6 +325,9 @@ data WxppTalkerFreshStateEntry r0 m = forall s r.
                                 , WxTalkerFreshState (r0, r) (ReaderT WxppDbBackend m) s
                                 ) =>
                                 WxppTalkerFreshStateEntry (Proxy s) r
+
+wxppTalkerFreshStateEntryToStateEntry :: WxppTalkerFreshStateEntry r m -> WxppTalkerStateEntry r m
+wxppTalkerFreshStateEntryToStateEntry (WxppTalkerFreshStateEntry p x) = WxppTalkerStateEntry p x
 
 -- | 消息处理器：调用后会新建一个会话
 -- 它接受的 event key 必须是以下的形式： initiate-talk:XXX
