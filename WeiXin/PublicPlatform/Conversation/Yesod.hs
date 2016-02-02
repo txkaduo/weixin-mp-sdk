@@ -360,37 +360,45 @@ instance
     IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
     where
     processInMsg (WxppTalkEvtKeyInitiator db_runner env entries) _cache _bs m_ime = runExceptT $ do
-        ime <- maybe (throwError []) return m_ime
-        evtkey <- case wxppInMessage ime of
-                    WxppInMsgEvent (WxppEvtClickItem evtkey) -> return evtkey
-                    _                                        -> throwError []
+        case m_ime of
+            Nothing -> return []
+            Just ime -> do
+                case wxppInMessage ime of
+                    WxppInMsgEvent (WxppEvtClickItem evtkey) -> do
+                        case T.stripPrefix "initiate-talk:" evtkey of
+                            Nothing     -> return []
+                            Just st_type -> do_work ime st_type
 
-        st_type <- maybe (throwError []) return $ T.stripPrefix "initiate-talk:" evtkey
-        let match_st_type (WxppTalkerFreshStateEntry px _) = getStateType px == st_type
-        WxppTalkerFreshStateEntry st_px extra_env <-
-            case find match_st_type entries of
-                Nothing -> do
-                    $logWarnS wxppLogSource $
-                            "Failed to initiate talk from menu click,"
-                            <> " because talk state type is unknown to me: "
-                            <> st_type
-                    throwError []
-                Just x  -> return x
-        let from_open_id = wxppInFromUserName ime
-            app_id = getWxppAppID env
-        mapExceptT (runWxppDB db_runner) $ do
-            msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiateBlank st_px from_open_id
-            case msgs_or_state of
-                Left msgs -> do
-                            -- cannot create conversation
-                            $logErrorS wxppLogSource $
-                                "Couldn't create talk, providing error output messages: " <> tshow msgs
-                            return $ map ((False,) . Just) $ msgs
+                    _ -> return []
 
-                Right state -> do
-                    -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
-                    e_state <- lift $ newWxppTalkState' app_id from_open_id state
-                    ExceptT $ processJustInitedWxTalk st_px (env, extra_env) e_state
+        where
+            do_work ime st_type = do
+                let match_st_type (WxppTalkerFreshStateEntry px _) = getStateType px == st_type
+                case find match_st_type entries of
+                    Nothing -> do
+                        $logWarnS wxppLogSource $
+                                "Failed to initiate talk from menu click,"
+                                <> " because talk state type is unknown to me: "
+                                <> st_type
+                        return []
+
+                    Just (WxppTalkerFreshStateEntry st_px extra_env) -> do
+                        let from_open_id = wxppInFromUserName ime
+                            app_id = getWxppAppID env
+                        mapExceptT (runWxppDB db_runner) $ do
+                            msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $
+                                wxTalkInitiateBlank st_px from_open_id
+                            case msgs_or_state of
+                                Left msgs -> do
+                                            -- cannot create conversation
+                                            $logErrorS wxppLogSource $
+                                                "Couldn't create talk, providing error output messages: " <> tshow msgs
+                                            return $ map ((False,) . Just) $ msgs
+
+                                Right state -> do
+                                    -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
+                                    e_state <- lift $ newWxppTalkState' app_id from_open_id state
+                                    ExceptT $ processJustInitedWxTalk st_px (env, extra_env) e_state
 
 
 -- | 消息处理器：调用后会无条件结束当前会话
