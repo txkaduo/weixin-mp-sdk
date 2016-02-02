@@ -773,8 +773,8 @@ instance FromJSON ArtcileToKeywordsMap where
     parseJSON = withObject "ArtcileToKeywordsMap" $
         \obj -> fmap ArtcileToKeywordsMap $ do
                 base_dir <- T.unpack <$> obj .:? "base" .!= "."
-                pairs <- obj .: "articles" >>= parseArray "[artcile-info]" parse_item
-                return $ Map.fromList $ map (\(x, y) -> (base_dir </> x, y)) pairs
+                ps <- obj .: "articles" >>= parseArray "[artcile-info]" parse_item
+                return $ Map.fromList $ map (\(x, y) -> (base_dir </> x, y)) ps
             where
                 parse_item = withObject "article-info" $ \o -> do
                     (,) <$> (T.unpack <$> o .: "file")
@@ -971,7 +971,7 @@ instance (Monad m) => IsWxppInMsgProcessor m WxppInMsgSceneRE where
                         return $ testWithPosixREList lst $ T.unpack str
 
 
--- | Predictor: Logical And of some predictors
+-- | Predictor: Logical AND of some predictors
 data WxppInMsgLogicalAndPred m = WxppInMsgLogicalAndPred [ SomeWxppInMsgPredictor m ]
 
 instance JsonConfigable (WxppInMsgLogicalAndPred m) where
