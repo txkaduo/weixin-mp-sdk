@@ -141,7 +141,7 @@ class WxTalkerState r m a where
     -- 要表达这个函数是否真正有处理用户输入，因此结果是个 Maybe
     wxTalkHandleInput :: a
                         -> WxppInMsgEntity
-                        -> WxTalkerMonad r m ([WxppOutMsg], a)
+                        -> WxTalkerMonad r m ([Maybe WxppOutMsg], a)
 
     -- | 判断对话是否已结束
     wxTalkIfDone :: a
@@ -168,7 +168,7 @@ wxTalkerRun :: (Monad m, Eq a, WxTalkerState r m a) =>
     Bool
     -> (WxTalkerMonad r m (Maybe a))
     -> (a -> WxTalkerMonad r m ())
-    -> Conduit WxppInMsgEntity (WxTalkerMonad r m) WxppOutMsg
+    -> Conduit WxppInMsgEntity (WxTalkerMonad r m) (Maybe WxppOutMsg)
 wxTalkerRun skip_first_prompt get_state put_state =
     if skip_first_prompt
         then chk_wait_and_go
@@ -180,7 +180,7 @@ wxTalkerRun skip_first_prompt get_state put_state =
                 Nothing -> return ()
                 Just st -> do
                     (replies, new_st) <- lift $ wxTalkPromptToInput st
-                    mapM_ yield replies
+                    mapM_ yield $ map Just replies
                     unless (st == new_st) $ do
                         lift $ put_state new_st
 
@@ -202,10 +202,15 @@ wxTalkerRun skip_first_prompt get_state put_state =
                         Nothing -> return ()
                         Just st -> do
                             (replies, new_st) <- lift $ wxTalkHandleInput st t
-                            mapM_ yield replies
-                            unless (st == new_st) $ do
-                                lift $ put_state new_st
-                            go
+                            if null replies
+                                then do
+                                    -- 约定：如果 wxTalkHandleInput 返回空的消息列表，代表它拒绝处理这个输入消息
+                                    wait_and_go
+                                else do
+                                    mapM_ yield replies
+                                    unless (st == new_st) $ do
+                                        lift $ put_state new_st
+                                    go
 
 
 wxTalkerInputOneStep :: (Monad m, WxTalkerState r m s, Eq s) =>
@@ -215,7 +220,7 @@ wxTalkerInputOneStep :: (Monad m, WxTalkerState r m s, Eq s) =>
     -> Maybe WxppInMsgEntity
         -- ^ 新建立的会话时，用户输入理解为 Nothing
         -- 之后的调用都应该是 Just
-    -> m (Either String [WxppOutMsg])
+    -> m (Either String [Maybe WxppOutMsg])
         -- ^ 状态机的输出文字
 wxTalkerInputOneStep get_st set_st env m_input = flip runWxTalkerMonad env $ do
     send_intput =$= cond $$ CL.consume
@@ -253,14 +258,17 @@ wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
 
             else do
                 msgs <- lift $ ExceptT $ wxTalkerInputOneStep get_st' set_st' env m_ime
-                msgs2 <- lift $ liftM (fromMaybe []) $ runMaybeT $ do
-                            new_st <- MaybeT $ run_wx_monad $ get_st'
-                            done2 <- lift $ run_wx_monad $ wxTalkIfDone new_st
-                            if done2
-                                then lift $ run_wx_monad $ wxTalkDone new_st
-                                else return []
+                msgs2 <- if null msgs
+                            then return []
+                            else do
+                                lift $ liftM (map Just . fromMaybe []) $ runMaybeT $ do
+                                    new_st <- MaybeT $ run_wx_monad $ get_st'
+                                    done2 <- lift $ run_wx_monad $ wxTalkIfDone new_st
+                                    if done2
+                                        then lift $ run_wx_monad $ wxTalkDone new_st
+                                        else return []
 
-                return $ (map $ (True,) . Just) $ msgs <> msgs2
+                return $ (map $ (True,)) $ msgs <> msgs2
     where
         run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
         run_wx_monad = flip runWxTalkerMonadE env
@@ -284,18 +292,25 @@ wxTalkerInputProcessJustInited get_st set_st env =
         if done
             then do
                 -- not in conversation
-                $logWarn $ "inited state is done?"
+                $logWarnS wxppLogSource $ "inited state is done?"
                 return []
 
             else do
                 msgs <- lift $ ExceptT $ wxTalkerInputOneStep get_st' set_st' env Nothing
-                msgs2 <- lift $ liftM (fromMaybe []) $ runMaybeT $ do
-                            new_st <- MaybeT $ run_wx_monad $ get_st'
-                            done2 <- lift $ run_wx_monad $ wxTalkIfDone new_st
-                            if done2
-                                then lift $ run_wx_monad $ wxTalkDone new_st
-                                else return []
-                return $ (map $ (True,) . Just) $ msgs <> msgs2
+                msgs2 <- if null msgs
+                            then do
+                                $logErrorS wxppLogSource $
+                                    "wxTalkerInputOneStep generate no output for newly created talk state."
+                                return []
+                            else do
+                                lift $ liftM (map Just . fromMaybe []) $ runMaybeT $ do
+                                    new_st <- MaybeT $ run_wx_monad $ get_st'
+                                    done2 <- lift $ run_wx_monad $ wxTalkIfDone new_st
+                                    if done2
+                                        then lift $ run_wx_monad $ wxTalkDone new_st
+                                        else return []
+
+                return $ (map $ (True,)) $ msgs <> msgs2
     where
         run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
         run_wx_monad = flip runWxTalkerMonadE env
@@ -327,21 +342,31 @@ instance (Eq a, TalkerState a, Monad m) => WxTalkerState r m (WrapTalkerState a)
         let (m_reply, new_s) = talkPromptNext s
         return $ (maybe [] (return . WxppOutMsgText) m_reply, WrapTalkerState new_s)
 
-    wxTalkHandleInput (WrapTalkerState s) ime = mkWxTalkerMonad $ \_ -> runExceptT $ do
+    wxTalkHandleInput old_st@(WrapTalkerState s) ime = mkWxTalkerMonad $ \_ -> runExceptT $ do
         case wxppInMessage ime of
-            WxppInMsgText t -> do
-                case parse (talkParser s) "" t of
-                    Left err -> do
-                        let (m_t, new_s) = talkNotUnderstanding s err
-                        return $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+            WxppInMsgText t -> handle_txt t
 
-                    Right (m_t, new_s) -> do
-                        return $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+            WxppInMsgVoice _ _ (Just t) -> handle_txt t
 
-            _ -> do
+            WxppInMsgVoice _ _ Nothing -> do
                 let err = newErrorMessage (Message "unknown weixin message") (initialPos "")
                 let (m_t, new_s) = talkNotUnderstanding s err
-                return $ (maybe [] (return . WxppOutMsgText) m_t, WrapTalkerState new_s)
+                return $ (maybe [] (return . Just . WxppOutMsgText) m_t, WrapTalkerState new_s)
+
+            _ -> do
+                -- 除了文字、语音之外，其它消息都认为不算是用户有意识的回答
+                -- 我们这里不处理
+                return ([], old_st)
+
+            where
+                handle_txt t = do
+                    case parse (talkParser s) "" t of
+                        Left err -> do
+                            let (m_t, new_s) = talkNotUnderstanding s err
+                            return $ (maybe [] (return . Just . WxppOutMsgText) m_t, WrapTalkerState new_s)
+
+                        Right (m_t, new_s) -> do
+                            return $ (maybe [] (return . Just . WxppOutMsgText) m_t, WrapTalkerState new_s)
 
     wxTalkIfDone (WrapTalkerState s) = mkWxTalkerMonad $ const $ return $ Right $ talkDone s
 

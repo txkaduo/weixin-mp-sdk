@@ -107,22 +107,34 @@ instance
 
     wxTalkHandleInput old_st@(ConfirmState rd_st _m_confirmed) ime =
         mkWxTalkerMonad $ \env -> runExceptT $ do
-            case wxppInMessage ime of
-                WxppInMsgText t -> do
+            let handle_txt t = do
                     case parse generalParseConfirm "" t of
                         Left err -> do
                             $logWarn $ fromString $
                                 "cannot parse user input as confirmation: " <> show err
                             liftM (, old_st) $
-                                ExceptT $ flip runWxTalkerMonad env $ toDontUnderstandMessage old_st
+                                liftM (fmap Just) $ ExceptT $ flip runWxTalkerMonad env $
+                                    toDontUnderstandMessage old_st
 
                         Right b -> do
                             let new_st = ConfirmState rd_st (Just b)
                             return $ ([], new_st)
 
-                _ -> do
+            case wxppInMessage ime of
+                WxppInMsgText t -> handle_txt t
+
+                WxppInMsgVoice _ _ (Just t) -> handle_txt t
+
+                WxppInMsgVoice _ _ Nothing -> do
                     liftM (, old_st) $
-                        ExceptT $ flip runWxTalkerMonad env $ toDontUnderstandMessage old_st
+                        liftM (fmap Just) $ ExceptT $ flip runWxTalkerMonad env $
+                            toDontUnderstandMessage old_st
+
+                _ -> do
+                    -- 除了文字、语音之外，其它消息都认为不算是用户有意识的回答
+                    -- 我们这里不处理
+                    return ([], old_st)
+
 
 
 instance ( LoadMsgMonad m
