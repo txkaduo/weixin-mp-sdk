@@ -818,17 +818,19 @@ instance FromJSON WxppOutMsg where
           _   -> fail $ "unknown type: " ++ typ
 
 
+type WxppMediaIdOrPath = Either WxppMediaID FilePath
+
 -- | 外发的信息的本地信息
 -- 因 WxppOutMsg 包含 media id，它只在上传3天内有效，这个类型的值代表的就是相应的本地长期有效的信息
 data WxppOutMsgL = WxppOutMsgTextL Text
-                | WxppOutMsgImageL FilePath
-                | WxppOutMsgVoiceL FilePath
-                | WxppOutMsgVideoL FilePath (Maybe FilePath) (Maybe Text) (Maybe Text)
+                | WxppOutMsgImageL WxppMediaIdOrPath
+                | WxppOutMsgVoiceL WxppMediaIdOrPath
+                | WxppOutMsgVideoL WxppMediaIdOrPath (Maybe WxppMediaIdOrPath) (Maybe Text) (Maybe Text)
                     -- ^ media_id thumb_image title description
                     -- XXX: 缩略图字段出现在"客服接口"文档里，
                     -- 但又没出现在回复用户消息文档里
                     -- 暂时为它留着一个字段
-                | WxppOutMsgMusicL FilePath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
+                | WxppOutMsgMusicL WxppMediaIdOrPath (Maybe Text) (Maybe Text) (Maybe UrlText) (Maybe UrlText)
                     -- ^ thumb_media_id, title, description, url, hq_url
                 | WxppOutMsgNewsL [WxppArticleLoader]
                     -- ^ 根据文档，图文总数不可超过10
@@ -837,28 +839,37 @@ data WxppOutMsgL = WxppOutMsgTextL Text
 
 type WxppOutMsgLoader = DelayedYamlLoader WxppOutMsgL
 
+parseMediaIDOrPath :: Text -> Object -> Parser WxppMediaIdOrPath
+parseMediaIDOrPath key_prefix o = (Left . WxppMediaID <$> o .: (key_prefix <> "media_id"))
+                            ClassyPrelude.<|> (Right <$> o .: (key_prefix <> "path"))
+
+parseMediaIDOrPathOpt :: Text -> Object -> Parser (Maybe WxppMediaIdOrPath)
+parseMediaIDOrPathOpt key_prefix o = (fmap (Left . WxppMediaID) <$> o .:? (key_prefix <> "media_id"))
+                            ClassyPrelude.<|> (fmap Right <$> o .:? (key_prefix <> "path"))
+
 instance FromJSON WxppOutMsgL where
     parseJSON = withObject "WxppOutMsgL" $ \obj -> do
                     type_s <- obj .:? "type" .!= "text"
                     case type_s of
                         "text" -> WxppOutMsgTextL <$> obj .: "text"
-                        "image" -> WxppOutMsgImageL . T.unpack <$> obj .: "path"
-                        "voice" -> WxppOutMsgVoiceL . T.unpack <$> obj .: "path"
+                        "image" -> WxppOutMsgImageL <$> parseMediaIDOrPath "" obj
+                        "voice" -> WxppOutMsgVoiceL <$> parseMediaIDOrPath "" obj
                         "video" -> do
-                                    path <- T.unpack <$> obj .: "path"
-                                    path2 <- fmap T.unpack <$> obj .:? "thumb-image"
-                                    title <- obj .:? "title"
-                                    desc <- obj .:? "desc"
-                                    return $ WxppOutMsgVideoL path path2 title desc
+                            media_id_or_path <- parseMediaIDOrPath "" obj
+                            thumb_media_id_or_path <- parseMediaIDOrPathOpt "thumb_" obj
+                            title <- obj .:? "title"
+                            desc <- obj .:? "desc"
+                            return $ WxppOutMsgVideoL media_id_or_path thumb_media_id_or_path title desc
+
                         "music" -> do
-                                    path <- T.unpack <$> obj .: "thumb-image"
+                                    thumb_media_id_or_path <- parseMediaIDOrPath "thumb_" obj
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
                                     url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
                                                 obj .:? "url"
                                     hq_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
                                                 obj .:? "hq-url"
-                                    return $ WxppOutMsgMusicL path title desc url hq_url
+                                    return $ WxppOutMsgMusicL thumb_media_id_or_path title desc url hq_url
 
                         "news" -> WxppOutMsgNewsL <$>
                                       ( obj .: "articles"
