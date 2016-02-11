@@ -173,22 +173,28 @@ defaultInMsgProcMiddlewares :: forall m.
     WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
-    -> [SomeWxppInMsgProcMiddleware m]
-defaultInMsgProcMiddlewares db_runner app_id down_media =
-    [
-    SomeWxppInMsgProcMiddleware $
-        (StoreInMsgToDB app_id
-            db_runner
-            (\x y z -> liftIO $ down_media x y z)
-        :: StoreInMsgToDB m
-        )
+    -> IO [SomeWxppInMsgProcMiddleware m]
+defaultInMsgProcMiddlewares db_runner app_id down_media = do
+    mvar <- newMVar Map.empty
+    return
+        [ SomeWxppInMsgProcMiddleware $
+            (IgnoreHandledInMsg
+                app_id
+                mvar
+            )
+        , SomeWxppInMsgProcMiddleware $
+            (StoreInMsgToDB app_id
+                db_runner
+                (\x y z -> liftIO $ down_media x y z)
+            :: StoreInMsgToDB m
+            )
 
-    , SomeWxppInMsgProcMiddleware $
-        (CacheAppOpenIdToUnionId
-            app_id
-            db_runner
-        )
-    ]
+        , SomeWxppInMsgProcMiddleware $
+            (CacheAppOpenIdToUnionId
+                app_id
+                db_runner
+            )
+        ]
     -- where db_runner = WxppSubDBActionRunner $ runDBWith foundation
 
 
