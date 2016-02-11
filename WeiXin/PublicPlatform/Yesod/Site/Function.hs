@@ -16,8 +16,10 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Conduit.List          as CL
+import qualified Data.Map.Strict            as Map
 import Data.Conduit
 import Database.Persist.Sql
+import Data.Time                            (addUTCTime)
 
 import Yesod.Helpers.Persist
 
@@ -179,6 +181,42 @@ instance (MonadIO m
                 _ -> return ()
 
         return $ Just (bs, m_ime)
+
+
+-- | 检查收到的信息有没有处理过，如果是，则不再处理
+data IgnoreHandledInMsg = IgnoreHandledInMsg
+                            WxppAppID
+                            (MVar (Map (WxppAppID, WxppInMsgID) UTCTime))
+
+instance (MonadIO m
+    , MonadCatch m
+    , MonadLogger m
+    , Functor m
+    , MonadBaseControl IO m
+    ) => IsWxppInMsgProcMiddleware m IgnoreHandledInMsg where
+
+    preProcInMsg (IgnoreHandledInMsg app_id map_mar) _cache bs m_ime = do
+        done_before <- case join $ wxppInMessageID <$> m_ime of
+                        Nothing -> return False
+                        Just msg_id -> do
+                          liftIO $ withMVar map_mar $
+                                    \the_map -> return $! Map.member (app_id, msg_id) the_map
+        if done_before
+          then return Nothing
+          else return $ Just (bs, m_ime)
+
+    postProcInMsg (IgnoreHandledInMsg app_id map_mar) _bs m_ime res = do
+        case join $ wxppInMessageID <$> m_ime of
+          Nothing -> return ()
+          Just msg_id -> do
+            now <- liftIO getCurrentTime
+            let dt = addUTCTime (negate $ fromIntegral (600 :: Int)) now
+            liftIO $ modifyMVar_ map_mar $
+                      \the_map -> do
+                        -- remove histories that are long ago
+                        let the_map' = Map.filter (< dt) the_map
+                        return $! Map.insert (app_id, msg_id) now the_map'
+        return res
 
 -- | 下载多媒体文件，保存至数据库
 downloadSaveMediaToDB ::
