@@ -154,16 +154,10 @@ class Monad m => IsWxppInMsgProcMiddleware m a where
         -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
     preProcInMsg _ _ bs m_ime = return (Just (bs, m_ime))
 
-    {-
     postProcInMsg :: a
         -> WxppInMsgHandlerResult
-        -> m (Maybe WxppInMsgHandlerResult)
-    default postProcInMsg :: Monad m =>
-        a
-        -> WxppInMsgHandlerResult
-        -> m (Maybe WxppInMsgHandlerResult)
-    postProcInMsg _ x = return $ Just x
-    --}
+        -> m WxppInMsgHandlerResult
+    postProcInMsg _ x = return x
 
 
 data SomeWxppInMsgProcMiddleware m =
