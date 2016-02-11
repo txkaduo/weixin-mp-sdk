@@ -53,7 +53,7 @@ data WxppSub =
                 , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler IO
-                , wxppPreProcessInMsg   :: ( LB.ByteString
+                , wxppSubPreProcessInMsg :: ( LB.ByteString
                                                 -- ^ raw data of message (unparsed)
                                             -> Maybe WxppInMsgEntity
                                                 -- ^ this is nothing only if caller cannot parse the message

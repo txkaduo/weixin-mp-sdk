@@ -151,7 +151,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                         return Nothing
                     Right x -> return $ Just x
 
-        pre_result <- liftIO $ wxppPreProcessInMsg foundation decrypted_xml0 m_ime0
+        pre_result <- liftIO $ wxppSubPreProcessInMsg foundation decrypted_xml0 m_ime0
         case pre_result of
             Left err -> do
                 $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
