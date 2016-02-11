@@ -142,7 +142,7 @@ data SomeWxppInMsgHandlerRouter m =
             SomeWxppInMsgHandlerRouter p
 
 
-class IsWxppInMsgProcMiddleware m a where
+class Monad m => IsWxppInMsgProcMiddleware m a where
     preProcInMsg ::
         (WxppCacheTokenReader c, WxppCacheTemp c) =>
         a
@@ -152,6 +152,7 @@ class IsWxppInMsgProcMiddleware m a where
         -> Maybe WxppInMsgEntity
             -- ^ this is nothing only if caller cannot parse the message
         -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+    preProcInMsg _ _ bs m_ime = return (Just (bs, m_ime))
 
     {-
     postProcInMsg :: a
