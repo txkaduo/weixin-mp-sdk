@@ -155,7 +155,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
         case pre_result of
             Left err -> do
                 $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
-                return ("程序内部错误，请稍后重试", [])
+                throwE "程序内部错误，请稍后重试"
 
             Right Nothing -> do
                 $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
