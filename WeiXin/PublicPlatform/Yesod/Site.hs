@@ -175,7 +175,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
 
                 let post_handle_msg = wxppSubPostProcessInMsg foundation
                 out_res <- ExceptT $
-                        tryAny (liftIO $ post_handle_msg out_res0)
+                        tryAny (liftIO $ post_handle_msg decrypted_xml m_ime out_res0)
                             >>= \err_or_x -> do
                                     case err_or_x of
                                       Left err -> do

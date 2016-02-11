@@ -61,7 +61,12 @@ data WxppSub =
                                                     (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
                                                     )
                                             )
-                , wxppSubPostProcessInMsg :: ( WxppInMsgHandlerResult
+                , wxppSubPostProcessInMsg :: ( LB.ByteString
+                                                -- ^ raw data of message (unparsed)
+                                                -> Maybe WxppInMsgEntity
+                                                -- ^ this is nothing only if caller cannot parse the message
+
+                                                -> WxppInMsgHandlerResult
                                                 -> IO (Either String WxppInMsgHandlerResult)
                                             )
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a

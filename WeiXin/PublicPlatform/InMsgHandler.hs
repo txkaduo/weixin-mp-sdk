@@ -155,9 +155,13 @@ class Monad m => IsWxppInMsgProcMiddleware m a where
     preProcInMsg _ _ bs m_ime = return (Just (bs, m_ime))
 
     postProcInMsg :: a
+        -> LB.ByteString
+            -- ^ raw data of message (unparsed)
+        -> Maybe WxppInMsgEntity
+            -- ^ this is nothing only if caller cannot parse the message
         -> WxppInMsgHandlerResult
         -> m WxppInMsgHandlerResult
-    postProcInMsg _ x = return x
+    postProcInMsg _ _ _ x = return x
 
 
 data SomeWxppInMsgProcMiddleware m =
@@ -299,11 +303,15 @@ preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) cache bs m_ime =
 
 postProcessInMsgByMiddlewares :: (Monad m) =>
     [SomeWxppInMsgProcMiddleware m]
+    -> LB.ByteString
+        -- ^ raw data of message (unparsed)
+    -> Maybe WxppInMsgEntity
+        -- ^ this is nothing only if caller cannot parse the message
     -> WxppInMsgHandlerResult
     -> m WxppInMsgHandlerResult
-postProcessInMsgByMiddlewares [] res = return res
-postProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) res =
-    postProcInMsg x res >>= postProcessInMsgByMiddlewares xs
+postProcessInMsgByMiddlewares [] _bs _m_ime res = return res
+postProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) bs m_ime res =
+    postProcInMsg x bs m_ime res >>= postProcessInMsgByMiddlewares xs bs m_ime
 
 
 tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b
