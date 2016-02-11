@@ -119,6 +119,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                     (send_msg app_id)
                     (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
                     (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
+                    (\x1 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1)
                     (runLoggingTWith foundation)
                     opts
     where

@@ -297,6 +297,14 @@ preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) cache bs m_ime =
             (bs', m_ime') <- MaybeT $ preProcInMsg x cache bs m_ime
             MaybeT $ preProcessInMsgByMiddlewares xs cache bs' m_ime'
 
+postProcessInMsgByMiddlewares :: (Monad m) =>
+    [SomeWxppInMsgProcMiddleware m]
+    -> WxppInMsgHandlerResult
+    -> m WxppInMsgHandlerResult
+postProcessInMsgByMiddlewares [] res = return res
+postProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) res =
+    postProcInMsg x res >>= postProcessInMsgByMiddlewares xs
+
 
 tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b
 tryYamlExcE f =

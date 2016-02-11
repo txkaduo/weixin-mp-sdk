@@ -163,9 +163,26 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
 
             Right (Just (decrypted_xml, m_ime)) -> do
                 let handle_msg      = wxppSubMsgHandler foundation
+                out_res0 <- ExceptT $
+                        tryAny (liftIO $ handle_msg decrypted_xml m_ime)
+                            >>= \err_or_x -> do
+                                    case err_or_x of
+                                      Left err -> do
+                                        $logErrorS wxppLogSource $
+                                            "error when handling incoming message: " <> tshow err
+                                        return $ Left $ show err
+                                      Right x -> return x
+
+                let post_handle_msg = wxppSubPostProcessInMsg foundation
                 out_res <- ExceptT $
-                        (tryAny $ liftIO $ handle_msg decrypted_xml m_ime)
-                            >>= return . either (Left . show) id
+                        tryAny (liftIO $ post_handle_msg out_res0)
+                            >>= \err_or_x -> do
+                                    case err_or_x of
+                                      Left err -> do
+                                        $logErrorS wxppLogSource $
+                                            "error when post-handling incoming message: " <> tshow err
+                                        return $ Left $ show err
+                                      Right x -> return x
 
                 case m_ime of
                     Nothing -> do

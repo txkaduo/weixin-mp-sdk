@@ -61,6 +61,9 @@ data WxppSub =
                                                     (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
                                                     )
                                             )
+                , wxppSubPostProcessInMsg :: ( WxppInMsgHandlerResult
+                                                -> IO (Either String WxppInMsgHandlerResult)
+                                            )
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 }
