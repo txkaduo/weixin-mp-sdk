@@ -184,7 +184,7 @@ instance (MonadIO m
         return $ Just (bs, m_ime)
 
 
-type TrackHandledInMsgInnerMap = Map (WxppAppID, WxppInMsgID)
+type TrackHandledInMsgInnerMap = Map (WxppAppID, WxppInMsgAmostUniqueID)
                                   (UTCTime, Maybe (Either String UTCTime))
 
 -- | 检查收到的信息有没有处理过，如果是，则不再处理
@@ -201,7 +201,7 @@ instance (MonadIO m
     ) => IsWxppInMsgProcMiddleware m TrackHandledInMsg where
 
     preProcInMsg (TrackHandledInMsg _ app_id map_mar) _cache bs m_ime = do
-      case join $ wxppInMessageID <$> m_ime of
+      case almostUniqueIdOfWxppInMsgEntity <$> m_ime of
         Nothing -> do
           $logWarnS wxppLogSource $
             "could not parse incoming or no message id, message was:\n"
@@ -229,14 +229,14 @@ instance (MonadIO m
                 Nothing -> do
                   $logWarnS wxppLogSource $
                     "Duplicate incoming message before previous one could be handled successfully:"
-                    <> tshow (unWxppInMsgID msg_id)
+                    <> tshow msg_id
                   return Nothing
 
                 Just (Left _) -> do
                   -- handled before, but failed
                   $logInfoS wxppLogSource $
                     "Duplicate incoming message with previous one was handled unsuccessfully:"
-                    <> tshow (unWxppInMsgID msg_id)
+                    <> tshow msg_id
                   -- retry
                   return $ Just (bs, m_ime)
 
@@ -244,7 +244,7 @@ instance (MonadIO m
                   -- handled before, and success
                   $logInfoS wxppLogSource $
                     "Duplicate incoming message with previous one was handled successfully:"
-                    <> tshow (unWxppInMsgID msg_id)
+                    <> tshow msg_id
                   return Nothing
 
     postProcInMsg (TrackHandledInMsg slow_threshold app_id map_mar) _bs m_ime res = do
@@ -262,7 +262,7 @@ trackHandleInMsgSaveResult :: (MonadIO m, MonadLogger m)
                             -> Maybe String
                             -> m ()
 trackHandleInMsgSaveResult slow_threshold app_id map_mvar m_ime m_err = do
-  case join $ wxppInMessageID <$> m_ime of
+  case almostUniqueIdOfWxppInMsgEntity <$> m_ime of
     Nothing -> return ()
     Just msg_id -> do
       now <- liftIO getCurrentTime
@@ -283,13 +283,13 @@ trackHandleInMsgSaveResult slow_threshold app_id map_mvar m_ime m_err = do
       case m_val of
         Nothing -> do
           $logErrorS wxppLogSource $
-            "Previous handling info was not found: " <> tshow (unWxppInMsgID msg_id)
+            "Previous handling info was not found: " <> tshow msg_id
 
         Just (start_time, _) -> do
           let time_used = diffUTCTime now start_time
           when (time_used > slow_threshold) $ do
             $logWarnS wxppLogSource $
-              "Too slow to handle message " <> tshow (unWxppInMsgID msg_id)
+              "Too slow to handle message " <> tshow msg_id
               <> ", time used: "
               <> tshow (realToFrac time_used :: Float) <> " seconds."
 

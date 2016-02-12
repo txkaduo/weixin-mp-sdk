@@ -691,6 +691,14 @@ data WxppInMsgEntity = WxppInMsgEntity
                         }
                         deriving (Show, Eq)
 
+-- | 用于排重的值
+type WxppInMsgAmostUniqueID = Either WxppInMsgID (WxppOpenID, UTCTime)
+
+almostUniqueIdOfWxppInMsgEntity :: WxppInMsgEntity -> WxppInMsgAmostUniqueID
+almostUniqueIdOfWxppInMsgEntity ime = case wxppInMessageID ime of
+                                        Just msg_id -> Left msg_id
+                                        Nothing     -> Right $ (wxppInFromUserName &&& wxppInCreatedTime) ime
+
 instance ToJSON WxppInMsgEntity where
     toJSON e = object [ "to"            .= wxppInToUserName e
                       , "from"          .= wxppInFromUserName e
