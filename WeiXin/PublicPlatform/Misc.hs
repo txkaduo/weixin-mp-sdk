@@ -120,6 +120,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                     (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
                     (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
                     (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                    (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
                     (runLoggingTWith foundation)
                     opts
     where
@@ -178,7 +179,8 @@ defaultInMsgProcMiddlewares db_runner app_id down_media = do
     mvar <- newMVar Map.empty
     return
         [ SomeWxppInMsgProcMiddleware $
-            (IgnoreHandledInMsg
+            (TrackHandledInMsg
+                (fromIntegral (2 :: Int))
                 app_id
                 mvar
             )

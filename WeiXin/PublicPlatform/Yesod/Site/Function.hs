@@ -14,12 +14,13 @@ import Control.Lens
 import Network.Wreq
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
+import qualified Data.Text.Lazy             as LT
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as Map
 import Data.Conduit
 import Database.Persist.Sql
-import Data.Time                            (addUTCTime)
+import Data.Time                            (addUTCTime, diffUTCTime, NominalDiffTime)
 
 import Yesod.Helpers.Persist
 
@@ -183,40 +184,114 @@ instance (MonadIO m
         return $ Just (bs, m_ime)
 
 
+type TrackHandledInMsgInnerMap = Map (WxppAppID, WxppInMsgID)
+                                  (UTCTime, Maybe (Either String UTCTime))
+
 -- | 检查收到的信息有没有处理过，如果是，则不再处理
-data IgnoreHandledInMsg = IgnoreHandledInMsg
+data TrackHandledInMsg = TrackHandledInMsg
+                            NominalDiffTime
                             WxppAppID
-                            (MVar (Map (WxppAppID, WxppInMsgID) UTCTime))
+                            (MVar TrackHandledInMsgInnerMap)
 
 instance (MonadIO m
     , MonadCatch m
     , MonadLogger m
     , Functor m
     , MonadBaseControl IO m
-    ) => IsWxppInMsgProcMiddleware m IgnoreHandledInMsg where
+    ) => IsWxppInMsgProcMiddleware m TrackHandledInMsg where
 
-    preProcInMsg (IgnoreHandledInMsg app_id map_mar) _cache bs m_ime = do
-        done_before <- case join $ wxppInMessageID <$> m_ime of
-                        Nothing -> return False
-                        Just msg_id -> do
-                          liftIO $ withMVar map_mar $
-                                    \the_map -> return $! Map.member (app_id, msg_id) the_map
-        if done_before
-          then return Nothing
-          else return $ Just (bs, m_ime)
+    preProcInMsg (TrackHandledInMsg _ app_id map_mar) _cache bs m_ime = do
+      case join $ wxppInMessageID <$> m_ime of
+        Nothing -> do
+          $logWarnS wxppLogSource $
+            "could not parse incoming or no message id, message was:\n"
+            <> LT.toStrict (decodeUtf8 bs)
+          return $ Just (bs, m_ime)
 
-    postProcInMsg (IgnoreHandledInMsg app_id map_mar) _bs m_ime res = do
-        case join $ wxppInMessageID <$> m_ime of
-          Nothing -> return ()
-          Just msg_id -> do
-            now <- liftIO getCurrentTime
-            let dt = addUTCTime (negate $ fromIntegral (600 :: Int)) now
-            liftIO $ modifyMVar_ map_mar $
-                      \the_map -> do
-                        -- remove histories that are long ago
-                        let the_map' = Map.filter (< dt) the_map
-                        return $! Map.insert (app_id, msg_id) now the_map'
-        return res
+        Just msg_id -> do
+          now <- liftIO getCurrentTime
+          m_prev_rec <- liftIO $ modifyMVar map_mar $
+                    \the_map -> do
+                      let k = (app_id, msg_id)
+                          v = (now, Nothing)
+                      return $!
+                        case Map.lookup k the_map of
+                          Nothing     -> (Map.insert k v the_map, Nothing)
+                          Just old_v  -> (the_map, Just old_v)
+
+          case m_prev_rec of
+            Nothing -> do
+              -- 正常的情况
+              return $ Just (bs, m_ime)
+
+            Just (_prev_start, m_prev_done) -> do
+              case m_prev_done of
+                Nothing -> do
+                  $logWarnS wxppLogSource $
+                    "Duplicate incoming message before previous one could be handled successfully:"
+                    <> tshow (unWxppInMsgID msg_id)
+                  return Nothing
+
+                Just (Left _) -> do
+                  -- handled before, but failed
+                  $logInfoS wxppLogSource $
+                    "Duplicate incoming message with previous one was handled unsuccessfully:"
+                    <> tshow (unWxppInMsgID msg_id)
+                  -- retry
+                  return $ Just (bs, m_ime)
+
+                Just (Right _) -> do
+                  -- handled before, and success
+                  $logInfoS wxppLogSource $
+                    "Duplicate incoming message with previous one was handled successfully:"
+                    <> tshow (unWxppInMsgID msg_id)
+                  return Nothing
+
+    postProcInMsg (TrackHandledInMsg slow_threshold app_id map_mar) _bs m_ime res = do
+      trackHandleInMsgSaveResult slow_threshold app_id map_mar m_ime Nothing
+      return res
+
+    onProcInMsgError (TrackHandledInMsg slow_threshold app_id map_mar) _bs m_ime err = do
+      trackHandleInMsgSaveResult slow_threshold app_id map_mar m_ime (Just err)
+
+trackHandleInMsgSaveResult :: (MonadIO m, MonadLogger m)
+                            => NominalDiffTime
+                            -> WxppAppID
+                            -> MVar TrackHandledInMsgInnerMap
+                            -> Maybe WxppInMsgEntity
+                            -> Maybe String
+                            -> m ()
+trackHandleInMsgSaveResult slow_threshold app_id map_mvar m_ime m_err = do
+  case join $ wxppInMessageID <$> m_ime of
+    Nothing -> return ()
+    Just msg_id -> do
+      now <- liftIO getCurrentTime
+      let dt = addUTCTime (negate $ fromIntegral (1800 :: Int)) now
+      m_val <- liftIO $ modifyMVar map_mvar $
+                \the_map -> do
+                  let (m_val, new_map) = Map.updateLookupWithKey
+                                          (\_ -> Just . second
+                                                      (const $ Just $ maybe (Right now) Left m_err)
+                                          )
+                                          (app_id, msg_id)
+                                          the_map
+                      -- remove histories that are long ago
+                      new_map' = Map.filter ((< dt) . fst) new_map
+                  
+                  return $! (new_map', m_val)
+
+      case m_val of
+        Nothing -> do
+          $logErrorS wxppLogSource $
+            "Previous handling info was not found: " <> tshow (unWxppInMsgID msg_id)
+
+        Just (start_time, _) -> do
+          let time_used = diffUTCTime now start_time
+          when (time_used > slow_threshold) $ do
+            $logWarnS wxppLogSource $
+              "Too slow to handle message " <> tshow (unWxppInMsgID msg_id)
+              <> ", time used: "
+              <> tshow (realToFrac time_used :: Float) <> " seconds."
 
 -- | 下载多媒体文件，保存至数据库
 downloadSaveMediaToDB ::

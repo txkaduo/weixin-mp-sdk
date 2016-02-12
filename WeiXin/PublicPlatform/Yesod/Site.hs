@@ -16,7 +16,7 @@ import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
-import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
+import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
@@ -139,8 +139,8 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
         (decrypted_xml0, m_enc_akey) <-
             if enc
                 then do
-                    (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
-                        >>= maybe (throwE $ "Internal Error: no AesKey available to decrypt")
+                    (either throwError return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
+                        >>= maybe (throwError $ "Internal Error: no AesKey available to decrypt")
                                 (return . (LB.fromStrict *** Just))
                 else return (lbs, Nothing)
 
@@ -155,7 +155,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
         case pre_result of
             Left err -> do
                 $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
-                throwE "程序内部错误，请稍后重试"
+                throwError "程序内部错误，请稍后重试"
 
             Right Nothing -> do
                 $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
@@ -163,18 +163,18 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
 
             Right (Just (decrypted_xml, m_ime)) -> do
                 let handle_msg      = wxppSubMsgHandler foundation
-                out_res0 <- ExceptT $
-                        tryAny (liftIO $ handle_msg decrypted_xml m_ime)
-                            >>= \err_or_x -> do
-                                    case err_or_x of
-                                      Left err -> do
-                                        $logErrorS wxppLogSource $
-                                            "error when handling incoming message: " <> tshow err
-                                        return $ Left $ show err
-                                      Right x -> return x
+                    try_handle_msg = ExceptT $ do
+                                tryAny (liftIO $ handle_msg decrypted_xml m_ime)
+                                    >>= \err_or_x -> do
+                                            case err_or_x of
+                                              Left err -> do
+                                                $logErrorS wxppLogSource $
+                                                    "error when handling incoming message: " <> tshow err
+                                                return $ Left $ show err
+                                              Right x -> return x
 
                 let post_handle_msg = wxppSubPostProcessInMsg foundation
-                out_res <- ExceptT $
+                    do_post_handle_msg out_res0 = ExceptT $ do
                         tryAny (liftIO $ post_handle_msg decrypted_xml m_ime out_res0)
                             >>= \err_or_x -> do
                                     case err_or_x of
@@ -183,6 +183,11 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                             "error when post-handling incoming message: " <> tshow err
                                         return $ Left $ show err
                                       Right x -> return x
+
+                let do_on_error err = ExceptT $
+                                        liftIO (wxppSubOnProcessInMsgError foundation decrypted_xml m_ime err)
+                out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
+                                >>= do_post_handle_msg
 
                 case m_ime of
                     Nothing -> do

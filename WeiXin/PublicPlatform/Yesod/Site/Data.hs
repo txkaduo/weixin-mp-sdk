@@ -69,6 +69,14 @@ data WxppSub =
                                                 -> WxppInMsgHandlerResult
                                                 -> IO (Either String WxppInMsgHandlerResult)
                                             )
+                , wxppSubOnProcessInMsgError :: ( LB.ByteString
+                                                -- ^ raw data of message (unparsed)
+                                                -> Maybe WxppInMsgEntity
+                                                -- ^ this is nothing only if caller cannot parse the message
+
+                                                -> String
+                                                -> IO (Either String ())
+                                            )
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 }

@@ -163,6 +163,16 @@ class Monad m => IsWxppInMsgProcMiddleware m a where
         -> m WxppInMsgHandlerResult
     postProcInMsg _ _ _ x = return x
 
+    -- | callback when something goes wrong
+    onProcInMsgError :: a
+        -> LB.ByteString
+            -- ^ raw data of message (unparsed)
+        -> Maybe WxppInMsgEntity
+            -- ^ this is nothing only if caller cannot parse the message
+        -> String
+        -> m ()
+    onProcInMsgError _ _ _ _ = return ()
+
 
 data SomeWxppInMsgProcMiddleware m =
         forall a. IsWxppInMsgProcMiddleware m a => SomeWxppInMsgProcMiddleware a
@@ -312,6 +322,18 @@ postProcessInMsgByMiddlewares :: (Monad m) =>
 postProcessInMsgByMiddlewares [] _bs _m_ime res = return res
 postProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) bs m_ime res =
     postProcInMsg x bs m_ime res >>= postProcessInMsgByMiddlewares xs bs m_ime
+
+
+onErrorProcessInMsgByMiddlewares :: (Monad m) =>
+    [SomeWxppInMsgProcMiddleware m]
+    -> LB.ByteString
+        -- ^ raw data of message (unparsed)
+    -> Maybe WxppInMsgEntity
+        -- ^ this is nothing only if caller cannot parse the message
+    -> String
+    -> m ()
+onErrorProcessInMsgByMiddlewares xs bs m_ime err =
+    forM_ xs $ \(SomeWxppInMsgProcMiddleware x) -> onProcInMsgError x bs m_ime err
 
 
 tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b
