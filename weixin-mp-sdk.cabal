@@ -137,6 +137,7 @@ library
                      , monad-control
                      , http-types
                      , blaze-builder
+                     , blaze-html
                      , network
                      , StateVar
                      , haskell-qrencode
