@@ -29,6 +29,7 @@ import Database.Persist                     (PersistValue)
 import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
 import Data.Proxy                           (Proxy(..))
+import Text.Shakespeare.I18N                (ToMessage(..))
 import Language.Haskell.TH.Lift             (deriveLift)
 
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
@@ -49,7 +50,7 @@ import WeiXin.PublicPlatform.Utils
 
 -- | 微信用户名
 newtype WeixinUserName = WeixinUserName { unWeixinUserName :: Text }
-                        deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+                        deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql, ToMessage)
 
 
 -- | 用户分组的ID
@@ -59,16 +60,16 @@ newtype WxppUserGroupID = WxppUserGroupID { unWxppUserGroupID :: Int }
 
 -- | 卡券ID
 newtype WxCardID = WxCardID { unWxCardID :: Text }
-                    deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql)
+                    deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql, ToMessage)
 
 -- | 客服帐号
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
-                        deriving (Show, Eq, Ord)
+                        deriving (Show, Eq, Ord, ToMessage)
 
 
 -- | 为区分临时素材和永久素材，这个值专指 临时素材
 newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
-                        deriving (Show, Eq, Ord)
+                        deriving (Show, Eq, Ord, ToMessage)
 
 instance SafeCopy WxppBriefMediaID where
     getCopy                         = contain $ WxppBriefMediaID <$> safeGet
@@ -92,7 +93,7 @@ instance FromJSON WxppBriefMediaID where
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
 -- 虽然文档叫这种值 media id，但接口用的词是 material
 newtype WxppDurableMediaID = WxppDurableMediaID { unWxppDurableMediaID :: Text }
-                        deriving (Show, Eq, Ord, Read)
+                        deriving (Show, Eq, Ord, Read, ToMessage)
 
 instance SafeCopy WxppDurableMediaID where
     getCopy                         = contain $ WxppDurableMediaID <$> safeGet
@@ -118,7 +119,7 @@ instance PathPiece WxppDurableMediaID where
 
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, ToMessage)
 $(deriveLift ''WxppMediaID)
 
 fromWxppBriefMediaID :: WxppBriefMediaID -> WxppMediaID
@@ -135,7 +136,7 @@ instance FromJSON WxppMediaID where
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
-                    deriving (Show, Read, Eq, Ord, Typeable)
+                    deriving (Show, Read, Eq, Ord, Typeable, ToMessage)
 
 instance SafeCopy WxppOpenID where
     getCopy                 = contain $ WxppOpenID <$> safeGet
@@ -163,7 +164,7 @@ instance PathPiece WxppOpenID where
                                           else WxppOpenID <$> fromPathPiece t'
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
-                    deriving (Show, Read, Eq, Ord, Typeable)
+                    deriving (Show, Read, Eq, Ord, Typeable, ToMessage)
 
 instance FromJSON WxppUnionID where
     parseJSON = fmap WxppUnionID . parseJSON
@@ -211,7 +212,7 @@ newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
                     deriving (Show, Eq, Ord)
 
 newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, ToMessage)
 
 data WxppScene =    WxppSceneInt WxppIntSceneID
                     | WxppSceneStr WxppStrSceneID
@@ -276,7 +277,7 @@ instance SimpleStringRep WxppScene where
 
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, ToMessage)
 
 instance ToJSON QRTicket where
     toJSON = toJSON . unQRTicket
@@ -293,7 +294,7 @@ instance PersistFieldSql QRTicket where
 
 
 newtype Token = Token { unToken :: Text }
-                    deriving (Show, Eq, Ord, PersistFieldSql, PersistField)
+                    deriving (Show, Eq, Ord, PersistFieldSql, PersistField, ToMessage)
 
 newtype AesKey = AesKey { unAesKey :: Key AES }
                     deriving (Eq)
@@ -308,6 +309,9 @@ instance PersistField AesKey where
 
 instance PersistFieldSql AesKey where
     sqlType _ = sqlType (Proxy :: Proxy ByteString)
+
+instance ToMessage AesKey where
+    toMessage (AesKey k) = T.filter (/= '=') $ decodeUtf8 $ B64.encode $ toBytes k
 
 decodeBase64Encoded :: Text -> Either String ByteString
 decodeBase64Encoded = B64.decode . encodeUtf8
@@ -329,10 +333,10 @@ newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
                     deriving (Show, Eq)
 
 newtype Nonce = Nonce { unNounce :: Text }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, ToMessage)
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
-                    deriving (Show, Eq, Ord, Typeable)
+                    deriving (Show, Eq, Ord, Typeable, ToMessage)
 
 instance SafeCopy WxppAppID where
     getCopy                 = contain $ WxppAppID <$> safeGet
@@ -386,7 +390,7 @@ instance FromJSON AccessToken where
 type AccessTokenP = WxppAppID -> AccessToken
 
 newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
-                    deriving (Show, Eq, PersistFieldSql, PersistField)
+                    deriving (Show, Eq, PersistFieldSql, PersistField, ToMessage)
 
 data WxppAppConfig = WxppAppConfig {
                     wxppConfigAppID         :: WxppAppID
