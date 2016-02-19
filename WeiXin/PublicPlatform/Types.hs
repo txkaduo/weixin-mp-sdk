@@ -405,6 +405,10 @@ newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
                              , ToMessage, ToMarkup
                              )
 
+instance ToJSON WxppAppSecret where toJSON = toJSON . unWxppAppSecret
+
+instance FromJSON WxppAppSecret where parseJSON = fmap WxppAppSecret . parseJSON
+
 data WxppAppConfig = WxppAppConfig {
                     wxppConfigAppID         :: WxppAppID
                     , wxppConfigAppSecret   :: WxppAppSecret
