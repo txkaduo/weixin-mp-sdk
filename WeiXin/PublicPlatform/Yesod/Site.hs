@@ -249,6 +249,24 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                 Right xdoc  -> return xdoc
 
 
+-- | 生成随机字串作为 oauth 的state参数之用
+-- 这是按官方文档的思路，用于防 csrf
+-- 所生成的随机字串会放在 sessionKeyWxppOAuthState 会话变量里
+wxppOAuthMakeRandomState :: (MonadHandler m, MonadIO m)
+                        => WxppAppID
+                        -> m Text
+wxppOAuthMakeRandomState app_id = do
+    m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
+    case m_oauth_random_st of
+        Just x | not (null x) -> do
+            return x
+        _   -> do
+            random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $
+                                fmap B.pack $ replicateM 8 randomIO
+            setSession (sessionKeyWxppOAuthState app_id) random_state
+            return random_state
+
+
 wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
                         => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
                         -> WxppAppID
@@ -257,15 +275,7 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
                         -> UrlText          -- ^ return URL
                         -> m UrlText
 wxppOAuthLoginRedirectUrl url_render_io app_id scope user_st return_url = do
-    m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
-    random_state <- case m_oauth_random_st of
-                        Just x | not (null x) -> do
-                            return x
-                        _   -> do
-                            random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $ fmap B.pack $ replicateM 8 randomIO
-                            setSession (sessionKeyWxppOAuthState app_id) random_state
-                            return random_state
-
+    random_state <- wxppOAuthMakeRandomState app_id
     let state = random_state <> ":" <> user_st
 
     oauth_retrurn_url <- liftIO $ liftM UrlText $
