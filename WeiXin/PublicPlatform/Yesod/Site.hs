@@ -268,18 +268,18 @@ wxppOAuthMakeRandomState app_id = do
 
 
 wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
-                        => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
+                        => (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                         -> WxppAppID
                         -> OAuthScope
                         -> Text             -- ^ oauth's state param
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOAuthLoginRedirectUrl url_render_io app_id scope user_st return_url = do
+wxppOAuthLoginRedirectUrl url_render app_id scope user_st return_url = do
     random_state <- wxppOAuthMakeRandomState app_id
     let state = random_state <> ":" <> user_st
 
-    oauth_retrurn_url <- liftIO $ liftM UrlText $
-                            url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
+    oauth_retrurn_url <- liftM UrlText $
+                            url_render OAuthCallbackR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
                         oauth_retrurn_url
                         state
@@ -386,12 +386,12 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
                 , WxppCacheTokenReader c, WxppCacheTemp c)
                 => c
-                -> (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
+                -> (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                 -> WxppAppID
                 -> OAuthScope
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
-wxppOAuthHandler cache render_url_io app_id scope f = do
+wxppOAuthHandler cache render_url app_id scope f = do
     m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
     case m_atk_p of
         Nothing -> do
@@ -399,7 +399,7 @@ wxppOAuthHandler cache render_url_io app_id scope f = do
             unless is_wx $ do
                 permissionDenied "请用在微信里打开此网页"
             url <- getCurrentUrl
-            wxppOAuthLoginRedirectUrl render_url_io app_id scope "" (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url app_id scope "" (UrlText url)
                 >>= redirect . unUrlText
         Just atk_p -> f atk_p
 
