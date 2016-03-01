@@ -81,6 +81,7 @@ library
                        ConstraintKinds
                        TupleSections
                        RankNTypes
+                       DeriveGeneric
 
 
   build-depends:       base >=4.7
@@ -150,6 +151,7 @@ library
                      , HTTP
                      , vector
                      , cereal
+                     , binary
                      , hash-tx-utils
                      , parsec-tx-utils
 

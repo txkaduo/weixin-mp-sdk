@@ -16,6 +16,7 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 -- import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
+import Data.Binary                          (Binary)
 import Data.Byteable                        (toBytes)
 import Data.Char                            (isSpace)
 import Crypto.Cipher                        (makeKey, Key)
@@ -169,7 +170,8 @@ instance PathPiece WxppOpenID where
                                           else WxppOpenID <$> fromPathPiece t'
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
-                    deriving (Show, Read, Eq, Ord, Typeable, ToMessage, ToMarkup)
+                    deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance FromJSON WxppUnionID where
     parseJSON = fmap WxppUnionID . parseJSON
@@ -347,7 +349,8 @@ newtype Nonce = Nonce { unNounce :: Text }
                     deriving (Show, Eq, ToMessage, ToMarkup)
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
-                    deriving (Show, Eq, Ord, Typeable, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance SafeCopy WxppAppID where
     getCopy                 = contain $ WxppAppID <$> safeGet
