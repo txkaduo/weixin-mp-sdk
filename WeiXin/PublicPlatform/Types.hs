@@ -17,6 +17,7 @@ import qualified Data.ByteString.Char8      as C8
 -- import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
 import Data.Binary                          (Binary)
+import Data.Binary.Orphans                  ()
 import Data.Byteable                        (toBytes)
 import Data.Char                            (isSpace)
 import Crypto.Cipher                        (makeKey, Key)
@@ -75,7 +76,8 @@ newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
 
 -- | 为区分临时素材和永久素材，这个值专指 临时素材
 newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
-                        deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+                        deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                                 , ToMessage, ToMarkup)
 
 instance SafeCopy WxppBriefMediaID where
     getCopy                         = contain $ WxppBriefMediaID <$> safeGet
@@ -142,7 +144,8 @@ instance FromJSON WxppMediaID where
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
-                    deriving (Show, Read, Eq, Ord, Typeable, ToMessage, ToMarkup)
+                    deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance SafeCopy WxppOpenID where
     getCopy                 = contain $ WxppOpenID <$> safeGet
@@ -196,7 +199,8 @@ instance PathPiece WxppUnionID where
     fromPathPiece t             = WxppUnionID <$> fromPathPiece t
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
-                    deriving (Show, Eq, Ord, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMarkup)
 
 instance PersistField WxppInMsgID where
     toPersistValue      = toPersistValue . unWxppInMsgID
@@ -216,14 +220,17 @@ instance FromJSON WxppInMsgID where
 -- 从文档“生成带参数的二维码”一文中看
 -- 场景ID可以是个32位整数，也可以是个字串。有若干约束。
 newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
-                    deriving (Show, Eq, Ord, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary, ToMarkup)
 
 newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
-                    deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 data WxppScene =    WxppSceneInt WxppIntSceneID
                     | WxppSceneStr WxppStrSceneID
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, Typeable, Generic)
+
+instance Binary WxppScene
 
 instance ToJSON WxppScene where
     toJSON (WxppSceneInt (WxppIntSceneID x)) = object [ "scene_id" .= x ]
@@ -284,7 +291,8 @@ instance SimpleStringRep WxppScene where
 
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
-                    deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance ToJSON QRTicket where
     toJSON = toJSON . unQRTicket
@@ -457,7 +465,9 @@ instance FromJSON WxppAppConfig where
 data GroupSendStatus =    GroupSendSuccess
                         | GroupSendFail
                         | GroupSendError Int
-                        deriving (Show, Eq)
+                        deriving (Show, Eq, Typeable, Generic)
+
+instance Binary GroupSendStatus
 
 $(deriveJsonS "GroupSendStatus")
 
@@ -496,7 +506,9 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtFollowUrl UrlText
                 | WxppEvtGroupSendReport GroupSendStatus Int Int Int Int
                     -- ^ status, total, filter count, sent count, error count
-                deriving (Show, Eq)
+                deriving (Show, Eq, Typeable, Generic)
+
+instance Binary WxppEvent
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
 wxppEventTypeString WxppEvtSubscribe              = "subscribe"
@@ -615,7 +627,9 @@ data WxppInMsg =  WxppInMsgText Text
                 | WxppInMsgLink UrlText Text Text
                     -- ^ url title description
                 | WxppInMsgEvent WxppEvent
-                deriving (Show, Eq)
+                deriving (Show, Eq, Typeable, Generic)
+
+instance Binary WxppInMsg
 
 wxppInMsgTypeString :: IsString a => WxppInMsg -> a
 wxppInMsgTypeString (WxppInMsgText {})      = "text"
@@ -713,7 +727,8 @@ data WxppInMsgEntity = WxppInMsgEntity
                                 -- ^ 从文档看，除了事件通知，所有信息都有 MsgID
                             , wxppInMessage         :: WxppInMsg
                         }
-                        deriving (Show, Eq)
+                        deriving (Show, Eq, Typeable, Generic)
+instance Binary WxppInMsgEntity
 
 -- | 用于排重的值
 type WxppInMsgAmostUniqueID = Either WxppInMsgID (WxppOpenID, UTCTime)

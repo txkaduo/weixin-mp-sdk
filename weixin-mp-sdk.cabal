@@ -152,6 +152,7 @@ library
                      , vector
                      , cereal
                      , binary
+                     , binary-orphans
                      , hash-tx-utils
                      , parsec-tx-utils
 
