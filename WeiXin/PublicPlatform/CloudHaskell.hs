@@ -1,4 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
 module WeiXin.PublicPlatform.CloudHaskell where
 
 import           ClassyPrelude                      hiding (newChan)
@@ -63,7 +62,8 @@ instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
 
 
 -- | A message handler that send WxppInMsgEntity to peers and wait for responses
-data DelegateInMsgToCloud = DelegateInMsgToCloud
+data DelegateInMsgToCloud (m :: * -> *) =
+                          DelegateInMsgToCloud
                               SimpleCloudBackend
                               String
                                 -- ^ Process name that should receive forwarded message
@@ -74,8 +74,8 @@ data DelegateInMsgToCloud = DelegateInMsgToCloud
                                 -- ^ timeout (ms) when handling message with Cloud Haskell
                                 -- 配置时用的单位是秒，浮点数
 
-instance JsonConfigable DelegateInMsgToCloud where
-    type JsonConfigableUnconfigData DelegateInMsgToCloud = SimpleCloudBackend
+instance JsonConfigable (DelegateInMsgToCloud m) where
+    type JsonConfigableUnconfigData (DelegateInMsgToCloud m) = SimpleCloudBackend
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
@@ -91,10 +91,10 @@ instance JsonConfigable DelegateInMsgToCloud where
                                           o .:? "timeout2" .!= (5 :: Float)
                                       )
 
-type instance WxppInMsgProcessResult DelegateInMsgToCloud = WxppInMsgHandlerResult
+type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandlerResult
 
 instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
-  => IsWxppInMsgProcessor m DelegateInMsgToCloud where
+  => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
       (DelegateInMsgToCloud (SimpleCloudBackend new_local_node find_peers) pname t1 t2)
       _cache bs m_ime = do
