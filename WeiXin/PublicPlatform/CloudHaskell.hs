@@ -1,6 +1,7 @@
 module WeiXin.PublicPlatform.CloudHaskell where
 
 import           ClassyPrelude                      hiding (newChan)
+import qualified Data.ByteString.Lazy               as LB
 import           Control.Monad.Logger
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans.Control        (MonadBaseControl)
@@ -22,6 +23,7 @@ data SimpleCloudBackend = SimpleCloudBackend
 
 -- | A middleware to send event notifications of some types to the cloud (async)
 data TeeEventToCloud = TeeEventToCloud
+                          WxppAppID
                           SimpleCloudBackend
                           String
                             -- ^ Process name that should receive forwarded message
@@ -30,20 +32,21 @@ data TeeEventToCloud = TeeEventToCloud
                             -- if null, forward all.
 
 instance JsonConfigable TeeEventToCloud where
-    type JsonConfigableUnconfigData TeeEventToCloud = SimpleCloudBackend
+    type JsonConfigableUnconfigData TeeEventToCloud =
+            (WxppAppID, SimpleCloudBackend)
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
     -- 然后从 json 数据中反解出相应的值
     isNameOfInMsgHandler _ = (== "tee-to-cloud")
 
-    parseWithExtraData _ x o = TeeEventToCloud x
+    parseWithExtraData _ (x1, x2) o = TeeEventToCloud x1 x2
                                         <$> o .: "receive-proc-name"
                                         <*> o .: "event-types"
 
 instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
-      (TeeEventToCloud (SimpleCloudBackend new_local_node find_peers) pname evt_types)
+      (TeeEventToCloud app_id (SimpleCloudBackend new_local_node find_peers) pname evt_types)
       _cache bs m_ime = do
           forM_ m_ime $ \ime -> do
             case wxppInMessage ime of
@@ -54,7 +57,8 @@ instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
                   liftIO $ runProcess node $ do
                     my_pid <- getSelfPid
                     forM_ peers $ \nid -> do
-                      nsendRemote nid pname (my_pid, ime)
+                      let msg = WrapInMsgHandlerInput app_id bs ime
+                      nsendRemote nid pname (my_pid, msg)
 
               _ -> return ()
 
@@ -64,6 +68,7 @@ instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
 -- | A message handler that send WxppInMsgEntity to peers and wait for responses
 data DelegateInMsgToCloud (m :: * -> *) =
                           DelegateInMsgToCloud
+                              WxppAppID
                               SimpleCloudBackend
                               String
                                 -- ^ Process name that should receive forwarded message
@@ -75,14 +80,15 @@ data DelegateInMsgToCloud (m :: * -> *) =
                                 -- 配置时用的单位是秒，浮点数
 
 instance JsonConfigable (DelegateInMsgToCloud m) where
-    type JsonConfigableUnconfigData (DelegateInMsgToCloud m) = SimpleCloudBackend
+    type JsonConfigableUnconfigData (DelegateInMsgToCloud m) =
+            (WxppAppID, SimpleCloudBackend)
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
     -- 然后从 json 数据中反解出相应的值
     isNameOfInMsgHandler _ = (== "deletgate-to-cloud")
 
-    parseWithExtraData _ x o = DelegateInMsgToCloud x
+    parseWithExtraData _ (x1, x2) o = DelegateInMsgToCloud x1 x2
                                   <$> o .: "receive-proc-name"
                                   <*> (fmap (round . (* 1000000)) $
                                           o .:? "timeout1" .!= (5 :: Float)
@@ -96,7 +102,7 @@ type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandler
 instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
-      (DelegateInMsgToCloud (SimpleCloudBackend new_local_node find_peers) pname t1 t2)
+      (DelegateInMsgToCloud app_id (SimpleCloudBackend new_local_node find_peers) pname t1 t2)
       _cache bs m_ime = do
         case m_ime of
           Nothing   -> return $ Right []
@@ -111,7 +117,8 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
 
             let send_recv pid = do
                   (send_port, recv_port) <- newChan
-                  send pid $ ((bs, ime), send_port)
+                  let msg = WrapInMsgHandlerInput app_id bs ime
+                  send pid (msg, send_port)
                   receiveChan recv_port
 
             let get_answer = runMaybeT $ do
@@ -146,6 +153,13 @@ data WxppElectInMsgHandlerR = WxppElectInMsgHandlerR ProcessId
                             deriving (Typeable, Generic)
 instance Binary WxppElectInMsgHandlerR
 
+-- | Cloud message that wraps incoming message info
+data WrapInMsgHandlerInput = WrapInMsgHandlerInput
+                                WxppAppID
+                                LB.ByteString
+                                WxppInMsgEntity
+                            deriving (Typeable, Generic)
+instance Binary WrapInMsgHandlerInput
 
 runProcessTimeout :: Int -> LocalNode -> Process a -> IO (Maybe a)
 runProcessTimeout t node proc = do
