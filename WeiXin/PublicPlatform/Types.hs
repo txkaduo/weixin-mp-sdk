@@ -127,7 +127,8 @@ instance PathPiece WxppDurableMediaID where
 
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
-                    deriving (Show, Eq, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 $(deriveLift ''WxppMediaID)
 
 fromWxppBriefMediaID :: WxppBriefMediaID -> WxppMediaID
@@ -763,7 +764,8 @@ data WxppArticle = WxppArticle {
                     , wxppArticlePicUrl :: Maybe UrlText -- ^ pic url
                     , wxppArticleUrl    :: Maybe UrlText -- ^ url
                     }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, Typeable, Generic)
+instance Binary WxppArticle
 $(deriveLift ''WxppArticle)
 
 instance ToJSON WxppArticle where
@@ -801,8 +803,9 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerService
                     -- ^ 把信息转发至客服
-                deriving (Show, Eq)
+                deriving (Show, Eq, Typeable, Generic)
 
+instance Binary WxppOutMsg
 $(deriveLift ''WxppOutMsg)
 
 wxppOutMsgTypeString :: IsString a => WxppOutMsg -> a
