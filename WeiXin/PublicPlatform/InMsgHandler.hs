@@ -182,6 +182,22 @@ data WxppInMsgProcMiddlewarePrototype m =
                 WxppInMsgProcMiddlewarePrototype (Proxy a) (JsonConfigableUnconfigData a)
 
 
+-- | 一种可调用任意指定函数的middleware
+-- 但因为太任意，不方便给定一个固定的名字，
+-- 所以目前不能从配置文件中选择性地引入(即readWxppInMsgProcMiddlewares)
+-- 而是要写死在 Haskell 代码里
+data WrapPreProcMsg m = WrapPreProcMsg
+                          (forall c.(WxppCacheTokenReader c, WxppCacheTemp c)
+                            => c
+                            -> LB.ByteString
+                            -> Maybe WxppInMsgEntity
+                            -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+                          )
+
+instance Monad m => IsWxppInMsgProcMiddleware m (WrapPreProcMsg m) where
+  preProcInMsg (WrapPreProcMsg f) = f
+
+
 -- | 用于在配置文件中，读取出一系列响应算法
 parseWxppInMsgProcessors ::
     [WxppInMsgProcessorPrototype r m]
