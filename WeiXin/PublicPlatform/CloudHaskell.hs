@@ -3,7 +3,7 @@ module WeiXin.PublicPlatform.CloudHaskell where
 import           ClassyPrelude                      hiding (newChan)
 import qualified Data.ByteString.Lazy               as LB
 import           Control.Monad.Logger
-import           Control.Monad.Trans.Maybe
+import           Control.Monad.Except               (runExceptT, throwError)
 import           Control.Monad.Trans.Control        (MonadBaseControl)
 import           Control.Distributed.Process
 import           Control.Distributed.Process.Node
@@ -105,12 +105,17 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
       (DelegateInMsgToCloud app_id (SimpleCloudBackend new_local_node find_peers) pname t1 t2)
-      _cache bs m_ime = do
+      _cache bs m_ime = runExceptT $ do
         case m_ime of
-          Nothing   -> return $ Right []
+          Nothing   -> return []
           Just ime  -> do
             node <- liftIO new_local_node
             peers <- liftIO find_peers
+            when (null peers) $ do
+              let msg = "no peers available in cloud haskell"
+              $logErrorS wxppLogSource $ fromString msg
+              throwError msg
+
             let select_pid = do
                   my_pid <- getSelfPid
                   forM_ peers $ \nid -> nsendRemote nid pname $ WxppElectInMsgHandler my_pid
@@ -123,25 +128,36 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
                   send pid (msg, send_port)
                   receiveChan recv_port
 
-            let get_answer = runMaybeT $ do
-                  pid <- MaybeT (runProcessTimeout t1 node select_pid)
-                  MaybeT $ runProcessTimeout t2 node $ send_recv pid
+            let get_answer = do
+                  m_pid <- liftIO (runProcessTimeout t1 node select_pid)
+                  case m_pid of
+                    Nothing -> do
+                      let msg = "No volunteer in clould response in time to handle msg"
+                                  <> ", timeout was "
+                                  <> show (fromIntegral t1 / 1000 / 1000 :: Float)
+                      $logErrorS wxppLogSource $ fromString msg
+                      throwError msg
+
+                    Just pid -> do
+                      m_res <- liftIO $ runProcessTimeout t2 node $ send_recv pid
+
+                      case m_res of
+                        Nothing -> do
+                          let msg = "Clould response timed-out when handling msg"
+                                      <> ", timeout was "
+                                      <> show (fromIntegral t2 / 1000 / 1000 :: Float)
+                          $logErrorS wxppLogSource $ fromString msg
+                          throwError msg
+
+                        Just res -> return res
 
             let handle_err err = do
-                  $logErrorS wxppLogSource $
-                    "got exception when running cloud-haskell code: "
-                    <> tshow err
-                  return $ Left $ show err
+                  let msg = "got exception when running cloud-haskell code: "
+                              <> show err
+                  $logErrorS wxppLogSource $ fromString msg
+                  throwError msg
 
-            let handle_timeout = do
-                  $logErrorS wxppLogSource $
-                    "Timed-out when running cloud-haskell code: "
-                    <> "timeout1=" <> tshow (fromIntegral t1 / 1000 / 1000 :: Float)
-                    <> ", timeout2=" <> tshow (fromIntegral t2 / 1000 / 1000 :: Float)
-                  return $ Left "timed-out in cloud"
-
-            (liftIO get_answer >>= maybe handle_timeout return)
-              `catchAny` handle_err
+            get_answer `catchAny` handle_err
 
 
 -- | A message to tell all candidate processes to response
