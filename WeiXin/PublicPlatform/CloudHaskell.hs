@@ -66,8 +66,10 @@ instance (MonadIO m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToClo
                        liftIO $ runProcess node $ do
                          my_pid <- getSelfPid
                          forM_ peers $ \nid -> do
+                           -- 注意：WrapInMsgHandlerInput 消息下面也有用到
+                           --       这里只发 WrapInMsgHandlerInput ，接收者无法回复
                            let msg = WrapInMsgHandlerInput app_id bs ime
-                           nsendRemote nid pname (my_pid, msg)
+                           nsendRemote nid pname msg
 
               _ -> return ()
 
