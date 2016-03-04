@@ -49,7 +49,7 @@ instance JsonConfigable TeeEventToCloud where
                                         <$> o .: "receive-proc-name"
                                         <*> o .: "event-types"
 
-instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
+instance (MonadIO m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
       (TeeEventToCloud app_id (CloudBackendInfo new_local_node find_peers) pname evt_types)
       _cache bs m_ime = do
@@ -57,13 +57,17 @@ instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
             case wxppInMessage ime of
               WxppInMsgEvent evt -> do
                 when (null evt_types || wxppEventTypeString evt `elem` evt_types) $ do
-                  node <- liftIO new_local_node
                   peers <- liftIO find_peers
-                  liftIO $ runProcess node $ do
-                    my_pid <- getSelfPid
-                    forM_ peers $ \nid -> do
-                      let msg = WrapInMsgHandlerInput app_id bs ime
-                      nsendRemote nid pname (my_pid, msg)
+                  if null peers
+                     then do
+                       $logWarnS wxppLogSource $ "no peers available to forward event notifications"
+                     else do
+                       node <- liftIO new_local_node
+                       liftIO $ runProcess node $ do
+                         my_pid <- getSelfPid
+                         forM_ peers $ \nid -> do
+                           let msg = WrapInMsgHandlerInput app_id bs ime
+                           nsendRemote nid pname (my_pid, msg)
 
               _ -> return ()
 
