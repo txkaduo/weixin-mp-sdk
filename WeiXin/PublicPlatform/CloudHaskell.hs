@@ -1,21 +1,26 @@
 module WeiXin.PublicPlatform.CloudHaskell where
 
-import           ClassyPrelude                      hiding (newChan)
-import qualified Data.ByteString.Lazy               as LB
-import           Control.Monad.Logger
-import           Control.Monad.Except               (runExceptT, throwError)
-import           Control.Monad.Trans.Control        (MonadBaseControl)
+import           ClassyPrelude                                      hiding
+                                                                     (newChan)
 import           Control.Distributed.Process
-import           Control.Distributed.Process.Node
+import           Control.Distributed.Process.Backend.SimpleLocalnet (Backend,
+                                                                     findPeers,
+                                                                     newLocalNode)
+import           Control.Distributed.Process.Node                   hiding (newLocalNode)
+import           Control.Monad.Except                               (runExceptT,
+                                                                     throwError)
+import           Control.Monad.Logger
+import           Control.Monad.Trans.Control                        (MonadBaseControl)
 import           Data.Aeson
-import           Data.Binary                        (Binary (..))
-import           System.Timeout                     (timeout)
+import           Data.Binary                                        (Binary (..))
+import qualified Data.ByteString.Lazy                               as LB
+import           System.Timeout                                     (timeout)
 
 import           WeiXin.PublicPlatform.InMsgHandler
 import           WeiXin.PublicPlatform.Types
 
 
-data SimpleCloudBackend = SimpleCloudBackend
+data CloudBackendInfo = CloudBackendInfo
                             (IO LocalNode)
                               -- ^ create new LocalNode
                             (IO [NodeId])
@@ -24,7 +29,7 @@ data SimpleCloudBackend = SimpleCloudBackend
 -- | A middleware to send event notifications of some types to the cloud (async)
 data TeeEventToCloud = TeeEventToCloud
                           WxppAppID
-                          SimpleCloudBackend
+                          CloudBackendInfo
                           String
                             -- ^ Process name that should receive forwarded message
                           [Text]
@@ -33,7 +38,7 @@ data TeeEventToCloud = TeeEventToCloud
 
 instance JsonConfigable TeeEventToCloud where
     type JsonConfigableUnconfigData TeeEventToCloud =
-            (WxppAppID, SimpleCloudBackend)
+            (WxppAppID, CloudBackendInfo)
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
@@ -46,7 +51,7 @@ instance JsonConfigable TeeEventToCloud where
 
 instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
-      (TeeEventToCloud app_id (SimpleCloudBackend new_local_node find_peers) pname evt_types)
+      (TeeEventToCloud app_id (CloudBackendInfo new_local_node find_peers) pname evt_types)
       _cache bs m_ime = do
           forM_ m_ime $ \ime -> do
             case wxppInMessage ime of
@@ -69,7 +74,7 @@ instance MonadIO m => IsWxppInMsgProcMiddleware m TeeEventToCloud where
 data DelegateInMsgToCloud (m :: * -> *) =
                           DelegateInMsgToCloud
                               WxppAppID
-                              SimpleCloudBackend
+                              CloudBackendInfo
                               String
                                 -- ^ Process name that should receive forwarded message
                               Int
@@ -81,7 +86,7 @@ data DelegateInMsgToCloud (m :: * -> *) =
 
 instance JsonConfigable (DelegateInMsgToCloud m) where
     type JsonConfigableUnconfigData (DelegateInMsgToCloud m) =
-            (WxppAppID, SimpleCloudBackend)
+            (WxppAppID, CloudBackendInfo)
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
@@ -104,7 +109,7 @@ type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandler
 instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
-      (DelegateInMsgToCloud app_id (SimpleCloudBackend new_local_node find_peers) pname t1 t2)
+      (DelegateInMsgToCloud app_id (CloudBackendInfo new_local_node find_peers) pname t1 t2)
       _cache bs m_ime = runExceptT $ do
         case m_ime of
           Nothing   -> return []
@@ -178,6 +183,14 @@ data WrapInMsgHandlerInput = WrapInMsgHandlerInput
                                 WxppInMsgEntity
                             deriving (Typeable, Generic)
 instance Binary WrapInMsgHandlerInput
+
+
+-- | Create CloudBackendInfo from Backend of simplelocalnet
+simpleLocalnetBackendToInfo :: Int -> Backend -> CloudBackendInfo
+simpleLocalnetBackendToInfo find_peers_timeout bk = CloudBackendInfo
+                                  (newLocalNode bk)
+                                  (findPeers bk find_peers_timeout)
+
 
 runProcessTimeout :: Int -> LocalNode -> Process a -> IO (Maybe a)
 runProcessTimeout t node proc = do
