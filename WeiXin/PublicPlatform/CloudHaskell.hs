@@ -91,11 +91,13 @@ instance JsonConfigable (DelegateInMsgToCloud m) where
     parseWithExtraData _ (x1, x2) o = DelegateInMsgToCloud x1 x2
                                   <$> o .: "receive-proc-name"
                                   <*> (fmap (round . (* 1000000)) $
-                                          o .:? "timeout1" .!= (5 :: Float)
+                                          o .:? "timeout1" .!= (0.1 :: Float)
                                       )
+                                      -- ^ timeout number is a float in seconds
                                   <*> (fmap (round . (* 1000000)) $
                                           o .:? "timeout2" .!= (5 :: Float)
                                       )
+                                      -- ^ timeout number is a float in seconds
 
 type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandlerResult
 
