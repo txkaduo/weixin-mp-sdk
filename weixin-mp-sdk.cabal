@@ -174,7 +174,7 @@ library
      exposed-modules:   WeiXin.PublicPlatform.CloudHaskell
      cpp-options:       -DCLOUD_HASKELL
      build-depends:     distributed-process
-                      , distributed-process-simplelocalnet
+                      , distributed-process-async
 
   -- hs-source-dirs:      
   default-language:    Haskell2010
