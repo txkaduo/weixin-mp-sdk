@@ -166,7 +166,14 @@ encodeStringQRCodeImage :: MonadIO m =>
                            -> m (P.Image P.Pixel8)
 encodeStringQRCodeImage pixelPerCell input = do
     qrcode <- liftIO $ QR.encodeString input Nothing QR.QR_ECLEVEL_M QR.QR_MODE_EIGHT True
-    let matrix = QR.toMatrix qrcode
+    return $ renderQRCodeToImage pixelPerCell qrcode
+
+
+-- XXX: Data.QRCode do not export QRCode, we cannot write type signature here.
+-- renderQRCodeToImage :: (Bounded px, P.Pixel px) => Int -> QR.QRCode -> P.Image px
+renderQRCodeToImage pixelPerCell qrcode = image
+  where
+        matrix = QR.toMatrix qrcode
         dim1 = length matrix
         dim2 = fromMaybe 0 $ fmap length $ listToMaybe matrix
         to_on_off x = if x /= 0 then minBound else maxBound
@@ -174,14 +181,14 @@ encodeStringQRCodeImage pixelPerCell input = do
                     y <- [0..dim1-1]
                     x <- [0..dim2-1]
                     return $ ((y, x), to_on_off $ (matrix !! y) !! x)
-    let ((y0,x0),(y1,x1)) = bounds arr
+        ((y0,x0),(y1,x1)) = bounds arr
         pixelAt x y = let x' = x `div` pixelPerCell
                           y' = y `div` pixelPerCell
                           i = y'+y0
                           j = x'+x0
                       in arr !(i,j)
         image = P.generateImage pixelAt ((x1-x0+1)*pixelPerCell) ((y1-y0+1)*pixelPerCell)
-    return image
+
 
 encodeStringQRCodeJpeg :: MonadIO m =>
                         Int
