@@ -3,6 +3,7 @@ module WeiXin.PublicPlatform.EndUser
     , GetUserResult(..)
     , wxppOpenIdListInGetUserResult
     , wxppGetEndUserSource
+    , wxppLookupAllCacheForUnionID
     , wxppCachedGetEndUserUnionID
     , wxppCachedQueryEndUserInfo
     , GroupBasicInfo(..)
@@ -19,7 +20,9 @@ import ClassyPrelude
 import Network.Wreq
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
+import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
+import Data.Foldable                        (asum)
 import Data.Conduit                         (Source, yield)
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import qualified Data.Text                  as T
@@ -92,6 +95,25 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
                         else m_next_id
 
             maybe (return ()) (loop . Just) $ m_next_id'
+
+
+-- | 只找 cache: 根据 app id, open_id 找 union id
+-- 因现在有不止一个 cache 表, 这个函数能找的都找
+wxppLookupAllCacheForUnionID :: ( MonadIO m, WxppCacheTemp c)
+                             => c
+                             -> WxppAppID
+                             -> WxppOpenID
+                             -> m (Maybe WxppUnionID)
+wxppLookupAllCacheForUnionID cache app_id open_id =
+  runMaybeT $ asum [ by_sns, by_normal ]
+  where
+    by_sns = do
+      info <- fmap fst $ MaybeT $ liftIO $ wxppCacheGetSnsUserInfo cache app_id open_id "zh_CN"
+      MaybeT $ return $ oauthUserInfoUnionID info
+
+    by_normal = do
+      info <- fmap fst $ MaybeT $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id
+      MaybeT $ return $ endUserQueryResultUnionID info
 
 
 -- | 取用户的 UnionID
