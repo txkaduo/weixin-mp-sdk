@@ -5,6 +5,7 @@ import           ClassyPrelude                                      hiding
 import           Control.Distributed.Process
 import           Control.Distributed.Process.Async
 import           Control.Distributed.Process.Node                   hiding (newLocalNode)
+import           Control.Monad.Trans.Maybe                          (runMaybeT, MaybeT(..))
 import           Control.Monad.Except                               (runExceptT,
                                                                      throwError)
 import           Control.Monad.Logger
@@ -15,8 +16,9 @@ import qualified Data.ByteString.Lazy                               as LB
 import           System.Timeout                                     (timeout)
 
 import           WeiXin.PublicPlatform.InMsgHandler
-import           WeiXin.PublicPlatform.Types
-
+import           WeiXin.PublicPlatform.Class
+import           WeiXin.PublicPlatform.WS
+import           WeiXin.PublicPlatform.EndUser
 
 -- | 代表一种能找到接收 w 信息的 Process/SendPort 信息
 data CloudBackendInfo w = CloudBackendInfo
@@ -45,10 +47,10 @@ instance JsonConfigable TeeEventToCloud where
     parseWithExtraData _ (x1, x2) o = TeeEventToCloud x1 x2
                                         <$> o .: "event-types"
 
-instance (MonadIO m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToCloud where
+instance (MonadIO m, MonadCatch m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
       (TeeEventToCloud app_id (CloudBackendInfo new_local_node get_ports) evt_types)
-      _cache bs m_ime = do
+      cache bs m_ime = do
           forM_ m_ime $ \ime -> do
             case wxppInMessage ime of
               WxppInMsgEvent evt -> do
@@ -58,7 +60,15 @@ instance (MonadIO m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToClo
                      then do
                        $logWarnS wxppLogSource $ "No SendPort available to send event notifications"
                      else do
-                       let msg = WrapInMsgHandlerInput app_id bs ime
+                       m_union_id <- runMaybeT $ do
+                         atk <- fmap fst $ MaybeT $ liftIO $ wxppCacheGetAccessToken cache app_id
+                         MaybeT $ wxppCachedGetEndUserUnionID cache
+                                       (fromIntegral (maxBound :: Int)) -- because union id is stable
+                                       atk
+                                       (wxppInFromUserName ime)
+
+                       let msg = WrapInMsgHandlerInput app_id bs ime m_union_id
+
                        node <- liftIO new_local_node
                        liftIO $ runProcess node $ do
                          forM_ send_port_list $ \sp -> do
@@ -95,11 +105,11 @@ instance JsonConfigable (DelegateInMsgToCloud m) where
 
 type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandlerResult
 
-instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
+instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
       (DelegateInMsgToCloud app_id (CloudBackendInfo new_local_node get_ports) t1)
-      _cache bs m_ime = runExceptT $ do
+      cache bs m_ime = runExceptT $ do
         case m_ime of
           Nothing   -> return []
           Just ime  -> do
@@ -109,7 +119,17 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m)
               $logErrorS wxppLogSource $ fromString msg
               throwError msg
 
-            let cloud_pack_msg = WrapInMsgHandlerInput app_id bs ime
+            let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                                wxppCacheGetAccessToken cache app_id)
+                            >>= maybe (throwError $ "no access token available") (return . fst)
+
+            atk <- get_atk
+            m_union_id <- wxppCachedGetEndUserUnionID cache
+                             (fromIntegral (maxBound :: Int)) -- because union id is stable
+                             atk
+                             (wxppInFromUserName ime)
+
+            let cloud_pack_msg = WrapInMsgHandlerInput app_id bs ime m_union_id
 
             let send_recv sp = do
                   (send_port, recv_port) <- newChan
@@ -158,6 +178,12 @@ data WrapInMsgHandlerInput = WrapInMsgHandlerInput
                                 WxppAppID
                                 LB.ByteString
                                 WxppInMsgEntity
+                                (Maybe WxppUnionID)
+                                  -- ^ 用户的 union id
+                                  -- 增加这个额外信息有两个目的
+                                  -- * 因为大多数情况下,union id都有用,
+                                  --   所以如果发送者能提供,可以简化接收者的许多重复代码
+                                  -- * 方便模拟测试.
                             deriving (Typeable, Generic)
 instance Binary WrapInMsgHandlerInput
 
