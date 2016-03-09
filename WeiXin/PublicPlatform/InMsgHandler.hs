@@ -142,7 +142,7 @@ data SomeWxppInMsgHandlerRouter m =
             SomeWxppInMsgHandlerRouter p
 
 
-class IsWxppInMsgProcMiddleware m a where
+class Monad m => IsWxppInMsgProcMiddleware m a where
     preProcInMsg ::
         (WxppCacheTokenReader c, WxppCacheTemp c) =>
         a
@@ -152,17 +152,26 @@ class IsWxppInMsgProcMiddleware m a where
         -> Maybe WxppInMsgEntity
             -- ^ this is nothing only if caller cannot parse the message
         -> m (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+    preProcInMsg _ _ bs m_ime = return (Just (bs, m_ime))
 
-    {-
     postProcInMsg :: a
+        -> LB.ByteString
+            -- ^ raw data of message (unparsed)
+        -> Maybe WxppInMsgEntity
+            -- ^ this is nothing only if caller cannot parse the message
         -> WxppInMsgHandlerResult
-        -> m (Maybe WxppInMsgHandlerResult)
-    default postProcInMsg :: Monad m =>
-        a
-        -> WxppInMsgHandlerResult
-        -> m (Maybe WxppInMsgHandlerResult)
-    postProcInMsg _ x = return $ Just x
-    --}
+        -> m WxppInMsgHandlerResult
+    postProcInMsg _ _ _ x = return x
+
+    -- | callback when something goes wrong
+    onProcInMsgError :: a
+        -> LB.ByteString
+            -- ^ raw data of message (unparsed)
+        -> Maybe WxppInMsgEntity
+            -- ^ this is nothing only if caller cannot parse the message
+        -> String
+        -> m ()
+    onProcInMsgError _ _ _ _ = return ()
 
 
 data SomeWxppInMsgProcMiddleware m =
@@ -301,6 +310,30 @@ preProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) cache bs m_ime =
     runMaybeT $ do
             (bs', m_ime') <- MaybeT $ preProcInMsg x cache bs m_ime
             MaybeT $ preProcessInMsgByMiddlewares xs cache bs' m_ime'
+
+postProcessInMsgByMiddlewares :: (Monad m) =>
+    [SomeWxppInMsgProcMiddleware m]
+    -> LB.ByteString
+        -- ^ raw data of message (unparsed)
+    -> Maybe WxppInMsgEntity
+        -- ^ this is nothing only if caller cannot parse the message
+    -> WxppInMsgHandlerResult
+    -> m WxppInMsgHandlerResult
+postProcessInMsgByMiddlewares [] _bs _m_ime res = return res
+postProcessInMsgByMiddlewares (SomeWxppInMsgProcMiddleware x:xs) bs m_ime res =
+    postProcInMsg x bs m_ime res >>= postProcessInMsgByMiddlewares xs bs m_ime
+
+
+onErrorProcessInMsgByMiddlewares :: (Monad m) =>
+    [SomeWxppInMsgProcMiddleware m]
+    -> LB.ByteString
+        -- ^ raw data of message (unparsed)
+    -> Maybe WxppInMsgEntity
+        -- ^ this is nothing only if caller cannot parse the message
+    -> String
+    -> m ()
+onErrorProcessInMsgByMiddlewares xs bs m_ime err =
+    forM_ xs $ \(SomeWxppInMsgProcMiddleware x) -> onProcInMsgError x bs m_ime err
 
 
 tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b

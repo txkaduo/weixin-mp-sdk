@@ -16,7 +16,7 @@ import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
-import Control.Monad.Trans.Except           (runExceptT, ExceptT(..), throwE)
+import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
@@ -139,8 +139,8 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
         (decrypted_xml0, m_enc_akey) <-
             if enc
                 then do
-                    (either throwE return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
-                        >>= maybe (throwE $ "Internal Error: no AesKey available to decrypt")
+                    (either throwError return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
+                        >>= maybe (throwError $ "Internal Error: no AesKey available to decrypt")
                                 (return . (LB.fromStrict *** Just))
                 else return (lbs, Nothing)
 
@@ -151,11 +151,11 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                         return Nothing
                     Right x -> return $ Just x
 
-        pre_result <- liftIO $ wxppPreProcessInMsg foundation decrypted_xml0 m_ime0
+        pre_result <- liftIO $ wxppSubPreProcessInMsg foundation decrypted_xml0 m_ime0
         case pre_result of
             Left err -> do
                 $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
-                return ("程序内部错误，请稍后重试", [])
+                throwError "程序内部错误，请稍后重试"
 
             Right Nothing -> do
                 $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
@@ -163,9 +163,31 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
 
             Right (Just (decrypted_xml, m_ime)) -> do
                 let handle_msg      = wxppSubMsgHandler foundation
-                out_res <- ExceptT $
-                        (tryAny $ liftIO $ handle_msg decrypted_xml m_ime)
-                            >>= return . either (Left . show) id
+                    try_handle_msg = ExceptT $ do
+                                tryAny (liftIO $ handle_msg decrypted_xml m_ime)
+                                    >>= \err_or_x -> do
+                                            case err_or_x of
+                                              Left err -> do
+                                                $logErrorS wxppLogSource $
+                                                    "error when handling incoming message: " <> tshow err
+                                                return $ Left $ show err
+                                              Right x -> return x
+
+                let post_handle_msg = wxppSubPostProcessInMsg foundation
+                    do_post_handle_msg out_res0 = ExceptT $ do
+                        tryAny (liftIO $ post_handle_msg decrypted_xml m_ime out_res0)
+                            >>= \err_or_x -> do
+                                    case err_or_x of
+                                      Left err -> do
+                                        $logErrorS wxppLogSource $
+                                            "error when post-handling incoming message: " <> tshow err
+                                        return $ Left $ show err
+                                      Right x -> return x
+
+                let do_on_error err = ExceptT $
+                                        liftIO (wxppSubOnProcessInMsgError foundation decrypted_xml m_ime err)
+                out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
+                                >>= do_post_handle_msg
 
                 case m_ime of
                     Nothing -> do
@@ -227,27 +249,37 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                 Right xdoc  -> return xdoc
 
 
+-- | 生成随机字串作为 oauth 的state参数之用
+-- 这是按官方文档的思路，用于防 csrf
+-- 所生成的随机字串会放在 sessionKeyWxppOAuthState 会话变量里
+wxppOAuthMakeRandomState :: (MonadHandler m, MonadIO m)
+                        => WxppAppID
+                        -> m Text
+wxppOAuthMakeRandomState app_id = do
+    m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
+    case m_oauth_random_st of
+        Just x | not (null x) -> do
+            return x
+        _   -> do
+            random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $
+                                fmap B.pack $ replicateM 8 randomIO
+            setSession (sessionKeyWxppOAuthState app_id) random_state
+            return random_state
+
+
 wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
-                        => (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
+                        => (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                         -> WxppAppID
                         -> OAuthScope
                         -> Text             -- ^ oauth's state param
                         -> UrlText          -- ^ return URL
                         -> m UrlText
-wxppOAuthLoginRedirectUrl url_render_io app_id scope user_st return_url = do
-    m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
-    random_state <- case m_oauth_random_st of
-                        Just x | not (null x) -> do
-                            return x
-                        _   -> do
-                            random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $ fmap B.pack $ replicateM 8 randomIO
-                            setSession (sessionKeyWxppOAuthState app_id) random_state
-                            return random_state
-
+wxppOAuthLoginRedirectUrl url_render app_id scope user_st return_url = do
+    random_state <- wxppOAuthMakeRandomState app_id
     let state = random_state <> ":" <> user_st
 
-    oauth_retrurn_url <- liftIO $ liftM UrlText $
-                            url_render_io OAuthCallbackR [ ("return", unUrlText return_url) ]
+    oauth_retrurn_url <- liftM UrlText $
+                            url_render OAuthCallbackR [ ("return", unUrlText return_url) ]
     let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
                         oauth_retrurn_url
                         state
@@ -354,12 +386,12 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
                 , WxppCacheTokenReader c, WxppCacheTemp c)
                 => c
-                -> (Route MaybeWxppSub -> [(Text, Text)] -> IO Text)
+                -> (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                 -> WxppAppID
                 -> OAuthScope
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
-wxppOAuthHandler cache render_url_io app_id scope f = do
+wxppOAuthHandler cache render_url app_id scope f = do
     m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
     case m_atk_p of
         Nothing -> do
@@ -367,7 +399,7 @@ wxppOAuthHandler cache render_url_io app_id scope f = do
             unless is_wx $ do
                 permissionDenied "请用在微信里打开此网页"
             url <- getCurrentUrl
-            wxppOAuthLoginRedirectUrl render_url_io app_id scope "" (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url app_id scope "" (UrlText url)
                 >>= redirect . unUrlText
         Just atk_p -> f atk_p
 

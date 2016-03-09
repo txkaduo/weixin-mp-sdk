@@ -53,13 +53,29 @@ data WxppSub =
                 , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
                     -- ^ a computation to send outgoing messages
                 , wxppSubMsgHandler     :: WxppInMsgHandler IO
-                , wxppPreProcessInMsg   :: ( LB.ByteString
+                , wxppSubPreProcessInMsg :: ( LB.ByteString
                                                 -- ^ raw data of message (unparsed)
                                             -> Maybe WxppInMsgEntity
                                                 -- ^ this is nothing only if caller cannot parse the message
                                             -> IO (Either String
                                                     (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
                                                     )
+                                            )
+                , wxppSubPostProcessInMsg :: ( LB.ByteString
+                                                -- ^ raw data of message (unparsed)
+                                                -> Maybe WxppInMsgEntity
+                                                -- ^ this is nothing only if caller cannot parse the message
+
+                                                -> WxppInMsgHandlerResult
+                                                -> IO (Either String WxppInMsgHandlerResult)
+                                            )
+                , wxppSubOnProcessInMsgError :: ( LB.ByteString
+                                                -- ^ raw data of message (unparsed)
+                                                -> Maybe WxppInMsgEntity
+                                                -- ^ this is nothing only if caller cannot parse the message
+
+                                                -> String
+                                                -> IO (Either String ())
                                             )
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts

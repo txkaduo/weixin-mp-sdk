@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.OAuth
     ( OAuthCode(..)
+    , WxppAuthConfig(..)
     , OAuthAccessToken(..)
     , OAuthAccessTokenPkg(..)
     , OAuthRefreshToken(..)
@@ -26,6 +27,7 @@ import Network.URI                          ( parseAbsoluteURI, uriQuery, uriFra
 import Network.HTTP                         (urlEncodeVars)
 import Text.Shakespeare.I18N                (Lang)
 import Data.Time                            (NominalDiffTime)
+import Data.Aeson                           (FromJSON(..), withObject, (.:))
 
 import Yesod.Helpers.Parsec
 
@@ -33,6 +35,21 @@ import Yesod.Helpers.Parsec
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 
+
+-- | 当仅需要做 OAuth 认证时，不需要 WxppAppConfig 那么多信息
+-- 这个相当于为 OAuth 简化的 WxppAppConfig
+data WxppAuthConfig = WxppAuthConfig {
+                        wxppAuthAppID           :: WxppAppID
+                        , wxppAuthAppSecret     :: WxppAppSecret
+                        }
+                        deriving (Show, Eq)
+
+instance FromJSON WxppAuthConfig where
+    -- 注意：这个实现刻意地跟 WxppAppConfig 的实现兼容
+    parseJSON = withObject "WxppAuthConfig" $ \obj -> do
+                    WxppAuthConfig
+                        <$> obj .: "app-id"
+                        <*> obj .: "secret"
 
 
 -- | 获取用户授权: 仅用于微信内打开
