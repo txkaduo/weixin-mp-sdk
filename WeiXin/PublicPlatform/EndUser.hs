@@ -22,7 +22,6 @@ import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
-import Data.Foldable                        (asum)
 import Data.Conduit                         (Source, yield)
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import qualified Data.Text                  as T
