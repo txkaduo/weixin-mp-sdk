@@ -173,6 +173,7 @@ instance PathPiece WxppOpenID where
                                           then Nothing
                                           else WxppOpenID <$> fromPathPiece t'
 
+
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
                              , ToMessage, ToMarkup)
@@ -388,6 +389,36 @@ instance FromJSON WxppAppID where parseJSON = fmap WxppAppID . parseJSON
 -- 但不清楚具体使用场景，不知道以下的定义是否合适
 instance Read WxppAppID where
     readsPrec d s = map (WxppAppID *** id) $ readsPrec d s
+
+
+-- | app id 及对应的 open id
+data WxppAppOpenID = WxppAppOpenID WxppAppID WxppOpenID
+                    deriving (Show, Read, Eq, Ord, Typeable, Generic)
+
+$(deriveSafeCopy 0 'base ''WxppAppOpenID)
+
+instance Binary WxppAppOpenID
+
+instance FromJSON WxppAppOpenID where
+  parseJSON = withObject "WxppAppOpenID" $ \o -> do
+                WxppAppOpenID <$> o .: "app_id"
+                              <*> o .: "open_id"
+
+instance ToJSON WxppAppOpenID where
+  toJSON (WxppAppOpenID app_id open_id) =
+    object [ "app_id" .= app_id, "open_id" .= open_id ]
+
+instance PathPiece WxppAppOpenID where
+  toPathPiece (WxppAppOpenID app_id open_id) =
+    mconcat [ unWxppAppID app_id, "@", unWxppOpenID open_id ]
+
+  fromPathPiece t = do
+    app_id <- fromPathPiece app_id_t
+    open_id <- T.stripPrefix "@" other_t >>= fromPathPiece
+    return $ WxppAppOpenID app_id open_id
+    where
+      (app_id_t, other_t) = T.breakOn "@" t
+
 
 -- | 为保证 access_token 的值与它生成属的 app 一致
 -- 把它们打包在一个类型里
