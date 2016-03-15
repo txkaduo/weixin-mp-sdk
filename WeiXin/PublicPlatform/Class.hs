@@ -278,3 +278,55 @@ instance HasWxppOutMsgDir (NonEmpty FilePath) where
 
 instance HasWxppOutMsgDir FilePath where
     getWxppOutMsgDir x = x :| []
+
+
+
+-- | As a placeholder for testing
+data FakeWxppCache = FakeWxppCache
+
+instance WxppCacheTokenUpdater FakeWxppCache where
+    -- | save a access token
+    wxppCacheAddAccessToken _ _ _ = return ()
+
+    wxppCachePurgeAccessToken _ _ = return ()
+
+    wxppCacheAddJsTicket _ _ _ _ = return ()
+
+    wxppCachePurgeJsTicket _ _ = return ()
+
+instance WxppCacheTokenReader FakeWxppCache where
+    wxppCacheGetAccessToken _ _ = return Nothing
+
+    wxppCacheGetJsTicket _ _ = return Nothing
+
+
+instance WxppCacheTemp FakeWxppCache where
+    wxppCacheGetOAuthAccessToken _ _ _ _ = return Nothing
+
+    wxppCacheAddOAuthAccessToken _ _ _ = return ()
+
+    wxppCachePurgeOAuthAccessToken _ _ = return ()
+
+    wxppCacheAddSnsUserInfo _ _ _ _ _ = return ()
+
+    wxppCacheGetSnsUserInfo _ _ _ _ = return Nothing
+
+    wxppCacheSaveUserInfo _ _ _ = return ()
+
+    wxppCacheLookupUserInfo _ _ _ = return Nothing
+
+    wxppCacheSaveUploadedMediaID _ _ _ _ = return ()
+
+    wxppCacheLookupUploadedMediaIDByHash _ _ _ = return Nothing
+
+
+instance WxppCacheAppRegistry FakeWxppCache where
+    wxppCacheRegistryAdd _ _ _ _ = return ()
+
+    wxppCacheRegistryGet _ _ = return Nothing
+
+    wxppCacheRegistryDel _ _ = return ()
+
+    wxppCacheRegistryDisable _ _ = return ()
+
+    wxppCacheRegistryEnable _ _ = return ()

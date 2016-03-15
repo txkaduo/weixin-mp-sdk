@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform
     ( module WeiXin.PublicPlatform.Error
     , module WeiXin.PublicPlatform.Types
@@ -30,6 +31,9 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Center
     , module WeiXin.PublicPlatform.OAuth
     , module WeiXin.PublicPlatform.JS
+#if defined(CLOUD_HASKELL)
+    , module WeiXin.PublicPlatform.CloudHaskell
+#endif
     ) where
 
 import WeiXin.PublicPlatform.Error
@@ -63,3 +67,7 @@ import WeiXin.PublicPlatform.Conversation.Message
 import WeiXin.PublicPlatform.Center
 import WeiXin.PublicPlatform.OAuth
 import WeiXin.PublicPlatform.JS
+
+#if defined(CLOUD_HASKELL)
+import WeiXin.PublicPlatform.CloudHaskell
+#endif

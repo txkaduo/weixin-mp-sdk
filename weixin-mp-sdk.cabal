@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                weixin-mp-sdk
-version:             0.18
+version:             0.18.1
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -31,6 +31,10 @@ Flag parsec3
 Flag network-uri
     Description: Get Network.URI from the network-uri package
     Default: True
+
+Flag cloud
+    Description:   Support For Cloud Haskell
+    Default:       True
 
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
@@ -81,6 +85,7 @@ library
                        ConstraintKinds
                        TupleSections
                        RankNTypes
+                       DeriveGeneric
 
 
   build-depends:       base >=4.7
@@ -150,6 +155,8 @@ library
                      , HTTP
                      , vector
                      , cereal
+                     , binary
+                     , binary-orphans
                      , hash-tx-utils
                      , parsec-tx-utils
 
@@ -162,6 +169,12 @@ library
      build-depends: network-uri >= 2.6, network >= 2.6
   else
      build-depends: network-uri < 2.6, network < 2.6
+
+  if flag(cloud)
+     exposed-modules:   WeiXin.PublicPlatform.CloudHaskell
+     cpp-options:       -DCLOUD_HASKELL
+     build-depends:     distributed-process
+                      , distributed-process-async
 
   -- hs-source-dirs:      
   default-language:    Haskell2010
@@ -200,6 +213,7 @@ executable wxpp-manage
                        TemplateHaskell
 
   ghc-options:         -Wall
+  default-language:    Haskell2010
 
 test-suite test
   type:                exitcode-stdio-1.0

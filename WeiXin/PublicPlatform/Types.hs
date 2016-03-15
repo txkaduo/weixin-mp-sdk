@@ -16,6 +16,8 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 -- import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
+import Data.Binary                          (Binary)
+import Data.Binary.Orphans                  ()
 import Data.Byteable                        (toBytes)
 import Data.Char                            (isSpace)
 import Crypto.Cipher                        (makeKey, Key)
@@ -74,7 +76,8 @@ newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
 
 -- | 为区分临时素材和永久素材，这个值专指 临时素材
 newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
-                        deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+                        deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                                 , ToMessage, ToMarkup)
 
 instance SafeCopy WxppBriefMediaID where
     getCopy                         = contain $ WxppBriefMediaID <$> safeGet
@@ -124,7 +127,8 @@ instance PathPiece WxppDurableMediaID where
 
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
-                    deriving (Show, Eq, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 $(deriveLift ''WxppMediaID)
 
 fromWxppBriefMediaID :: WxppBriefMediaID -> WxppMediaID
@@ -141,7 +145,8 @@ instance FromJSON WxppMediaID where
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
-                    deriving (Show, Read, Eq, Ord, Typeable, ToMessage, ToMarkup)
+                    deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance SafeCopy WxppOpenID where
     getCopy                 = contain $ WxppOpenID <$> safeGet
@@ -168,8 +173,10 @@ instance PathPiece WxppOpenID where
                                           then Nothing
                                           else WxppOpenID <$> fromPathPiece t'
 
+
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
-                    deriving (Show, Read, Eq, Ord, Typeable, ToMessage, ToMarkup)
+                    deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance FromJSON WxppUnionID where
     parseJSON = fmap WxppUnionID . parseJSON
@@ -194,7 +201,8 @@ instance PathPiece WxppUnionID where
     fromPathPiece t             = WxppUnionID <$> fromPathPiece t
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
-                    deriving (Show, Eq, Ord, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMarkup)
 
 instance PersistField WxppInMsgID where
     toPersistValue      = toPersistValue . unWxppInMsgID
@@ -214,14 +222,17 @@ instance FromJSON WxppInMsgID where
 -- 从文档“生成带参数的二维码”一文中看
 -- 场景ID可以是个32位整数，也可以是个字串。有若干约束。
 newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
-                    deriving (Show, Eq, Ord, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary, ToMarkup)
 
 newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
-                    deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 data WxppScene =    WxppSceneInt WxppIntSceneID
                     | WxppSceneStr WxppStrSceneID
-                    deriving (Show, Eq, Ord)
+                    deriving (Show, Eq, Ord, Typeable, Generic)
+
+instance Binary WxppScene
 
 instance ToJSON WxppScene where
     toJSON (WxppSceneInt (WxppIntSceneID x)) = object [ "scene_id" .= x ]
@@ -282,7 +293,8 @@ instance SimpleStringRep WxppScene where
 
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
-                    deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance ToJSON QRTicket where
     toJSON = toJSON . unQRTicket
@@ -347,7 +359,8 @@ newtype Nonce = Nonce { unNounce :: Text }
                     deriving (Show, Eq, ToMessage, ToMarkup)
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
-                    deriving (Show, Eq, Ord, Typeable, ToMessage, ToMarkup)
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToMessage, ToMarkup)
 
 instance SafeCopy WxppAppID where
     getCopy                 = contain $ WxppAppID <$> safeGet
@@ -376,6 +389,36 @@ instance FromJSON WxppAppID where parseJSON = fmap WxppAppID . parseJSON
 -- 但不清楚具体使用场景，不知道以下的定义是否合适
 instance Read WxppAppID where
     readsPrec d s = map (WxppAppID *** id) $ readsPrec d s
+
+
+-- | app id 及对应的 open id
+data WxppAppOpenID = WxppAppOpenID WxppAppID WxppOpenID
+                    deriving (Show, Read, Eq, Ord, Typeable, Generic)
+
+$(deriveSafeCopy 0 'base ''WxppAppOpenID)
+
+instance Binary WxppAppOpenID
+
+instance FromJSON WxppAppOpenID where
+  parseJSON = withObject "WxppAppOpenID" $ \o -> do
+                WxppAppOpenID <$> o .: "app_id"
+                              <*> o .: "open_id"
+
+instance ToJSON WxppAppOpenID where
+  toJSON (WxppAppOpenID app_id open_id) =
+    object [ "app_id" .= app_id, "open_id" .= open_id ]
+
+instance PathPiece WxppAppOpenID where
+  toPathPiece (WxppAppOpenID app_id open_id) =
+    mconcat [ unWxppAppID app_id, "@", unWxppOpenID open_id ]
+
+  fromPathPiece t = do
+    app_id <- fromPathPiece app_id_t
+    open_id <- T.stripPrefix "@" other_t >>= fromPathPiece
+    return $ WxppAppOpenID app_id open_id
+    where
+      (app_id_t, other_t) = T.breakOn "@" t
+
 
 -- | 为保证 access_token 的值与它生成属的 app 一致
 -- 把它们打包在一个类型里
@@ -454,7 +497,9 @@ instance FromJSON WxppAppConfig where
 data GroupSendStatus =    GroupSendSuccess
                         | GroupSendFail
                         | GroupSendError Int
-                        deriving (Show, Eq)
+                        deriving (Show, Eq, Typeable, Generic)
+
+instance Binary GroupSendStatus
 
 $(deriveJsonS "GroupSendStatus")
 
@@ -493,7 +538,9 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtFollowUrl UrlText
                 | WxppEvtGroupSendReport GroupSendStatus Int Int Int Int
                     -- ^ status, total, filter count, sent count, error count
-                deriving (Show, Eq)
+                deriving (Show, Eq, Typeable, Generic)
+
+instance Binary WxppEvent
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
 wxppEventTypeString WxppEvtSubscribe              = "subscribe"
@@ -612,7 +659,9 @@ data WxppInMsg =  WxppInMsgText Text
                 | WxppInMsgLink UrlText Text Text
                     -- ^ url title description
                 | WxppInMsgEvent WxppEvent
-                deriving (Show, Eq)
+                deriving (Show, Eq, Typeable, Generic)
+
+instance Binary WxppInMsg
 
 wxppInMsgTypeString :: IsString a => WxppInMsg -> a
 wxppInMsgTypeString (WxppInMsgText {})      = "text"
@@ -710,7 +759,8 @@ data WxppInMsgEntity = WxppInMsgEntity
                                 -- ^ 从文档看，除了事件通知，所有信息都有 MsgID
                             , wxppInMessage         :: WxppInMsg
                         }
-                        deriving (Show, Eq)
+                        deriving (Show, Eq, Typeable, Generic)
+instance Binary WxppInMsgEntity
 
 -- | 用于排重的值
 type WxppInMsgAmostUniqueID = Either WxppInMsgID (WxppOpenID, UTCTime)
@@ -745,7 +795,8 @@ data WxppArticle = WxppArticle {
                     , wxppArticlePicUrl :: Maybe UrlText -- ^ pic url
                     , wxppArticleUrl    :: Maybe UrlText -- ^ url
                     }
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, Typeable, Generic)
+instance Binary WxppArticle
 $(deriveLift ''WxppArticle)
 
 instance ToJSON WxppArticle where
@@ -783,8 +834,9 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ 根据文档，图文总数不可超过10
                 | WxppOutMsgTransferToCustomerService
                     -- ^ 把信息转发至客服
-                deriving (Show, Eq)
+                deriving (Show, Eq, Typeable, Generic)
 
+instance Binary WxppOutMsg
 $(deriveLift ''WxppOutMsg)
 
 wxppOutMsgTypeString :: IsString a => WxppOutMsg -> a
