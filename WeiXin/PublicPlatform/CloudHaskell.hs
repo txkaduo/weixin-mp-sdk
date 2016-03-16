@@ -140,15 +140,19 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
                   node <- liftIO new_local_node
                   Just async_res_list <- liftIO $ runProcessTimeout maxBound node $ do
                                       async_list <- forM send_port_list $ \sp -> do
-                                                      asyncLinked $ AsyncTask $ send_recv sp
-                                      mapM wait async_list
-                  res_list <- forM (zip [0..] async_res_list) $ \(idx, async_res) -> do
+                                                      fmap (sp,) $
+                                                        asyncLinked $ AsyncTask $ send_recv sp
+
+                                      forM async_list $ \(sp, ayp) -> fmap (sp,) $ wait ayp
+
+                  res_list <- forM async_res_list $ \(sp, async_res) -> do
                                 case async_res of
                                   AsyncDone mx -> do
                                     when (isNothing mx) $ do
-                                        $logWarnS wxppLogSource $ "Cloud SendPort at pos #"
-                                                                    <> tshow (idx :: Int)
-                                                                    <> " timed-out."
+                                        $logWarnS wxppLogSource $
+                                          "Cloud SendPort at "
+                                          <> tshow (sendPortId sp)
+                                          <> " timed-out."
                                     return mx
 
                                   AsyncPending -> do
