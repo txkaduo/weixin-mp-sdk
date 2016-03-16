@@ -99,7 +99,9 @@ instance JsonConfigable (DelegateInMsgToCloud m) where
 
     parseWithExtraData _ (x1, x2) o = DelegateInMsgToCloud x1 x2
                                   <$> (fmap (round . (* 1000000)) $
-                                          o .:? "timeout" .!= (5 :: Float)
+                                          o .:? "timeout" .!= (3 :: Float)
+                                          -- ^ 选择 3 秒超时是因为微信5秒超时
+                                          -- 加上网络通讯等其它一些开销
                                       )
                                       -- ^ timeout number is a float in seconds
 
