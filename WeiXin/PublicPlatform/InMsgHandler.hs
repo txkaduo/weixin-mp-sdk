@@ -177,7 +177,7 @@ class Monad m => IsWxppInMsgProcMiddleware m a where
 
 
 data SomeWxppInMsgProcMiddleware m =
-        forall a. IsWxppInMsgProcMiddleware m a => SomeWxppInMsgProcMiddleware a
+        forall a. (IsWxppInMsgProcMiddleware m a, JsonConfigable a) => SomeWxppInMsgProcMiddleware a
 
 data WxppInMsgProcMiddlewarePrototype m =
         forall a. (IsWxppInMsgProcMiddleware m a, JsonConfigable a) =>
