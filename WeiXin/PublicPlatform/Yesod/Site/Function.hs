@@ -193,6 +193,18 @@ data TrackHandledInMsg = TrackHandledInMsg
                             WxppAppID
                             (MVar TrackHandledInMsgInnerMap)
 
+instance JsonConfigable TrackHandledInMsg where
+  type JsonConfigableUnconfigData TrackHandledInMsg =
+    ( NominalDiffTime
+    , WxppAppID
+    , MVar TrackHandledInMsgInnerMap
+    )
+
+  isNameOfInMsgHandler _ t = t == "track-handled-in-msg"
+
+  parseWithExtraData _ (x1, x2, x3) _ = return $ TrackHandledInMsg x1 x2 x3
+
+
 instance (MonadIO m
     , MonadCatch m
     , MonadLogger m
