@@ -86,6 +86,8 @@ class JsonConfigable h where
 
     parseWithExtraData :: Proxy h -> JsonConfigableUnconfigData h -> Object -> Parser h
 
+isNameOfInMsgHandler' :: forall h. JsonConfigable h => h -> Text -> Bool
+isNameOfInMsgHandler' _ = isNameOfInMsgHandler (Proxy :: Proxy h)
 
 -- | 预处理收到的消息的结果
 type family WxppInMsgProcessResult h :: *
