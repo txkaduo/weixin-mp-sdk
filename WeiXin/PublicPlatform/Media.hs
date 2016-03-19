@@ -238,27 +238,50 @@ fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
         liftM WxppOutMsgNews $ do
             sequence $ fmap (runDelayedYamlLoaderExcL msg_dir) loaders
 
-fromWxppOutMsgL _ cache    get_atk (WxppOutMsgImageL fp)   = do
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgImageL (Right fp))   = do
         atk <- get_atk
         liftM (WxppOutMsgImage . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeImage fp
 
-fromWxppOutMsgL _ cache    get_atk (WxppOutMsgVoiceL fp)   = do
+fromWxppOutMsgL _ _cache    _get_atk (WxppOutMsgImageL (Left media_id))   = do
+        return $ WxppOutMsgImage media_id
+
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgVoiceL (Right fp))   = do
         atk <- get_atk
         liftM (WxppOutMsgVoice . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeVoice fp
 
-fromWxppOutMsgL _ cache    get_atk (WxppOutMsgVideoL fp m_fp2 x1 x2)   = do
-        atk <- get_atk
-        liftM2 (\i i2 -> WxppOutMsgVideo i i2 x1 x2)
-            (liftM (fromWxppBriefMediaID . urMediaId) $ wxppUploadMediaCached cache atk WxppMediaTypeVideo fp)
-            (liftM (fmap $ fromWxppBriefMediaID . urMediaId) $
-                mapM (wxppUploadMediaCached cache atk WxppMediaTypeImage) m_fp2)
+fromWxppOutMsgL _ _cache    _get_atk (WxppOutMsgVoiceL (Left media_id))   = do
+        return $ WxppOutMsgVoice  media_id
 
-fromWxppOutMsgL _ cache    get_atk (WxppOutMsgMusicL fp x1 x2 x3 x4)   = do
+fromWxppOutMsgL _ _cache    _get_atk (WxppOutMsgVideoL (Left media_id) Nothing x1 x2)   = do
+        return $ WxppOutMsgVideo media_id Nothing x1 x2
+
+fromWxppOutMsgL _ _cache    _get_atk (WxppOutMsgVideoL (Left media_id) (Just (Left thumb_mid)) x1 x2)   = do
+        return $ WxppOutMsgVideo media_id (Just thumb_mid) x1 x2
+
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgVideoL mp m_mp2 x1 x2)   = do
+        atk <- get_atk
+        media_id <- either
+                    return
+                    (\fp -> liftM (fromWxppBriefMediaID . urMediaId) $
+                                wxppUploadMediaCached cache atk WxppMediaTypeVideo fp)
+                    mp
+        thumb_mid <- forM m_mp2 $
+                        either
+                            return
+                            (\fp -> liftM (fromWxppBriefMediaID . urMediaId) $
+                                        wxppUploadMediaCached cache atk WxppMediaTypeImage fp)
+
+        return $ WxppOutMsgVideo media_id thumb_mid x1 x2
+
+fromWxppOutMsgL _ cache    get_atk (WxppOutMsgMusicL (Right fp) x1 x2 x3 x4)   = do
         atk <- get_atk
         liftM ((\i -> WxppOutMsgMusic i x1 x2 x3 x4) . fromWxppBriefMediaID . urMediaId) $
             wxppUploadMediaCached cache atk WxppMediaTypeImage fp
+
+fromWxppOutMsgL _ _cache    _get_atk (WxppOutMsgMusicL (Left media_id) x1 x2 x3 x4)   = do
+        return $ WxppOutMsgMusic media_id x1 x2 x3 x4
 
 fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
