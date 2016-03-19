@@ -254,6 +254,7 @@ instance (MonadIO m
     onProcInMsgError (TrackHandledInMsg slow_threshold app_id map_mar) _bs m_ime err = do
       trackHandleInMsgSaveResult slow_threshold app_id map_mar m_ime (Just err)
 
+
 trackHandleInMsgSaveResult :: (MonadIO m, MonadLogger m)
                             => NominalDiffTime
                             -> WxppAppID
@@ -276,7 +277,7 @@ trackHandleInMsgSaveResult slow_threshold app_id map_mvar m_ime m_err = do
                                           (app_id, msg_id)
                                           the_map
                       -- remove histories that are long ago
-                      new_map' = Map.filter ((< dt) . fst) new_map
+                      new_map' = Map.filter ((> dt) . fst) new_map
                   
                   return $! (new_map', m_val)
 
