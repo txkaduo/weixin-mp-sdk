@@ -8,6 +8,7 @@ import ClassyPrelude hiding (catch)
 import Network.Wreq hiding (Proxy)
 import Control.Lens hiding ((<.>), op)
 import Data.Proxy
+import Control.DeepSeq                      (($!!))
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import Control.Monad.Catch                  ( catchAll )
@@ -643,10 +644,10 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                 case m_exp of
                     Nothing -> do
                         liftIO $ modifyMVar_ mvar $
-                                        return . Map.delete (open_id, app_id)
+                          (return $!!) . Map.delete (open_id, app_id)
                     Just (exp_t, timeout_txt) -> do
                         liftIO $ modifyMVar_ mvar $
-                                        return . Map.insert
+                          (return $!!) . Map.insert
                                                     (open_id, app_id)
                                                     (url, (exp_t, timeout_txt))
 
@@ -752,10 +753,10 @@ instance (MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
                         case m_exp of
                             Nothing -> do
                                 liftIO $ modifyMVar_ mvar $
-                                                return . Map.delete (open_id, app_id)
+                                  (return $!!) . Map.delete (open_id, app_id)
                             Just (exp_t, timeout_txt) -> do
                                 liftIO $ modifyMVar_ mvar $
-                                        return . Map.insert
+                                  (return $!!) . Map.insert
                                                     (open_id, app_id)
                                                     (url, (exp_t, timeout_txt))
 

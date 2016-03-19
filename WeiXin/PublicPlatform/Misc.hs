@@ -12,6 +12,7 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
 import Control.Concurrent                   (threadDelay)
+import Control.DeepSeq                      (($!!))
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
@@ -245,7 +246,7 @@ loopCleanupTimedOutForwardUrl get_atk mvar = go
         go = do
             now <- liftIO getCurrentTime
             m2 <- liftIO $ modifyMVar mvar $
-                        return . Map.partition ((> now) . fst . snd)
+                    (return $!!) . Map.partition ((> now) . fst . snd)
 
             forM_ (Map.toList m2) $ \((open_id, app_id), (_, (_, txt))) -> do
                 let outmsg = WxppOutMsgText txt
