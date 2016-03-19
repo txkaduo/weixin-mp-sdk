@@ -14,6 +14,7 @@ import Control.Lens
 import Network.Wreq
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
+import Control.DeepSeq                      (($!!))
 import qualified Data.Text.Lazy             as LT
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Conduit.List          as CL
@@ -226,7 +227,7 @@ instance (MonadIO m
                     \the_map -> do
                       let k = (app_id, msg_id)
                           v = (now, Nothing)
-                      return $!
+                      return $!!
                         case Map.lookup k the_map of
                           Nothing     -> (Map.insert k v the_map, Nothing)
                           Just old_v  -> (the_map, Just old_v)
@@ -291,7 +292,7 @@ trackHandleInMsgSaveResult slow_threshold app_id map_mvar m_ime m_err = do
                       -- remove histories that are long ago
                       new_map' = Map.filter ((> dt) . fst) new_map
                   
-                  return $! (new_map', m_val)
+                  return $!! (new_map', m_val)
 
       case m_val of
         Nothing -> do
