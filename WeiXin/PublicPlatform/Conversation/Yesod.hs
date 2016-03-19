@@ -13,7 +13,6 @@ import qualified Data.Conduit.List          as CL
 import Control.Monad.Except hiding (forM_)
 import Control.Monad.Trans.Maybe
 import Data.Time                            (NominalDiffTime, addUTCTime)
-import Data.Foldable                        (asum)
 import Data.List.NonEmpty                   (NonEmpty(..))
 import Data.Aeson                           ((.:?), (.!=))
 
