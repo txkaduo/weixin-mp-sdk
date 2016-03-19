@@ -97,7 +97,7 @@ library
                      , yesod-core
                      , yesod-form
                      , shakespeare
-                     , yesod-helpers >= 0.11
+                     , yesod-helpers >= 0.13.4
                      , text
                      , aeson
                      , bytestring
@@ -154,6 +154,7 @@ library
                      , case-insensitive
                      , HTTP
                      , vector
+                     , deepseq
                      , cereal
                      , binary
                      , binary-orphans

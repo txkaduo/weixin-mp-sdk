@@ -8,6 +8,7 @@ module WeiXin.PublicPlatform.Types
     ) where
 
 import ClassyPrelude hiding (try, optional)
+import Control.DeepSeq                      (NFData)
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
@@ -54,29 +55,32 @@ import WeiXin.PublicPlatform.Utils
 -- | 微信用户名
 newtype WeixinUserName = WeixinUserName { unWeixinUserName :: Text }
                         deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql
+                                 , NFData
                                  , ToMessage, ToMarkup
                                  )
 
 
 -- | 用户分组的ID
 newtype WxppUserGroupID = WxppUserGroupID { unWxppUserGroupID :: Int }
-                        deriving (Show, Eq, Ord, ToJSON, FromJSON)
+  deriving (Show, Eq, Ord, ToJSON, FromJSON, NFData)
 
 
 -- | 卡券ID
 newtype WxCardID = WxCardID { unWxCardID :: Text }
                     deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql
+                             , NFData
                              , ToMessage, ToMarkup
                              )
 
 -- | 客服帐号
 newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
-                        deriving (Show, Eq, Ord, ToMessage, ToMarkup)
+  deriving (Show, Eq, Ord, ToMessage, ToMarkup, NFData)
 
 
 -- | 为区分临时素材和永久素材，这个值专指 临时素材
 newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
                         deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                                 , NFData
                                  , ToMessage, ToMarkup)
 
 instance SafeCopy WxppBriefMediaID where
@@ -101,7 +105,7 @@ instance FromJSON WxppBriefMediaID where
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
 -- 虽然文档叫这种值 media id，但接口用的词是 material
 newtype WxppDurableMediaID = WxppDurableMediaID { unWxppDurableMediaID :: Text }
-                        deriving (Show, Eq, Ord, Read, ToMessage, ToMarkup)
+  deriving (Show, Eq, Ord, Read, ToMessage, ToMarkup, NFData)
 
 instance SafeCopy WxppDurableMediaID where
     getCopy                         = contain $ WxppDurableMediaID <$> safeGet
@@ -128,6 +132,7 @@ instance PathPiece WxppDurableMediaID where
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
                     deriving (Show, Eq, Typeable, Generic, Binary
+                             , NFData
                              , ToMessage, ToMarkup)
 $(deriveLift ''WxppMediaID)
 
@@ -146,6 +151,7 @@ instance FromJSON WxppMediaID where
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
                              , ToMessage, ToMarkup)
 
 instance SafeCopy WxppOpenID where
@@ -176,6 +182,7 @@ instance PathPiece WxppOpenID where
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
                              , ToMessage, ToMarkup)
 
 instance FromJSON WxppUnionID where
@@ -202,6 +209,7 @@ instance PathPiece WxppUnionID where
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
                              , ToMarkup)
 
 instance PersistField WxppInMsgID where
@@ -222,16 +230,18 @@ instance FromJSON WxppInMsgID where
 -- 从文档“生成带参数的二维码”一文中看
 -- 场景ID可以是个32位整数，也可以是个字串。有若干约束。
 newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
-                    deriving (Show, Eq, Ord, Typeable, Generic, Binary, ToMarkup)
+  deriving (Show, Eq, Ord, Typeable, Generic, Binary, NFData, ToMarkup)
 
 newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
                              , ToMessage, ToMarkup)
 
 data WxppScene =    WxppSceneInt WxppIntSceneID
                     | WxppSceneStr WxppStrSceneID
                     deriving (Show, Eq, Ord, Typeable, Generic)
 
+instance NFData WxppScene
 instance Binary WxppScene
 
 instance ToJSON WxppScene where
@@ -294,6 +304,7 @@ instance SimpleStringRep WxppScene where
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
                              , ToMessage, ToMarkup)
 
 instance ToJSON QRTicket where
@@ -312,11 +323,12 @@ instance PersistFieldSql QRTicket where
 
 newtype Token = Token { unToken :: Text }
                     deriving (Show, Eq, Ord, PersistFieldSql, PersistField
+                             , NFData
                              , ToMessage, ToMarkup
                              )
 
 newtype AesKey = AesKey { unAesKey :: Key AES }
-                    deriving (Eq)
+  deriving (Eq)
 instance Show AesKey where
     show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
 
@@ -353,13 +365,14 @@ instance FromJSON AesKey where
     parseJSON = withText "AesKey" parseAesKeyFromText
 
 newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
-                    deriving (Show, Eq)
+  deriving (Show, Eq, NFData)
 
 newtype Nonce = Nonce { unNounce :: Text }
-                    deriving (Show, Eq, ToMessage, ToMarkup)
+  deriving (Show, Eq, ToMessage, NFData, ToMarkup)
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
                              , ToMessage, ToMarkup)
 
 instance SafeCopy WxppAppID where
@@ -393,7 +406,9 @@ instance Read WxppAppID where
 
 -- | app id 及对应的 open id
 data WxppAppOpenID = WxppAppOpenID WxppAppID WxppOpenID
-                    deriving (Show, Read, Eq, Ord, Typeable, Generic)
+  deriving (Show, Read, Eq, Ord, Typeable, Generic)
+
+instance NFData WxppAppOpenID
 
 $(deriveSafeCopy 0 'base ''WxppAppOpenID)
 
@@ -426,7 +441,10 @@ data AccessToken = AccessToken {
                         accessTokenData     :: Text
                         , accessTokenApp    :: WxppAppID
                     }
-                    deriving (Show, Eq, Typeable)
+                    deriving (Show, Eq, Typeable, Generic)
+
+instance NFData AccessToken
+
 $(deriveSafeCopy 0 'base ''AccessToken)
 
 instance ToJSON AccessToken where
@@ -445,6 +463,7 @@ type AccessTokenP = WxppAppID -> AccessToken
 
 newtype WxppAppSecret = WxppAppSecret { unWxppAppSecret :: Text }
                     deriving (Show, Eq, PersistFieldSql, PersistField
+                             , NFData
                              , ToMessage, ToMarkup
                              )
 
@@ -499,6 +518,7 @@ data GroupSendStatus =    GroupSendSuccess
                         | GroupSendError Int
                         deriving (Show, Eq, Typeable, Generic)
 
+instance NFData GroupSendStatus
 instance Binary GroupSendStatus
 
 $(deriveJsonS "GroupSendStatus")
@@ -540,6 +560,7 @@ data WxppEvent = WxppEvtSubscribe
                     -- ^ status, total, filter count, sent count, error count
                 deriving (Show, Eq, Typeable, Generic)
 
+instance NFData WxppEvent
 instance Binary WxppEvent
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
@@ -661,6 +682,7 @@ data WxppInMsg =  WxppInMsgText Text
                 | WxppInMsgEvent WxppEvent
                 deriving (Show, Eq, Typeable, Generic)
 
+instance NFData WxppInMsg
 instance Binary WxppInMsg
 
 wxppInMsgTypeString :: IsString a => WxppInMsg -> a
@@ -760,6 +782,8 @@ data WxppInMsgEntity = WxppInMsgEntity
                             , wxppInMessage         :: WxppInMsg
                         }
                         deriving (Show, Eq, Typeable, Generic)
+
+instance NFData WxppInMsgEntity
 instance Binary WxppInMsgEntity
 
 -- | 用于排重的值
@@ -796,6 +820,8 @@ data WxppArticle = WxppArticle {
                     , wxppArticleUrl    :: Maybe UrlText -- ^ url
                     }
                     deriving (Show, Eq, Typeable, Generic)
+
+instance NFData WxppArticle
 instance Binary WxppArticle
 $(deriveLift ''WxppArticle)
 
@@ -836,6 +862,7 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ 把信息转发至客服
                 deriving (Show, Eq, Typeable, Generic)
 
+instance NFData WxppOutMsg
 instance Binary WxppOutMsg
 $(deriveLift ''WxppOutMsg)
 
@@ -976,8 +1003,9 @@ data WxppDurableArticle = WxppDurableArticle {
                                 , wxppDurableArticleContent        :: Text
                                 , wxppDurableArticleContentSrcUrl  :: Maybe UrlText
                             }
-                            deriving (Eq, Ord, Show)
+                            deriving (Eq, Ord, Show, Generic)
 
+instance NFData WxppDurableArticle
 $(deriveSafeCopy 0 'base ''WxppDurableArticle)
 
 instance FromJSON WxppDurableArticle where
@@ -1015,7 +1043,7 @@ wppDurableArticleToJsonPairs x =
 
 -- | 永久图文素材结构
 newtype WxppDurableNews = WxppDurableNews [WxppDurableArticle]
-                        deriving (Eq, Ord)
+  deriving (Eq, Ord, NFData)
 
 instance FromJSON WxppDurableNews where
     parseJSON = withObject "WxppDurableNews" $ \obj -> do
@@ -1030,8 +1058,9 @@ data WxppMediaType = WxppMediaTypeImage
                     | WxppMediaTypeVoice
                     | WxppMediaTypeVideo
                     | WxppMediaTypeThumb
-                    deriving (Show, Eq, Ord, Enum, Bounded)
+                    deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
+instance NFData WxppMediaType
 deriveSafeCopy 0 'base ''WxppMediaType
 
 $(derivePersistFieldS "WxppMediaType")
@@ -1060,7 +1089,9 @@ data WxppOutMsgEntity = WxppOutMsgEntity
                             , wxppOutCreatedTime    :: UTCTime
                             , wxppOutMessage        :: WxppOutMsg
                         }
-                        deriving (Show, Eq)
+                        deriving (Show, Eq, Generic)
+
+instance NFData WxppOutMsgEntity
 
 wxppMediaTypeString :: IsString a => WxppMediaType -> a
 wxppMediaTypeString mtype = fromString $ simpleEncode mtype
@@ -1085,8 +1116,9 @@ data MenuItemData = MenuItemDataClick Text
                         -- ^ key
                     | MenuItemDataLocationSelect Text
                         -- ^ key
-                    deriving (Show, Eq)
+                    deriving (Show, Eq, Generic)
 
+instance NFData MenuItemData
 
 menuItemDataToJsonPairs :: MenuItemData -> [Pair]
 menuItemDataToJsonPairs (MenuItemDataClick key) =
@@ -1164,8 +1196,8 @@ instance FromJSON MenuItem where
                     return $ MenuItem name dat_or_subs
 
 
-data SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
-                    deriving (Show, Eq, Ord)
+newtype SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
+  deriving (Show, Eq, Ord, Generic, NFData)
 
 instance SafeCopy SimpleLocaleName where
     getCopy                         = contain $ SimpleLocaleName <$> safeGet
@@ -1197,7 +1229,9 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                             UrlText     -- head image url
                             UTCTime
                             (Maybe WxppUnionID)
-                        deriving (Show, Eq, Ord, Typeable)
+                        deriving (Show, Eq, Ord, Typeable, Generic)
+
+instance NFData EndUserQueryResult
 
 $(deriveSafeCopy 0 'base ''EndUserQueryResult)
 
@@ -1302,7 +1336,9 @@ data UploadResult = UploadResult {
                         , urMediaId     :: WxppBriefMediaID
                         , urCreateTime  :: UTCTime
                         }
-                        deriving (Show, Typeable)
+                        deriving (Show, Typeable, Generic)
+
+instance NFData UploadResult
 
 deriveSafeCopy 0 'base ''UploadResult
 
@@ -1341,8 +1377,9 @@ data OAuthScope = AS_SnsApiBase
                 | AS_SnsApiUserInfo
                 | AS_SnsApiLogin
                 | AS_Unknown Text
-                deriving (Show, Eq, Ord)
+                deriving (Show, Eq, Ord, Generic)
 
+instance NFData OAuthScope
 $(derivePersistFieldS "OAuthScope")
 $(derivePathPieceS "OAuthScope")
 $(deriveSafeCopy 0 'base ''OAuthScope)
@@ -1368,7 +1405,7 @@ instance SimpleStringRep OAuthScope where
 
 
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
-                    deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
+  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData)
 
 instance PathPiece OAuthCode where
     fromPathPiece = fmap OAuthCode . fromPathPiece
@@ -1378,7 +1415,7 @@ instance ToJSON OAuthCode where toJSON = toJSON . unOAuthCode
 
 
 newtype OAuthAccessToken = OAuthAccessToken { unOAuthAccessToken :: Text }
-                        deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
+  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData)
 
 instance SafeCopy OAuthAccessToken where
     getCopy                      = contain $ OAuthAccessToken <$> safeGet
@@ -1394,7 +1431,7 @@ instance FromJSON OAuthAccessToken where
 
 
 newtype OAuthRefreshToken = OAuthRefreshToken { unOAuthRefreshToken :: Text }
-                            deriving (Eq, Ord, Show, PersistField, PersistFieldSql)
+  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData)
 
 instance SafeCopy OAuthRefreshToken where
     getCopy                       = contain $ OAuthRefreshToken <$> safeGet
@@ -1417,7 +1454,9 @@ data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
                             , oauthAtkPOpenID   :: WxppOpenID
                             , oauthAtkPAppID    :: WxppAppID
                             }
-                            deriving (Eq, Ord, Show)
+                            deriving (Eq, Ord, Show, Generic)
+
+instance NFData OAuthAccessTokenPkg
 
 $(deriveSafeCopy 0 'base ''OAuthAccessTokenPkg)
 
@@ -1426,7 +1465,9 @@ data OAuthTokenInfo = OAuthTokenInfo
                         !OAuthRefreshToken
                         !(Set OAuthScope)
                         !UTCTime
-                        deriving (Show, Typeable, Eq, Ord)
+                        deriving (Show, Typeable, Eq, Ord, Generic)
+
+instance NFData OAuthTokenInfo
 $(deriveSafeCopy 0 'base ''OAuthTokenInfo)
 
 packOAuthTokenInfo :: WxppAppID
@@ -1508,7 +1549,7 @@ instance FromJSON OAuthGetUserInfoResult where
                         <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
 
 newtype WxppJsTicket = WxppJsTicket { unWxppJsTicket :: Text }
-                    deriving (Show, Read, Eq, Ord, Typeable)
+  deriving (Show, Read, Eq, Ord, Typeable, NFData)
 
 instance SafeCopy WxppJsTicket where
     getCopy                  = contain $ WxppJsTicket <$> safeGet
