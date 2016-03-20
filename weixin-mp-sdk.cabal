@@ -175,6 +175,7 @@ library
      exposed-modules:   WeiXin.PublicPlatform.CloudHaskell
      cpp-options:       -DCLOUD_HASKELL
      build-depends:     distributed-process
+                      , distributed-process-monad-control
                       , distributed-process-async
 
   -- hs-source-dirs:      

@@ -4,6 +4,7 @@ import           ClassyPrelude                                      hiding
                                                                      (newChan)
 import           Control.Distributed.Process
 import           Control.Distributed.Process.Async
+import           Control.Distributed.Process.MonadBaseControl       ()
 import           Control.Distributed.Process.Node                   hiding (newLocalNode)
 import           Control.Monad.Trans.Maybe                          (runMaybeT, MaybeT(..))
 import           Control.Monad.Except                               (runExceptT,
@@ -201,8 +202,16 @@ instance Binary WrapInMsgHandlerInput
 runProcessTimeout :: Int -> LocalNode -> Process a -> IO (Maybe a)
 runProcessTimeout t node proc = do
   mv <- newEmptyMVar
-  timeout t $ do
-    runProcess node $ do
-      r <- proc
-      liftIO $ putMVar mv r
-    readMVar mv
+
+  pid_mvar <- newEmptyMVar
+  runProcess node $ do
+    getSelfPid >>= putMVar pid_mvar
+    r <- proc
+    putMVar mv r
+
+  pid <- readMVar pid_mvar
+  mx <- timeout t $ readMVar mv
+  when (isNothing mx) $ do
+    runProcess node $ exit pid (asString "timed-out")
+
+  return mx
