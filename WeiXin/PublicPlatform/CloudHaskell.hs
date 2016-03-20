@@ -6,7 +6,6 @@ import           Control.Distributed.Process
 import           Control.Distributed.Process.Async
 import           Control.Distributed.Process.MonadBaseControl       ()
 import           Control.Distributed.Process.Node                   hiding (newLocalNode)
-import           Control.Monad.Trans.Maybe                          (runMaybeT, MaybeT(..))
 import           Control.Monad.Except                               (runExceptT,
                                                                      throwError)
 import           Control.Monad.Logger
@@ -18,7 +17,6 @@ import           System.Timeout                                     (timeout)
 
 import           WeiXin.PublicPlatform.InMsgHandler
 import           WeiXin.PublicPlatform.Class
-import           WeiXin.PublicPlatform.EndUser
 
 -- | 代表一种能找到接收 w 信息的 Process/SendPort 信息
 data CloudBackendInfo w = CloudBackendInfo
@@ -50,7 +48,7 @@ instance JsonConfigable TeeEventToCloud where
 instance (MonadIO m, MonadCatch m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
       (TeeEventToCloud app_id (CloudBackendInfo new_local_node get_ports) evt_types)
-      cache bs m_ime = do
+      _cache bs m_ime = do
           forM_ m_ime $ \ime -> do
             case wxppInMessage ime of
               WxppInMsgEvent evt -> do
