@@ -21,6 +21,7 @@ import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
+import qualified Network.Wreq.Session       as WS
 import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
 import System.Random                        (randomIO)
@@ -331,10 +332,12 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
     let state = fromMaybe state' $ T.stripPrefix ":" state'
 
+    let sess = wxppSubWreqSession sub
     case fmap OAuthCode m_code of
         Just code | not (null $ unOAuthCode code) -> do
             -- 用户同意授权
-            err_or_atk_info <- tryWxppWsResult $ wxppOAuthGetAccessToken app_id secret code
+            err_or_atk_info <- tryWxppWsResult $ flip runReaderT sess $
+                                  wxppOAuthGetAccessToken app_id secret code
             atk_info <- case err_or_atk_info of
                             Left err -> do
                                 $logErrorS wxppLogSource $
@@ -503,8 +506,9 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     atk <- getAccessTokenSubHandler' foundation
 
+    let sess = wxppSubWreqSession foundation
     _ <- liftIO $ forkIO $ wxppSubRunLoggingT foundation $ do
-                _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp atk
+                _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp sess atk
                 return ()
 
     return $ toJSON ("run in background" :: Text)
@@ -521,15 +525,18 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
             if sm_mode
                 then endUserQueryResultSetUnionID (Just $ fakeUnionID open_id) <$> qres
                 else qres
-    (tryWxppWsResult $ wxppQueryEndUserInfo atk open_id)
-        >>= return . fix_uid
-        >>= forwardWsResult "wxppQueryEndUserInfo"
+
+    tryWxppWsResult
+      (flip runReaderT (wxppSubWreqSession foundation) $ wxppQueryEndUserInfo atk open_id)
+      >>= return . fix_uid
+      >>= forwardWsResult "wxppQueryEndUserInfo"
 
 -- | 模仿创建永久场景的二维码
 -- 行为接近微信平台的接口，区别是
 -- 输入仅仅是一个 WxppScene
 postCreateQrCodePersistR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
 postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
+    let sess = wxppSubWreqSession foundation
     alreadyExpired
     scene <- decodePostBodyAsYaml
     let sm_mode = wxppSubFakeQRTicket $ wxppSubOptions foundation
@@ -543,7 +550,8 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
 
         else do
             atk <- getAccessTokenSubHandler' foundation
-            liftM toJSON $ wxppQrCodeCreatePersist atk scene
+            flip runReaderT sess $ do
+              liftM toJSON $ wxppQrCodeCreatePersist atk scene
 
 
 -- | 返回一个二维码图像
@@ -632,19 +640,20 @@ fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
 -- | initialize db table: WxppUserCachedInfo
 initWxppUserDbCacheOfApp ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> ReaderT WxppDbBackend m Int
-initWxppUserDbCacheOfApp atk = do
-    wxppGetEndUserSource atk
-        =$= CL.concatMap wxppOpenIdListInGetUserResult
-        =$= save_to_db
-        $$ CC.length
+    WS.Session -> AccessToken -> ReaderT WxppDbBackend m Int
+initWxppUserDbCacheOfApp sess atk = do
+    flip runReaderT sess $ do
+      wxppGetEndUserSource atk
+          =$= CL.concatMap wxppOpenIdListInGetUserResult
+          =$= save_to_db
+          $$ CC.length
     where
         app_id = accessTokenApp atk
 
         save_to_db = awaitForever $ \open_id -> do
             now <- liftIO getCurrentTime
             _ <- lift $ do
-                m_old <- getBy $ UniqueWxppUserCachedInfo open_id app_id
+                m_old <- lift $ getBy $ UniqueWxppUserCachedInfo open_id app_id
                 case m_old of
                     Just _ -> do
                         -- 假定 open id 及 union id 对于固定的 app 是固定的
@@ -654,13 +663,13 @@ initWxppUserDbCacheOfApp atk = do
 
                     Nothing -> do
                         qres <- wxppQueryEndUserInfo atk open_id
-                        _ <- insertBy $ WxppUserCachedInfo app_id
+                        _ <- lift $ insertBy $ WxppUserCachedInfo app_id
                                 (endUserQueryResultOpenID qres)
                                 (endUserQueryResultUnionID qres)
                                 now
                         return ()
 
-                transactionSave
+                lift transactionSave
 
             yield ()
 

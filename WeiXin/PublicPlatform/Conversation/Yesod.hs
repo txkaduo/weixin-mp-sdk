@@ -224,7 +224,7 @@ instance JsonConfigable (WxppTalkHandlerGeneral r m) where
 
 type instance WxppInMsgProcessResult (WxppTalkHandlerGeneral r m) = WxppInMsgHandlerResult
 
-instance (MonadBaseControl IO m, MonadIO m, MonadLogger m) =>
+instance (MonadBaseControl IO m, WxppApiMonad m) =>
     IsWxppInMsgProcessor m (WxppTalkHandlerGeneral r m)
     where
     processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache _bs m_ime = runExceptT $ do
@@ -421,7 +421,7 @@ instance JsonConfigable WxppTalkTerminator where
 
 type instance WxppInMsgProcessResult WxppTalkTerminator = WxppInMsgHandlerResult
 
-instance (MonadIO m, MonadBaseControl IO m, MonadLogger m, MonadCatch m) =>
+instance (WxppApiMonad m, MonadBaseControl IO m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppTalkTerminator where
     processInMsg (WxppTalkTerminator app_id msg_dirs db_runner primary get_outmsg) cache _bs m_ime = runExceptT $ do
         case m_ime of
@@ -441,7 +441,7 @@ instance (MonadIO m, MonadBaseControl IO m, MonadLogger m, MonadCatch m) =>
 
 
 processInMsgByWxTalk :: (HasStateType s, Eq s, FromJSON s, ToJSON s
-                        , MonadIO m, MonadLogger m
+                        , WxppApiMonad m
                         , WxTalkerState r (ReaderT WxppDbBackend m) s
                         , WxTalkerDoneAction r (ReaderT WxppDbBackend m) s)  =>
                         Proxy s

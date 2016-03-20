@@ -11,6 +11,7 @@ import qualified Data.Text                  as T
 import qualified Data.Text.IO               as T
 import qualified Data.Map.Lazy              as LM
 import Network.Mime                         (defaultMimeMap, MimeType)
+import qualified Network.Wreq.Session       as WS
 import System.IO                            (hFlush, openTempFile, readLn, hSeek, SeekMode(..))
 import System.Directory                     (getTemporaryDirectory, removeFile)
 import System.Process                       (callProcess)
@@ -23,13 +24,7 @@ import qualified Data.Conduit.List          as CL
 
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
 
-import WeiXin.PublicPlatform.AutoReplyRules
-import WeiXin.PublicPlatform.Menu
-import WeiXin.PublicPlatform.EndUser
-import WeiXin.PublicPlatform.Material
-import WeiXin.PublicPlatform.Propagate
--- import WeiXin.PublicPlatform.WS
-import WeiXin.PublicPlatform.Security
+import WeiXin.PublicPlatform
 
 data ManageCmd = QueryAutoReplyRules
                 | QueryOriginMenu
@@ -205,9 +200,11 @@ optionsParse = Options
                 <*> manageCmdParser
 
 
-start :: (MonadLogger m, MonadThrow m, MonadCatch m, MonadIO m) => ReaderT Options m ()
-start = do
-    opts <- ask
+start :: (MonadLogger m, MonadThrow m, MonadCatch m, MonadIO m)
+      => Options
+      -> WS.Session
+      -> m ()
+start opts sess = do
     let app_id = optAppID opts
         m_app_secret = optAppSecret opts
         get_atk = do
@@ -217,7 +214,8 @@ start = do
                         Nothing -> do
                             throwM $ userError "need either app secret or access token"
                         Just app_secret -> do
-                            AccessTokenResp atk_p _ttl <- refreshAccessToken' app_id app_secret
+                            AccessTokenResp atk_p _ttl <- flip runReaderT sess $
+                                                            refreshAccessToken' app_id app_secret
                             return $ atk_p app_id
 
                 Just atk_data -> do
@@ -227,17 +225,17 @@ start = do
 
         QueryAutoReplyRules -> do
             atk <- get_atk
-            obj <- wxppQueryOriginAutoReplyRules atk
+            obj <- flip runReaderT sess $ wxppQueryOriginAutoReplyRules atk
             liftIO $ B.putStr $ Y.encode obj
 
         QueryOriginMenu -> do
             atk <- get_atk
-            result <- wxppQueryMenuConfig atk
+            result <- flip runReaderT sess $ wxppQueryMenuConfig atk
             liftIO $ B.putStr $ Y.encode result
 
         LoadMenu fp -> do
             atk <- get_atk
-            result <- wxppCreateMenuWithYaml atk ("." :| []) fp
+            result <- flip runReaderT sess $ wxppCreateMenuWithYaml atk ("." :| []) fp
             case result of
                 Left err -> do
                     $logError $ fromString $
@@ -245,17 +243,17 @@ start = do
                 Right _ -> return ()
 
         QueryCurrentMenu -> do
-            result <- get_atk >>= wxppQueryMenu
+            result <- get_atk >>= flip runReaderT sess . wxppQueryMenu
             liftIO $ B.putStr $ Y.encode result
 
         GetDurable mid edit_mode -> do
             atk <- get_atk
-            result <- wxppGetDurableMedia atk mid
+            result <- flip runReaderT sess $ wxppGetDurableMedia atk mid
 
             case result of
                 WxppGetDurableNews articles -> do
                     if edit_mode
-                        then editNewsDurable atk mid articles
+                        then flip runReaderT sess $ editNewsDurable atk mid articles
                         else liftIO $ B.putStr $ Y.encode articles
 
                 WxppGetDurableVideo title desc down_url -> do
@@ -278,48 +276,50 @@ start = do
 
         CountDurable -> do
             atk <- get_atk
-            result <- wxppCountDurableMedia atk
+            result <- flip runReaderT sess $ wxppCountDurableMedia atk
             liftIO $ B.putStr $ Y.encode result
 
         ListGroup -> do
             atk <- get_atk
-            result <- wxppListUserGroups atk
+            result <- flip runReaderT sess $ wxppListUserGroups atk
             liftIO $ B.putStr $ Y.encode result
 
         CreateGroup name -> do
             atk <- get_atk
-            grp_id <- wxppCreateUserGroup atk name
+            grp_id <- flip runReaderT sess $ wxppCreateUserGroup atk name
             liftIO $ putStrLn $ "group created, id is " <> (fromString $ show $ unWxppUserGroupID grp_id)
 
         DeleteGroup grp_id -> do
             atk <- get_atk
-            wxppDeleteUserGroup atk grp_id
+            flip runReaderT sess $ wxppDeleteUserGroup atk grp_id
 
         RenameGroup grp_id name -> do
             atk <- get_atk
-            wxppRenameUserGroup atk grp_id name
+            flip runReaderT sess $ wxppRenameUserGroup atk grp_id name
 
         GroupOfUser open_id -> do
             atk <- get_atk
-            grp_id <- wxppGetGroupOfUser atk open_id
+            grp_id <- flip runReaderT sess $ wxppGetGroupOfUser atk open_id
             liftIO $ putStrLn $ "user's group id is " <> (fromString $ show $ unWxppUserGroupID grp_id)
 
         SetUserGroup grp_id open_id_list -> do
             atk <- get_atk
             case open_id_list of
                 []          -> return ()
-                [open_id]   -> wxppSetUserGroup atk grp_id open_id
-                _           -> wxppBatchSetUserGroup atk grp_id open_id_list
+                [open_id]   -> flip runReaderT sess $ wxppSetUserGroup atk grp_id open_id
+                _           -> flip runReaderT sess $ wxppBatchSetUserGroup atk grp_id open_id_list
 
         ListAllDurableMedia mtype -> do
             atk <- get_atk
-            wxppBatchGetDurableToSrc (wxppBatchGetDurableMedia atk mtype 20)
-                $=  CL.map toJSON
+            flip runReaderT sess $ do
+              wxppBatchGetDurableToSrc (wxppBatchGetDurableMedia atk mtype 20)
+                $= CL.map toJSON
                 $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
 
         GetAllDurableNews show_id_only -> do
             atk <- get_atk
-            wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
+            flip runReaderT sess $ do
+              wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $=  CL.map (if show_id_only
                                 then toJSON . unWxppDurableMediaID . wxppBatchGetDurableNewsItemID
                                 else toJSON
@@ -332,7 +332,8 @@ start = do
                     let articles = wxppBatchGetDurableNewsItemContent item
                     in any (T.isInfixOf keyword . wxppDurableArticleTitle . wxppDurableArticleSA) articles
 
-            results <- wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
+            results <- flip runReaderT sess $ do
+              wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $= (awaitForever $ \x -> do
                         liftIO $ putStr "." >> hFlush stdout
                         yield x
@@ -349,21 +350,23 @@ start = do
                         Nothing -> return ()
                         Just result -> do
                             let mid = wxppBatchGetDurableNewsItemID result
-                            editNewsDurable atk mid (wxppBatchGetDurableNewsItemContent result)
+                            flip runReaderT sess $
+                              editNewsDurable atk mid (wxppBatchGetDurableNewsItemContent result)
                 else do
                     mapM_ (liftIO . B.putStr . Y.encode) results
 
         GetPropagateMsgStatus msg_id -> do
             atk <- get_atk
-            PropagateMsgStatus status <- wxppGetPropagateMsgStatus atk msg_id
+            PropagateMsgStatus status <- flip runReaderT sess $ wxppGetPropagateMsgStatus atk msg_id
             putStrLn status
 
         PropagateDurableNews media_id -> do
             atk <- get_atk
-            msg_id <- wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
+            msg_id <- flip runReaderT sess $
+                        wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
             putStrLn $ fromString $ show msg_id
 
-editNewsDurable :: (MonadIO m, MonadLogger m, MonadCatch m) =>
+editNewsDurable :: (WxppApiMonad m, MonadCatch m) =>
     AccessToken -> WxppDurableMediaID -> [WxppDurableArticleS] -> m ()
 editNewsDurable atk mid articles = do
     let go bs = do
@@ -431,10 +434,10 @@ extByMime mime =
     listToMaybe $ LM.keys $ LM.filter (== mime) defaultMimeMap
 
 start' :: Options -> IO ()
-start' opts = do
+start' opts = WS.withSession $ \sess -> do
     logger_set <- newStderrLoggerSet 0
     runLoggingT
-        (runReaderT start opts)
+        (start opts sess)
         (appLogger logger_set (optVerbose opts))
 
 appLogger :: LoggerSet -> Int -> Loc -> LogSource -> LogLevel -> LogStr -> IO ()

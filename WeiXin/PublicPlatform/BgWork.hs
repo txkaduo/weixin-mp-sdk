@@ -16,13 +16,11 @@ import Yesod.Helpers.Utils                  (foreverLogExc)
 
 -- | 检查最新的 access token 是否已接近过期
 -- 如是，则向服务器请求更新
-refreshAccessTokenIfNeeded ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c) =>
-    WxppAppConfig
-    -> c
-    -> NominalDiffTime
-    -> m ()
+refreshAccessTokenIfNeeded :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                           => WxppAppConfig
+                           -> c
+                           -> NominalDiffTime
+                           -> m ()
 refreshAccessTokenIfNeeded wac cache dt = do
     refreshAccessTokenIfNeeded' cache app_id secret dt
     where
@@ -30,14 +28,13 @@ refreshAccessTokenIfNeeded wac cache dt = do
         secret = wxppConfigAppSecret wac
 
 
-refreshAccessTokenIfNeeded' ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c)
-    => c
-    -> WxppAppID
-    -> WxppAppSecret
-    -> NominalDiffTime
-    -> m ()
+refreshAccessTokenIfNeeded' :: ( WxppApiMonad m, MonadCatch m
+                                , WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                            => c
+                            -> WxppAppID
+                            -> WxppAppSecret
+                            -> NominalDiffTime
+                            -> m ()
 refreshAccessTokenIfNeeded' cache app_id secret dt = do
     now <- liftIO getCurrentTime
     let t = addUTCTime (abs dt) now
@@ -49,31 +46,26 @@ refreshAccessTokenIfNeeded' cache app_id secret dt = do
 
 -- | infinite loop to refresh access token
 -- Create a backgroup thread to call this, so that access token can be keep fresh.
-loopRefreshAccessToken ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c
-    )
-    => IO Bool  -- ^ This function should be a blocking op,
-                -- return True if the infinite should be aborted.
-    -> Int      -- ^ interval between successive checking (in seconds)
-    -> WxppAppConfig
-    -> c
-    -> NominalDiffTime
-    -> m ()
+loopRefreshAccessToken :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                       => IO Bool  -- ^ This function should be a blocking op,
+                                   -- return True if the infinite should be aborted.
+                       -> Int      -- ^ interval between successive checking (in seconds)
+                       -> WxppAppConfig
+                       -> c
+                       -> NominalDiffTime
+                       -> m ()
 loopRefreshAccessToken chk_abort intv wac cache dt = do
     loopRunBgJob chk_abort intv $ refreshAccessTokenIfNeeded wac cache dt
 
 -- | like loopRefreshAccessToken, but for a list of Weixin App
-loopRefreshAccessTokens ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c)
-    => IO Bool  -- ^ This function should be a blocking op,
-                -- return True if the infinite should be aborted.
-    -> Int      -- ^ interval between successive checking (in seconds)
-    -> m [WxppAppConfig]
-    -> c
-    -> NominalDiffTime
-    -> m ()
+loopRefreshAccessTokens :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                        => IO Bool  -- ^ This function should be a blocking op,
+                                    -- return True if the infinite should be aborted.
+                        -> Int      -- ^ interval between successive checking (in seconds)
+                        -> m [WxppAppConfig]
+                        -> c
+                        -> NominalDiffTime
+                        -> m ()
 loopRefreshAccessTokens chk_abort intv get_wac_list cache dt = do
     loopRunBgJob chk_abort intv $ do
         wac_list <- get_wac_list
@@ -81,14 +73,11 @@ loopRefreshAccessTokens chk_abort intv get_wac_list cache dt = do
 
 -- | 检查最新的 JsTicket 是否已接近过期
 -- 如是，则向服务器请求更新
-refreshJsTicketIfNeeded ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c
-    ) =>
-    c
-    -> WxppAppID
-    -> NominalDiffTime
-    -> m ()
+refreshJsTicketIfNeeded :: ( WxppApiMonad m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                        => c
+                        -> WxppAppID
+                        -> NominalDiffTime
+                        -> m ()
 refreshJsTicketIfNeeded cache app_id dt = do
     ws_res <- tryWxppWsResult inner
     case ws_res of
@@ -109,32 +98,26 @@ refreshJsTicketIfNeeded cache app_id dt = do
 
 -- | infinite loop to refresh access token
 -- Create a backgroup thread to call this, so that access token can be keep fresh.
-loopRefreshJsTicket ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c
-    )
-    => IO Bool  -- ^ This function should be a blocking op,
-                -- return True if the infinite should be aborted.
-    -> Int      -- ^ interval between successive checking (in seconds)
-    -> c
-    -> WxppAppID
-    -> NominalDiffTime
-    -> m ()
+loopRefreshJsTicket :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                    => IO Bool  -- ^ This function should be a blocking op,
+                                -- return True if the infinite should be aborted.
+                    -> Int      -- ^ interval between successive checking (in seconds)
+                    -> c
+                    -> WxppAppID
+                    -> NominalDiffTime
+                    -> m ()
 loopRefreshJsTicket chk_abort intv cache app_id dt = do
     loopRunBgJob chk_abort intv $ refreshJsTicketIfNeeded cache app_id dt
 
 -- | like loopRefreshJsTicket, but for a list of Weixin App
-loopRefreshJsTickets ::
-    (MonadIO m, MonadLogger m, MonadCatch m
-    , WxppCacheTokenUpdater c, WxppCacheTokenReader c
-    )
-    => IO Bool     -- ^ This function should be a blocking op,
-                -- return True if the infinite should be aborted.
-    -> Int      -- ^ interval between successive checking (in seconds)
-    -> c
-    -> m [WxppAppID]
-    -> NominalDiffTime
-    -> m ()
+loopRefreshJsTickets :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+                     => IO Bool     -- ^ This function should be a blocking op,
+                                    -- return True if the infinite should be aborted.
+                     -> Int      -- ^ interval between successive checking (in seconds)
+                     -> c
+                     -> m [WxppAppID]
+                     -> NominalDiffTime
+                     -> m ()
 loopRefreshJsTickets chk_abort intv cache get_app_list dt = do
     loopRunBgJob chk_abort intv $ do
         app_list <- get_app_list

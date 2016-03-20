@@ -19,8 +19,8 @@ module WeiXin.PublicPlatform.Propagate
 import ClassyPrelude
 -- import qualified Data.Text.Lazy             as LT
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
-import Control.Monad.Logger
 import Data.Aeson
 import Data.Aeson.Types                     (Pair)
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
@@ -162,18 +162,19 @@ wxppPropagateMsgTypeS (WxppPropagateMsgCard {})     = "card"
 
 
 -- | 为群发而上传图文消息素材
-wxppPropagateUploadNews ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppBriefNews
-        -- ^ XXX: 这里只是用了与永久图文素材相同的数据类型
-        --        真正上传的结果只是一个临时的素材
-    -> m WxppBriefMediaID
+wxppPropagateUploadNews :: (WxppApiMonad m)
+                        => AccessToken
+                        -> WxppBriefNews
+                            -- ^ XXX: 这里只是用了与永久图文素材相同的数据类型
+                            --        真正上传的结果只是一个临时的素材
+                        -> m WxppBriefMediaID
 wxppPropagateUploadNews (AccessToken { accessTokenData = atk }) news = do
     let url = wxppRemoteApiBaseUrl <> "/media/uploadnews"
         opts = defaults & param "access_token" .~ [ atk ]
+
+    sess <- ask
     PUploadNewsResult _mtype media_id _ <-
-        (liftIO $ postWith opts url $ toJSON news)
+        liftIO (WS.postWith opts sess url $ toJSON news)
             >>= asWxppWsResponseNormal'
     return media_id
 
@@ -194,19 +195,20 @@ instance FromJSON CreateVideoMediaIDResult where
 -- | 文档说：群发视频之前，先上传多媒体文件，得到一个media_id
 --           然后还要再调用一个特别接口，得到一个新的 media_id
 --           即这里的 WxppPropagateVideoMediaID
-wxppPropagateNewVideoID ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaID
-        -- ^ 通过基础支持中的上传下载多媒体文件得到的id
-    -> Text     -- ^ title
-    -> Text     -- ^ description
-    -> m WxppPropagateVideoMediaID
+wxppPropagateNewVideoID :: (WxppApiMonad m)
+                        => AccessToken
+                        -> WxppMediaID
+                            -- ^ 通过基础支持中的上传下载多媒体文件得到的id
+                        -> Text     -- ^ title
+                        -> Text     -- ^ description
+                        -> m WxppPropagateVideoMediaID
 wxppPropagateNewVideoID (AccessToken { accessTokenData = atk }) media_id title desc = do
     let url = "https://file.api.weixin.qq.com/cgi-bin/media/uploadvideo"
         opts = defaults & param "access_token" .~ [ atk ]
+
+    sess <- ask
     CreateVideoMediaIDResult _typ v_media_id _created_at
-        <- (liftIO $ postWith opts url $ object
+        <- liftIO (WS.postWith opts sess url $ object
                     [ "type" .= ("video" :: Text)
                     , "media_id" .= media_id
                     , "title" .= title
@@ -251,12 +253,11 @@ instance FromJSON PropagateCallResult where
                     PropagateCallResult <$> o .: "msg_id"
 
 -- | 群发已准备好的消息
-wxppPropagateMsg ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> Maybe WxppUserGroupID
-    -> WxppPropagateMsg
-    -> m PropagateMsgID
+wxppPropagateMsg :: (WxppApiMonad m)
+                 => AccessToken
+                 -> Maybe WxppUserGroupID
+                 -> WxppPropagateMsg
+                 -> m PropagateMsgID
 wxppPropagateMsg (AccessToken { accessTokenData = atk }) m_grp_id p_msg = do
     let url = wxppRemoteApiBaseUrl <> "/message/mass/sendall"
         opts = defaults & param "access_token" .~ [ atk ]
@@ -267,19 +268,19 @@ wxppPropagateMsg (AccessToken { accessTokenData = atk }) m_grp_id p_msg = do
                     ] ++
                     [ wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg) ]
 
+    sess <- ask
     (_, PropagateCallResult msg_id) <-
-        (liftIO $ postWith opts url post_v)
+        liftIO (WS.postWith opts sess url post_v)
             >>= asWxppWsResponseNormal2'
     return msg_id
 
 
 -- | 預览要群发的消息
-wxppPreviewPropagateMsg ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> Either WxppOpenID WeixinUserName
-    -> WxppPropagateMsg
-    -> m ()
+wxppPreviewPropagateMsg :: (WxppApiMonad m)
+                        => AccessToken
+                        -> Either WxppOpenID WeixinUserName
+                        -> WxppPropagateMsg
+                        -> m ()
 wxppPreviewPropagateMsg (AccessToken { accessTokenData = atk }) openid_or_name p_msg = do
     let url = wxppRemoteApiBaseUrl <> "/message/mass/preview"
         opts = defaults & param "access_token" .~ [ atk ]
@@ -293,21 +294,23 @@ wxppPreviewPropagateMsg (AccessToken { accessTokenData = atk }) openid_or_name p
                     , wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg)
                     ]
 
-    (liftIO $ postWith opts url post_v)
+    sess <- ask
+    liftIO (WS.postWith opts sess url post_v)
             >>= asWxppWsResponseVoid
 
 
 
 -- | 删除已发出的群发消息
-wxppDropPropagateMsg ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> PropagateMsgID
-    -> m ()
+wxppDropPropagateMsg :: (WxppApiMonad m)
+                     => AccessToken
+                     -> PropagateMsgID
+                     -> m ()
 wxppDropPropagateMsg (AccessToken { accessTokenData = atk }) msg_id = do
     let url = wxppRemoteApiBaseUrl <> "/message/mass/delete"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ object [ "msg_id" .= msg_id ])
+
+    sess <- ask
+    liftIO (WS.postWith opts sess url $ object [ "msg_id" .= msg_id ])
             >>= asWxppWsResponseVoid
 
 
@@ -319,15 +322,15 @@ instance FromJSON PropagateMsgStatus where
 
 
 -- | 查询群发消息的发送状态
-wxppGetPropagateMsgStatus ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> PropagateMsgID
-    -> m PropagateMsgStatus
+wxppGetPropagateMsgStatus :: (WxppApiMonad m)
+                          => AccessToken
+                          -> PropagateMsgID
+                          -> m PropagateMsgStatus
 wxppGetPropagateMsgStatus (AccessToken { accessTokenData = atk }) msg_id = do
     let url = wxppRemoteApiBaseUrl <> "/message/mass/get"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    r <- liftIO $ postWith opts url $ object [ "msg_id" .= msg_id ]
+    sess <- ask
+    r <- liftIO $ WS.postWith opts sess url $ object [ "msg_id" .= msg_id ]
     -- $logDebugS wxppLogSource $ LT.toStrict $ decodeUtf8 $ r ^. responseBody
     asWxppWsResponseNormal' r

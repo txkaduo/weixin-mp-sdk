@@ -11,9 +11,10 @@ import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Media
+import WeiXin.PublicPlatform.WS
 
 
-type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, MonadThrow m, MonadCatch m)
+type LoadMsgMonad m = (WxppApiMonad m, MonadLoggerIO m, MonadCatch m)
 
 type LoadMsgEnv r = ( HasWxppOutMsgDir r
                     , HasSomeWxppCacheBackend r

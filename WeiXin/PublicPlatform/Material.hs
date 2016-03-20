@@ -6,6 +6,7 @@ module WeiXin.PublicPlatform.Material
 
 import ClassyPrelude hiding (catch)
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Data.Aeson
 import Control.Monad.Logger
@@ -86,14 +87,13 @@ instance FromJSON DurableUploadResult where
 
 
 -- | 上传本地一个媒体文件，成为永久素材
-wxppUploadDurableMediaInternal ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> Maybe (Text, Text)
-        -- ^ 上传视频素材所需的额外信息：标题，简介
-    -> FilePath         -- ^ the file to upload
-    -> m DurableUploadResult
+wxppUploadDurableMediaInternal :: (WxppApiMonad m)
+                               => AccessToken
+                               -> WxppMediaType
+                               -> Maybe (Text, Text)
+                                  -- ^ 上传视频素材所需的额外信息：标题，简介
+                               -> FilePath         -- ^ the file to upload
+                               -> m DurableUploadResult
 wxppUploadDurableMediaInternal atk mtype m_title_intro fp = do
     wxppUploadDurableMediaInternalLBS atk mtype
         m_title_intro
@@ -101,19 +101,19 @@ wxppUploadDurableMediaInternal atk mtype m_title_intro fp = do
 
 
 -- | 上传本地一个媒体文件，成为永久素材
-wxppUploadDurableMediaInternalLBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> Maybe (Text, Text)
-        -- ^ 上传视频素材所需的额外信息：标题，简介
-    -> Part                 -- ^ the @Part@ of uploaded file
-    -> m DurableUploadResult
+wxppUploadDurableMediaInternalLBS :: (WxppApiMonad m)
+                                  => AccessToken
+                                  -> WxppMediaType
+                                  -> Maybe (Text, Text)
+                                      -- ^ 上传视频素材所需的额外信息：标题，简介
+                                  -> Part                 -- ^ the @Part@ of uploaded file
+                                  -> m DurableUploadResult
 wxppUploadDurableMediaInternalLBS (AccessToken { accessTokenData = atk }) mtype m_title_intro fpart = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    (liftIO $ postWith opts url $
+    sess <- ask
+    liftIO (WS.postWith opts sess url $
                 [ fpart & partName .~ "media"
                 , partText "type" (wxppMediaTypeString mtype)
                 ]
@@ -129,37 +129,34 @@ wxppUploadDurableMediaInternalLBS (AccessToken { accessTokenData = atk }) mtype 
 
 
 -- | 上传本地视频成为永久素材
-wxppUploadDurableMediaVideo ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> Text     -- ^ 标题
-    -> Text     -- ^ 简介
-    -> FilePath
-    -> m DurableUploadResult
+wxppUploadDurableMediaVideo :: (WxppApiMonad m)
+                            => AccessToken
+                            -> Text     -- ^ 标题
+                            -> Text     -- ^ 简介
+                            -> FilePath
+                            -> m DurableUploadResult
 wxppUploadDurableMediaVideo atk title intro fp = do
     wxppUploadDurableMediaInternal atk WxppMediaTypeVideo (Just (title, intro)) fp
 
 
-wxppUploadDurableMediaVideoLBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> Text     -- ^ 标题
-    -> Text     -- ^ 简介
-    -> FilePath -- ^ a dummy file name
-    -> LB.ByteString
-    -> m DurableUploadResult
+wxppUploadDurableMediaVideoLBS :: (WxppApiMonad m)
+                               => AccessToken
+                               -> Text     -- ^ 标题
+                               -> Text     -- ^ 简介
+                               -> FilePath -- ^ a dummy file name
+                               -> LB.ByteString
+                               -> m DurableUploadResult
 wxppUploadDurableMediaVideoLBS atk title intro fp lbs = do
     wxppUploadDurableMediaInternalLBS atk WxppMediaTypeVideo (Just (title, intro))
         (partLBS "media" lbs & partFileName .~ Just fp)
 
 
 -- | 上传本地非视频媒体成为永久素材
-wxppUploadDurableMediaNonVideo ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> FilePath
-    -> m DurableUploadResult
+wxppUploadDurableMediaNonVideo :: (WxppApiMonad m)
+                               => AccessToken
+                               -> WxppMediaType
+                               -> FilePath
+                               -> m DurableUploadResult
 wxppUploadDurableMediaNonVideo atk mtype fp = do
     case mtype of
         WxppMediaTypeVideo ->
@@ -170,13 +167,12 @@ wxppUploadDurableMediaNonVideo atk mtype fp = do
 
 
 -- | 上传本地非视频媒体成为永久素材
-wxppUploadDurableMediaNonVideoLBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> FilePath
-    -> LB.ByteString
-    -> m DurableUploadResult
+wxppUploadDurableMediaNonVideoLBS :: (WxppApiMonad m)
+                                  => AccessToken
+                                  -> WxppMediaType
+                                  -> FilePath
+                                  -> LB.ByteString
+                                  -> m DurableUploadResult
 wxppUploadDurableMediaNonVideoLBS atk mtype fp lbs = do
     case mtype of
         WxppMediaTypeVideo ->
@@ -188,15 +184,16 @@ wxppUploadDurableMediaNonVideoLBS atk mtype fp lbs = do
 
 
 -- | 上传一个图文素材成为永久素材
-wxppUploadDurableNews ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppDurableNews
-    -> m DurableUploadResult
+wxppUploadDurableNews :: (WxppApiMonad m)
+                      => AccessToken
+                      -> WxppDurableNews
+                      -> m DurableUploadResult
 wxppUploadDurableNews (AccessToken { accessTokenData = atk }) news = do
     let url = wxppRemoteApiBaseUrl <> "/material/add_news"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ encode $ toJSON news)
+
+    sess <- ask
+    liftIO (WS.postWith opts sess url $ encode $ toJSON news)
             >>= asWxppWsResponseNormal'
 
 
@@ -220,15 +217,16 @@ instance FromJSON WxppGetDurableResult where
 
 
 -- | 获取永久素材
-wxppGetDurableMedia ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    AccessToken
-    -> WxppDurableMediaID
-    -> m WxppGetDurableResult
+wxppGetDurableMedia :: (WxppApiMonad m, MonadCatch m)
+                    => AccessToken
+                    -> WxppDurableMediaID
+                    -> m WxppGetDurableResult
 wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID mid) = do
     let url = wxppRemoteApiBaseUrl <> "/material/get_material"
         opts = defaults & param "access_token" .~ [ atk ]
-    r <- liftIO $ postWith opts url $ object [ "media_id" .= mid ]
+
+    sess <- ask
+    r <- liftIO $ WS.postWith opts sess url $ object [ "media_id" .= mid ]
     asWxppWsResponseNormal' r
         `catch`
         (\(_ :: JSONError) -> do
@@ -249,11 +247,10 @@ wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID 
                         (r ^. responseBody)
             )
 
-wxppGetDurableMediaMaybe ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    AccessToken
-    -> WxppDurableMediaID
-    -> m (Maybe WxppGetDurableResult)
+wxppGetDurableMediaMaybe :: (WxppApiMonad m, MonadCatch m)
+                         => AccessToken
+                         -> WxppDurableMediaID
+                         -> m (Maybe WxppGetDurableResult)
 wxppGetDurableMediaMaybe atk mid = do
     (liftM Just $ wxppGetDurableMedia atk mid)
         `catch` \e -> do
@@ -267,11 +264,10 @@ wxppGetDurableMediaMaybe atk mid = do
 -- | 组合了 wxppUploadDurableNews 与 wxppGetDurableMedia
 -- 把 WxppDurableNews 保存至素材库后，再取出来，从而知道每个图文的URL
 -- 再生成一个 WxppOutMsg
-wxppUploadDurableNewsThenMakeOutMsg ::
-    ( MonadIO m, MonadLogger m, MonadCatch m) =>
-    AccessToken
-    -> [(WxppDurableArticle, Maybe UrlText)]
-    -> m (WxppDurableMediaID, WxppOutMsg)
+wxppUploadDurableNewsThenMakeOutMsg :: (WxppApiMonad m, MonadCatch m)
+                                    => AccessToken
+                                    -> [(WxppDurableArticle, Maybe UrlText)]
+                                    -> m (WxppDurableMediaID, WxppOutMsg)
 wxppUploadDurableNewsThenMakeOutMsg atk article_and_url = do
     durable_media_id <- liftM durableUploadResultMediaID $
                             wxppUploadDurableNews atk $ WxppDurableNews $ map fst article_and_url
@@ -313,14 +309,15 @@ instance ToJSON WxppDurableCount where
                 , "news_count"  .= wxppDurableCountNews x
                 ]
 
-wxppCountDurableMedia ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    AccessToken
-    -> m WxppDurableCount
+wxppCountDurableMedia :: (WxppApiMonad m, MonadCatch m)
+                      => AccessToken
+                      -> m WxppDurableCount
 wxppCountDurableMedia (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/material/get_materialcount"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ getWith opts url)
+
+    sess <- ask
+    liftIO (WS.getWith opts sess url)
             >>= asWxppWsResponseNormal'
 
 
@@ -365,17 +362,18 @@ instance ToJSON WxppBatchGetDurableMediaItem where
                     ]
 
 -- | 调用批量取多媒体类型的永久素材的接口
-wxppBatchGetDurableMedia ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    AccessToken
-    -> WxppMediaType
-    -> Int      -- ^ limit
-    -> Int      -- ^ offset
-    -> m (WxppBatchGetDurableResult WxppBatchGetDurableMediaItem)
+wxppBatchGetDurableMedia :: (WxppApiMonad m, MonadCatch m)
+                         => AccessToken
+                         -> WxppMediaType
+                         -> Int      -- ^ limit
+                         -> Int      -- ^ offset
+                         -> m (WxppBatchGetDurableResult WxppBatchGetDurableMediaItem)
 wxppBatchGetDurableMedia (AccessToken { accessTokenData = atk }) mtype limit' offset' = do
     let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ object $
+
+    sess <- ask
+    liftIO (WS.postWith opts sess url $ object $
                 [ "type"    .= (wxppMediaTypeString mtype :: Text)
                 , "count"   .= show limit
                 , "offset"  .= show offset
@@ -411,16 +409,17 @@ instance ToJSON WxppBatchGetDurableNewsItem where
                     ]
 
 -- | 调用批量取图文消息类型的永久素材的接口
-wxppBatchGetDurableNews ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    AccessToken
-    -> Int      -- ^ limit
-    -> Int      -- ^ offset
-    -> m (WxppBatchGetDurableResult WxppBatchGetDurableNewsItem)
+wxppBatchGetDurableNews :: (WxppApiMonad m, MonadCatch m)
+                        => AccessToken
+                        -> Int      -- ^ limit
+                        -> Int      -- ^ offset
+                        -> m (WxppBatchGetDurableResult WxppBatchGetDurableNewsItem)
 wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' = do
     let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ object $
+
+    sess <- ask
+    liftIO (WS.postWith opts sess url $ object $
                 [ "type"    .= ("news" :: Text)
                 , "count"   .= limit
                 , "offset"  .= offset
@@ -431,12 +430,11 @@ wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' =
         offset = max 0 $ offset'
 
 -- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
-wxppBatchGetDurableToSrc' ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    (Int
-        -> m (WxppBatchGetDurableResult a)
-    )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
-    -> Source m (WxppBatchGetDurableResult a)
+wxppBatchGetDurableToSrc' :: (WxppApiMonad m, MonadCatch m)
+                          => (Int
+                                 -> m (WxppBatchGetDurableResult a)
+                             )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
+                          -> Source m (WxppBatchGetDurableResult a)
 wxppBatchGetDurableToSrc' get_by_offset = go 0
     where
         go offset = do
@@ -449,27 +447,27 @@ wxppBatchGetDurableToSrc' get_by_offset = go 0
                     let batch_count = wxppBatchGetDurableResultCount result
                     go $ offset + batch_count
 
-wxppBatchGetDurableToSrc ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    (Int
-        -> m (WxppBatchGetDurableResult a)
-    )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
-    -> Source m a
+wxppBatchGetDurableToSrc :: (WxppApiMonad m, MonadCatch m)
+                         => (Int
+                              -> m (WxppBatchGetDurableResult a)
+                         )    -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
+                         -> Source m a
 wxppBatchGetDurableToSrc get_by_offset =
     wxppBatchGetDurableToSrc' get_by_offset =$ CL.concatMap wxppBatchGetDurableResultItems
 
 -- | 修改一个图文类型的永久素材: 只能修改其中一个文章
-wxppReplaceArticleOfDurableNews ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m ) =>
-    AccessToken
-    -> WxppDurableMediaID
-    -> Int      -- ^ index
-    -> WxppDurableArticle
-    -> m ()
+wxppReplaceArticleOfDurableNews :: (WxppApiMonad m, MonadCatch m )
+                                => AccessToken
+                                -> WxppDurableMediaID
+                                -> Int      -- ^ index
+                                -> WxppDurableArticle
+                                -> m ()
 wxppReplaceArticleOfDurableNews (AccessToken { accessTokenData = atk }) material_id idx article = do
     let url = wxppRemoteApiBaseUrl <> "/material/update_news"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ object $
+
+    sess <- ask
+    liftIO (WS.postWith opts sess url $ object $
                 [ "media_id"    .= unWxppDurableMediaID material_id
                 , "index"       .= idx
                 , "articles"    .= article

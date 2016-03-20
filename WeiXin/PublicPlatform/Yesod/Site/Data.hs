@@ -6,6 +6,7 @@ module WeiXin.PublicPlatform.Yesod.Site.Data where
 
 import ClassyPrelude
 import qualified Data.ByteString.Lazy       as LB
+import qualified Network.Wreq.Session       as WS
 import Yesod
 import Control.Monad.Logger
 import Data.Aeson
@@ -79,6 +80,7 @@ data WxppSub =
                                             )
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
+                , wxppSubWreqSession    :: WS.Session
                 }
 
 instance Show WxppSub where

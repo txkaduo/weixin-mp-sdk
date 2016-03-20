@@ -5,6 +5,7 @@ module WeiXin.PublicPlatform.Security
 
 import ClassyPrelude
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens
 import Data.Word
 import Data.Bits
@@ -49,36 +50,37 @@ instance FromJSON AccessTokenResp where
 
 
 -- | Refresh/update access token from WeiXin server.
-refreshAccessToken ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    WxppAppConfig -> m AccessTokenResp
+refreshAccessToken :: (WxppApiMonad m)
+                   => WxppAppConfig
+                   -> m AccessTokenResp
 refreshAccessToken wac = refreshAccessToken' app_id app_secret
     where
         app_id      = wxppAppConfigAppID wac
         app_secret  = wxppConfigAppSecret wac
 
-refreshAccessToken' ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    WxppAppID
-    -> WxppAppSecret
-    -> m AccessTokenResp
+refreshAccessToken' :: ( WxppApiMonad m )
+                    => WxppAppID
+                    -> WxppAppSecret
+                    -> m AccessTokenResp
 refreshAccessToken' app_id app_secret = do
     let url = wxppRemoteApiBaseUrl <> "/token"
         opts = defaults & param "grant_type" .~ [ "client_credential" ]
                         & param "appid" .~ [ unWxppAppID app_id ]
                         & param "secret" .~ [ unWxppAppSecret app_secret ]
-    atk <- (liftIO $ getWith opts url)
+
+    sess <- ask
+    atk <- liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
     $(logDebugS) wxppLogSource $ "access token has been refreshed."
     return atk
 
 
-wxppAcquireAndSaveAccessToken :: (MonadIO m, MonadLogger m, MonadCatch m
-                                 , WxppCacheTokenUpdater c) =>
-                                c
-                                -> WxppAppID
-                                -> WxppAppSecret
-                                -> m ()
+wxppAcquireAndSaveAccessToken :: (WxppApiMonad m, MonadCatch m
+                                 , WxppCacheTokenUpdater c)
+                              => c
+                              -> WxppAppID
+                              -> WxppAppSecret
+                              -> m ()
 wxppAcquireAndSaveAccessToken cache app_id secret = do
     ws_res <- tryWxppWsResult $ refreshAccessToken' app_id secret
     case ws_res of

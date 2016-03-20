@@ -6,6 +6,7 @@ import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens
 import Data.Aeson
 import Data.Time                            (NominalDiffTime, addUTCTime)
@@ -28,14 +29,16 @@ instance FromJSON JsTicketResult where
                         <$> o .: "ticket"
                         <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
 
-wxppGetJsTicket :: (MonadIO m, MonadThrow m)
+wxppGetJsTicket :: (WxppApiMonad m)
                 => AccessToken
                 -> m JsTicketResult
 wxppGetJsTicket (AccessToken atk _app_id) = do
     let url = wxppRemoteApiBaseUrl <> "/ticket/getticket"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ "jsapi" ]
-    liftM snd $ liftIO (getWith opts url) >>= asWxppWsResponseNormal2'
+
+    sess <- ask
+    liftM snd $ liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal2'
 
 
 wxppJsApiSignature :: WxppJsTicket
@@ -107,7 +110,7 @@ wxppJsApiConfig app_id ticket debug url api_list = do
         });|]
 
 
-wxppAcquireAndSaveJsApiTicket :: ( MonadIO m, MonadLogger m, MonadCatch m
+wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad m, MonadCatch m
                                 , WxppCacheTokenUpdater c, WxppCacheTokenReader c
                                 )
                                 => c

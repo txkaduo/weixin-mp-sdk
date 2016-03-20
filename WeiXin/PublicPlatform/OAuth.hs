@@ -20,6 +20,7 @@ module WeiXin.PublicPlatform.OAuth
 import ClassyPrelude
 import qualified Data.Text                  as T
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens
 import Network.URI                          ( parseAbsoluteURI, uriQuery, uriFragment
                                             , uriToString
@@ -100,7 +101,7 @@ wxppOAuthRequestAuthImpl api_url app_id scope return_url state =
 
 
 -- | 根据 code 取 access token
-wxppOAuthGetAccessToken :: (MonadIO m, MonadThrow m)
+wxppOAuthGetAccessToken :: (WxppApiMonad m)
                         => WxppAppID
                         -> WxppAppSecret
                         -> OAuthCode
@@ -111,12 +112,14 @@ wxppOAuthGetAccessToken app_id secret code = do
                         & param "secret" .~ [ unWxppAppSecret secret ]
                         & param "code" .~ [ unOAuthCode code ]
                         & param "grant_type" .~ [ "authorization_code" ]
-    liftIO (getWith opts url)
+
+    sess <- ask
+    liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
 
 -- | Refresh AccessToken
-wxppOAuthRefreshAccessToken :: (MonadIO m, MonadThrow m)
+wxppOAuthRefreshAccessToken :: (WxppApiMonad m)
                             => WxppAppID
                             -> OAuthRefreshToken
                             -> m OAuthRefreshAccessTokenResult
@@ -125,11 +128,13 @@ wxppOAuthRefreshAccessToken app_id rtk = do
         opts = defaults & param "appid" .~ [ unWxppAppID app_id ]
                         & param "refresh_token" .~ [ unOAuthRefreshToken rtk ]
                         & param "grant_type" .~ [ "refresh_token" ]
-    liftIO (getWith opts url)
+
+    sess <- ask
+    liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
 
-wxppOAuthGetUserInfo :: (MonadIO m, MonadThrow m)
+wxppOAuthGetUserInfo :: (WxppApiMonad m)
                     => Lang
                     -> OAuthAccessTokenPkg
                     -> m OAuthGetUserInfoResult
@@ -138,11 +143,12 @@ wxppOAuthGetUserInfo lang atk_p = do
         opts = defaults & param "access_token" .~ [ unOAuthAccessToken $ oauthAtkPRaw atk_p ]
                         & param "openid" .~ [ unWxppOpenID $ oauthAtkPOpenID atk_p ]
                         & param "lang" .~ [ lang ]
-    liftIO (getWith opts url)
+    sess <- ask
+    liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
 -- | call wxppOAuthGetUserInfo and save it in cache
-wxppOAuthGetUserInfoCached :: (MonadIO m, MonadThrow m, WxppCacheTemp c)
+wxppOAuthGetUserInfoCached :: (WxppApiMonad m, WxppCacheTemp c)
                             => c
                             -> NominalDiffTime
                             -> Lang
@@ -161,12 +167,14 @@ wxppOAuthGetUserInfoCached cache ttl lang atk_p = do
         app_id = oauthAtkPAppID atk_p
         open_id = oauthAtkPOpenID atk_p
 
-wxppOAuthCheckAccessToken :: (MonadIO m, MonadThrow m)
+wxppOAuthCheckAccessToken :: (WxppApiMonad m)
                             => OAuthAccessTokenPkg
                             -> m ()
 wxppOAuthCheckAccessToken atk_p = do
     let url = "https://api.weixin.qq.com/sns/auth"
         opts = defaults & param "access_token" .~ [ unOAuthAccessToken $ oauthAtkPRaw atk_p ]
                         & param "openid" .~ [ unWxppOpenID $ oauthAtkPOpenID atk_p ]
-    liftIO (getWith opts url)
+
+    sess <- ask
+    liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseVoid

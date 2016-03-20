@@ -208,11 +208,13 @@ executable wxpp-manage
                      , directory
                      , process
                      , semigroups
+                     , wreq
 
   default-extensions:  NoImplicitPrelude
                        CPP
                        OverloadedStrings
                        TemplateHaskell
+                       FlexibleContexts
 
   ghc-options:         -Wall
   default-language:    Haskell2010

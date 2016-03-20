@@ -18,6 +18,7 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Data.Char
 import Network.Mime                         (MimeType)
+import qualified Network.Wreq.Session       as WS
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
 import Yesod.Core                           (HandlerSite, PathPiece(..))
@@ -106,8 +107,9 @@ mkMaybeWxppSub ::
     -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppSubsiteOpts
+    -> WS.Session
     -> MaybeWxppSub
-mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts =
+mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts sess =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config
         let app_id      = wxppConfigAppID wac
@@ -124,6 +126,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                     (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
                     (runLoggingTWith foundation)
                     opts
+                    sess
     where
         handle_msg wac data_dirs bs ime = do
             let app_id      = wxppConfigAppID wac
@@ -171,7 +174,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
 
 
 defaultInMsgProcMiddlewares :: forall m.
-    (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
+    (WxppApiMonad m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
     WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
@@ -237,10 +240,10 @@ logWxppWsExcThen op_name on_err on_ok f = do
 
 
 -- | 这个函数用于创建一个长期运行的线程
-loopCleanupTimedOutForwardUrl :: (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
-    (WxppAppID -> IO (Maybe AccessToken))
-    -> MVar ForwardUrlMap
-    -> m ()
+loopCleanupTimedOutForwardUrl :: (WxppApiMonad m, MonadCatch m, MonadBaseControl IO m)
+                              => (WxppAppID -> IO (Maybe AccessToken))
+                              -> MVar ForwardUrlMap
+                              -> m ()
 loopCleanupTimedOutForwardUrl get_atk mvar = go
     where
         go = do

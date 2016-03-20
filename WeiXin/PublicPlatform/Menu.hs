@@ -5,6 +5,7 @@ module WeiXin.PublicPlatform.Menu where
 
 import ClassyPrelude
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Data.Aeson
@@ -34,26 +35,31 @@ instance FromJSON MenuDef where
 
 
 -- | 调用服务器接口，创建菜单
-wxppCreateMenu ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> [MenuItem] -> m ()
+wxppCreateMenu :: (WxppApiMonad m)
+               => AccessToken
+               -> [MenuItem]
+               -> m ()
 wxppCreateMenu (AccessToken { accessTokenData = atk }) menus = do
     let url = wxppRemoteApiBaseUrl <> "/menu/create"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ postWith opts url $ toJSON $ object [ "button" .= menus ])
+
+    sess <- ask
+    liftIO (WS.postWith opts sess url $ toJSON $ object [ "button" .= menus ])
         >>= asWxppWsResponseVoid
 
 
 -- | 调用服务器接口，查询菜单
 -- 据文档，此接口只能查询到由 wxppCreateMenu 所用接口设置的菜单
 -- CAUTION: 还有一个类似的接口叫 “获取自定义菜单配置接口”
-wxppQueryMenu ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> m [MenuItem]
+wxppQueryMenu :: (WxppApiMonad m)
+              => AccessToken
+            -> m [MenuItem]
 wxppQueryMenu (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/menu/get"
         opts = defaults & param "access_token" .~ [ atk ]
-    MenuDef items <- (liftIO $ getWith opts url)
+
+    sess <- ask
+    MenuDef items <- liftIO (WS.getWith opts sess url)
                         >>= asWxppWsResponseNormal'
     return items
 
@@ -67,32 +73,36 @@ data WxppMenuConfig = WxppMenuConfig {
 -- | 获取自定义菜单配置接口
 -- XXX: 由于返回的 JSON 结构有点混乱，不同设置方式下得到的值不一样
 -- 目前暂时不作进一步解释，只当作一个字典保存
-wxppQueryMenuConfig ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> m Value
+wxppQueryMenuConfig :: (WxppApiMonad m)
+                    => AccessToken
+                  -> m Value
 wxppQueryMenuConfig (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/get_current_selfmenu_info"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ getWith opts url) >>= asWxppWsResponseNormal'
+
+    sess <- ask
+    liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal'
 
 
 -- | 调用服务器接口，删除菜单
-wxppDeleteMenu ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken -> m ()
+wxppDeleteMenu :: (WxppApiMonad m)
+               => AccessToken
+               -> m ()
 wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/menu/delete"
         opts = defaults & param "access_token" .~ [ atk ]
-    (liftIO $ getWith opts url)
+
+    sess <- ask
+    liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseVoid
 
 
 -- | 根据指定 YAML 文件配置调用远程接口，修改菜单
-wxppCreateMenuWithYaml :: (MonadIO m, MonadLogger m, MonadCatch m) =>
-    AccessToken
-    -> NonEmpty FilePath
-    -> FilePath
-    -> m (Either String ())
+wxppCreateMenuWithYaml :: (WxppApiMonad m, MonadCatch m)
+                       => AccessToken
+                       -> NonEmpty FilePath
+                       -> FilePath
+                       -> m (Either String ())
 wxppCreateMenuWithYaml access_token data_dirs fp = runExceptT $ do
     err_or_menu <- liftIO $ do
                     runDelayedYamlLoaderL data_dirs $ mkDelayedYamlLoader fp
@@ -124,12 +134,12 @@ liftBaseOpDiscard f g = liftBaseWith $ \runInBase -> f $ void . runInBase . g
 
 -- | 不断地监护菜单配置文件变化，自动修改微信的菜单
 -- 不返回，直至 block_until_exit 参数的计算完成
-wxppWatchMenuYaml :: (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
-    m (Maybe AccessToken)
-    -> IO ()        -- ^ bloack until exit
-    -> NonEmpty FilePath
-    -> FilePath
-    -> m ()
+wxppWatchMenuYaml :: (WxppApiMonad m, MonadCatch m, MonadBaseControl IO m)
+                  => m (Maybe AccessToken)
+                  -> IO ()        -- ^ bloack until exit
+                  -> NonEmpty FilePath
+                  -> FilePath
+                  -> m ()
 wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
     -- 主动加载一次菜单配置
     load
@@ -220,14 +230,14 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
 
 
 -- | like wxppWatchMenuYaml, but watch for many weixin app all at once
-wxppWatchMenuYamlOnSignal :: forall m. (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
-                        IO ()        -- ^ bloack until exit
-                        -> FilePath
-                        -> (WxppAppID -> IO (Maybe AccessToken))
-                        -> (WxppAppID -> IO (NonEmpty FilePath))
-                        -> IO WxppSignal
-                            -- ^ should be a blocking op
-                        -> m ()
+wxppWatchMenuYamlOnSignal :: forall m. (WxppApiMonad m, MonadCatch m, MonadBaseControl IO m)
+                          => IO ()        -- ^ bloack until exit
+                          -> FilePath
+                          -> (WxppAppID -> IO (Maybe AccessToken))
+                          -> (WxppAppID -> IO (NonEmpty FilePath))
+                          -> IO WxppSignal
+                              -- ^ should be a blocking op
+                          -> m ()
 wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event = do
     watch_data <- liftIO $ newIORef Map.empty
 

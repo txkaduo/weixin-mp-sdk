@@ -7,6 +7,7 @@ module WeiXin.PublicPlatform.Media
 import ClassyPrelude hiding (catch)
 import qualified Data.Text                  as T
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Lens
 import Control.Monad.Logger
 import Network.Mime                         (MimeType, defaultMimeLookup)
@@ -41,17 +42,18 @@ wxppDownloadMediaUrl if_ssl (AccessToken { accessTokenData = atk }) mid =
 
 
 -- | 下载一个多媒体文件
-wxppDownloadMedia ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, MonadCatch m) =>
-    Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
-    -> AccessToken
-    -> WxppBriefMediaID
-    -> m (Response LB.ByteString)
+wxppDownloadMedia :: ( WxppApiMonad m, MonadCatch m )
+                  => Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
+                  -> AccessToken
+                  -> WxppBriefMediaID
+                  -> m (Response LB.ByteString)
 wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
     let url = (if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl) <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppBriefMediaID mid ]
-    rb <- liftIO $ getWith opts url
+
+    sess <- ask
+    rb <- liftIO $ WS.getWith opts sess url
 
     -- 需要某种方法区别正常和异常的返回
     -- 使用 Content-Type 的方式
@@ -69,66 +71,63 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
                     (\(_ :: JSONError) -> return rb)
 
 
-wxppUploadMediaInternal ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> Part
-    -> m UploadResult
+wxppUploadMediaInternal :: ( WxppApiMonad m )
+                        => AccessToken
+                        -> WxppMediaType
+                        -> Part
+                        -> m UploadResult
 wxppUploadMediaInternal (AccessToken { accessTokenData = atk }) mtype fpart = do
     let url = wxppRemoteApiBaseUrl <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ wxppMediaTypeString mtype :: Text]
-    (liftIO $ postWith opts url $ fpart & partName .~ "media")
+
+    sess <- ask
+    liftIO (WS.postWith opts sess  url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
 
 
 -- | 上传本地一个文件
-wxppUploadMedia ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> FilePath
-    -> m UploadResult
+wxppUploadMedia :: ( WxppApiMonad m )
+                => AccessToken
+                -> WxppMediaType
+                -> FilePath
+                -> m UploadResult
 wxppUploadMedia atk mtype fp = do
     wxppUploadMediaInternal atk mtype $
         partFileSource "media" fp
             & partContentType .~ Just (defaultMimeLookup $ fromString $ takeFileName fp)
 
 -- | 上传已在内存中的 ByteString
-wxppUploadMediaBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> MimeType
-    -> String
-    -> ByteString
-    -> m UploadResult
+wxppUploadMediaBS :: ( WxppApiMonad m )
+                  => AccessToken
+                  -> WxppMediaType
+                  -> MimeType
+                  -> String
+                  -> ByteString
+                  -> m UploadResult
 wxppUploadMediaBS atk mtype mime filename bs = do
     wxppUploadMediaInternal atk mtype $
         partBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
-wxppUploadMediaLBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> WxppMediaType
-    -> MimeType
-    -> String
-    -> LB.ByteString
-    -> m UploadResult
+wxppUploadMediaLBS :: (WxppApiMonad m)
+                   => AccessToken
+                   -> WxppMediaType
+                   -> MimeType
+                   -> String
+                   -> LB.ByteString
+                   -> m UploadResult
 wxppUploadMediaLBS atk mtype mime filename bs = do
     wxppUploadMediaInternal atk mtype $
         partLBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
-wxppUploadMediaCached ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTokenReader c, WxppCacheTemp c) =>
-    c
-    -> AccessToken
-    -> WxppMediaType
-    -> FilePath
-    -> m UploadResult
+wxppUploadMediaCached :: ( WxppApiMonad m, WxppCacheTokenReader c, WxppCacheTemp c)
+                      => c
+                      -> AccessToken
+                      -> WxppMediaType
+                      -> FilePath
+                      -> m UploadResult
 wxppUploadMediaCached cache atk mtype fp = do
     h <- liftIO $ sha256HashFile fp
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
@@ -151,15 +150,14 @@ wxppUploadMediaCached cache atk mtype fp = do
 
 
 -- | 这里有个问题：如果之前上传过的文件的 mime 发生变化，可能会使用旧的文件 media id
-wxppUploadMediaCachedBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTokenReader c, WxppCacheTemp c) =>
-    c
-    -> AccessToken
-    -> WxppMediaType
-    -> MimeType
-    -> String
-    -> ByteString
-    -> m UploadResult
+wxppUploadMediaCachedBS :: ( WxppApiMonad m, WxppCacheTokenReader c, WxppCacheTemp c )
+                        => c
+                        -> AccessToken
+                        -> WxppMediaType
+                        -> MimeType
+                        -> String
+                        -> ByteString
+                        -> m UploadResult
 wxppUploadMediaCachedBS cache atk mtype mime filename bs = do
     let h = sha256HashBS bs
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
@@ -186,33 +184,32 @@ instance FromJSON UploadImgResult where
 -- | 这是在群发文档中描述的特别接口，只用于上传图片，jpg/png格式
 -- 不占用永久素材限额
 -- 回复得到一个 URL，用于图文消息中
-wxppUploadImageGetUrlInternal ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> Part
-    -> m UrlText
+wxppUploadImageGetUrlInternal :: ( WxppApiMonad m )
+                              => AccessToken
+                              -> Part
+                              -> m UrlText
 wxppUploadImageGetUrlInternal (AccessToken { accessTokenData = atk }) fpart = do
     let url = wxppRemoteApiBaseUrl <> "/media/uploadimg"
         opts = defaults & param "access_token" .~ [ atk ]
-    UploadImgResult media_url <- (liftIO $ postWith opts url $ fpart & partName .~ "media")
+
+    sess <- ask
+    UploadImgResult media_url <- liftIO (WS.postWith opts sess url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
     return media_url
 
-wxppUploadImageGetUrl ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> FilePath
-    -> m UrlText
+wxppUploadImageGetUrl :: (WxppApiMonad m)
+                      => AccessToken
+                      -> FilePath
+                      -> m UrlText
 wxppUploadImageGetUrl atk fp = do
     wxppUploadImageGetUrlInternal atk $ partFileSource "media" fp
 
-wxppUploadImageGetUrlBS ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    AccessToken
-    -> MimeType
-    -> FilePath
-    -> ByteString
-    -> m UrlText
+wxppUploadImageGetUrlBS :: (WxppApiMonad m)
+                        => AccessToken
+                        -> MimeType
+                        -> FilePath
+                        -> ByteString
+                        -> m UrlText
 wxppUploadImageGetUrlBS atk mime filename bs = do
     wxppUploadImageGetUrlInternal atk $
         partBS "media" bs & partFileName .~ Just filename
@@ -225,13 +222,12 @@ wxppUploadImageGetUrlBS atk mime filename bs = do
 -- * 执行必要的延迟加载
 -- 这个函数会抛出异常 见 tryWxppWsResult
 -- 下面还有个尽量不抛出异常的版本
-fromWxppOutMsgL ::
-    ( MonadIO m, MonadLogger m, MonadThrow m, WxppCacheTokenReader c, WxppCacheTemp c) =>
-    NonEmpty FilePath
-    -> c
-    -> m AccessToken
-    -> WxppOutMsgL
-    -> m WxppOutMsg
+fromWxppOutMsgL :: (WxppApiMonad m, WxppCacheTokenReader c, WxppCacheTemp c)
+                => NonEmpty FilePath
+                -> c
+                -> m AccessToken
+                -> WxppOutMsgL
+                -> m WxppOutMsg
 fromWxppOutMsgL _       _   _   (WxppOutMsgTextL x)     = return (WxppOutMsgText x)
 
 fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
@@ -287,13 +283,12 @@ fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
 
 
-fromWxppOutMsgL' ::
-    ( MonadIO m, MonadLogger m, MonadCatch m, WxppCacheTokenReader c, WxppCacheTemp c) =>
-    NonEmpty FilePath
-    -> c
-    -> m AccessToken
-    -> WxppOutMsgL
-    -> m (Either String WxppOutMsg)
+fromWxppOutMsgL' :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenReader c, WxppCacheTemp c)
+                 => NonEmpty FilePath
+                 -> c
+                 -> m AccessToken
+                 -> WxppOutMsgL
+                 -> m (Either String WxppOutMsg)
 fromWxppOutMsgL' fp cache get_atk out_msg_l =
     (liftM Right $ fromWxppOutMsgL fp cache get_atk out_msg_l) `catches`
         (Handler h_yaml_exc : fmap unifyExcHandler wxppWsExcHandlers)

@@ -12,6 +12,7 @@ import ClassyPrelude
 import Yesod
 import Control.Lens
 import Network.Wreq
+import qualified Network.Wreq.Session       as WS
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.DeepSeq                      (($!!))
@@ -141,9 +142,8 @@ instance (MonadIO m
         return []
 
 
-instance (MonadIO m
+instance (WxppApiMonad m
     , MonadCatch m
-    , MonadLogger m
     , Functor m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m CacheAppOpenIdToUnionId where
@@ -320,7 +320,8 @@ downloadSaveMediaToDB ::
     , PersistMonadBackend m ~ PersistEntityBackend WxppStoredMedia
 #endif
     ) =>
-    Bool
+    WS.Session
+    -> Bool
     -> AccessToken
     -> WxppInMsgRecordId
     -> WxppBriefMediaID
@@ -329,8 +330,8 @@ downloadSaveMediaToDB ::
 #else
     -> m ()
 #endif
-downloadSaveMediaToDB if_ssl atk msg_id media_id = do
-    err_or_rb <- tryWxppWsResult $ wxppDownloadMedia if_ssl atk media_id
+downloadSaveMediaToDB sess if_ssl atk msg_id media_id = do
+    err_or_rb <- tryWxppWsResult $ flip runReaderT sess $ wxppDownloadMedia if_ssl atk media_id
     case err_or_rb of
         Left err -> do
                     $(logErrorS) wxppLogSource $ "Failed to download media '" <> unWxppBriefMediaID media_id
