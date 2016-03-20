@@ -60,13 +60,15 @@ instance (MonadIO m, MonadCatch m, MonadLogger m) => IsWxppInMsgProcMiddleware m
                      then do
                        $logWarnS wxppLogSource $ "No SendPort available to send event notifications"
                      else do
+                       {-
                        m_union_id <- runMaybeT $ do
                          atk <- fmap fst $ MaybeT $ liftIO $ wxppCacheGetAccessToken cache app_id
                          MaybeT $ wxppCachedGetEndUserUnionID cache
                                        (fromIntegral (maxBound :: Int)) -- because union id is stable
                                        atk
                                        (wxppInFromUserName ime)
-
+                        --}
+                       let m_union_id = Nothing
                        let msg = WrapInMsgHandlerInput app_id bs ime m_union_id
 
                        node <- liftIO new_local_node
