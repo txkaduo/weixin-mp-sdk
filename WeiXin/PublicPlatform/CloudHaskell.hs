@@ -17,7 +17,6 @@ import           System.Timeout                                     (timeout)
 
 import           WeiXin.PublicPlatform.InMsgHandler
 import           WeiXin.PublicPlatform.Class
-import           WeiXin.PublicPlatform.WS
 import           WeiXin.PublicPlatform.EndUser
 
 -- | 代表一种能找到接收 w 信息的 Process/SendPort 信息
@@ -111,7 +110,7 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
       (DelegateInMsgToCloud app_id (CloudBackendInfo new_local_node get_ports) t1)
-      cache bs m_ime = runExceptT $ do
+      _cache bs m_ime = runExceptT $ do
         case m_ime of
           Nothing   -> return []
           Just ime  -> do
@@ -121,6 +120,8 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
               $logErrorS wxppLogSource $ fromString msg
               throwError msg
 
+            {-
+             - It's a little slow to call WeiXin API, so let cloud handler do it itself.
             let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
                                 wxppCacheGetAccessToken cache app_id)
                             >>= maybe (throwError $ "no access token available") (return . fst)
@@ -130,6 +131,8 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
                              (fromIntegral (maxBound :: Int)) -- because union id is stable
                              atk
                              (wxppInFromUserName ime)
+             --}
+            let m_union_id = Nothing
 
             let cloud_pack_msg = WrapInMsgHandlerInput app_id bs ime m_union_id
 
