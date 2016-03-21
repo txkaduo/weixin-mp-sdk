@@ -397,7 +397,7 @@ instance JsonConfigable WelcomeSubscribe where
 
 type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
     where
 
@@ -434,7 +434,7 @@ instance JsonConfigable WxppInMsgMenuItemClickSendMsg where
 
 type instance WxppInMsgProcessResult WxppInMsgMenuItemClickSendMsg = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgMenuItemClickSendMsg
     where
 
@@ -528,7 +528,7 @@ instance JsonConfigable WxppInMsgSendAsRequested where
 
 type instance WxppInMsgProcessResult WxppInMsgSendAsRequested = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgSendAsRequested
     where
 
@@ -571,7 +571,7 @@ instance JsonConfigable WxppInMsgShowWxppID where
 
 type instance WxppInMsgProcessResult WxppInMsgShowWxppID = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgShowWxppID
     where
 
@@ -616,7 +616,7 @@ instance JsonConfigable WxppInMsgForwardAsJson where
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardAsJson
     where
 
@@ -677,7 +677,7 @@ instance JsonConfigable WxppInMsgForwardDyn where
 
 type instance WxppInMsgProcessResult WxppInMsgForwardDyn = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardDyn
     where
 
@@ -721,7 +721,7 @@ instance JsonConfigable WxppInMsgForwardScene where
 
 type instance WxppInMsgProcessResult WxppInMsgForwardScene = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardScene
     where
 
@@ -1095,7 +1095,7 @@ instance JsonConfigable ConstResponse where
 
 type instance WxppInMsgProcessResult ConstResponse = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m ConstResponse
     where
 
@@ -1131,7 +1131,7 @@ instance JsonConfigable (WxppInMsgParseScanCodePush m a) where
 
 type instance WxppInMsgProcessResult (WxppInMsgParseScanCodePush m a) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m (WxppInMsgParseScanCodePush m a)
     where
 
@@ -1177,7 +1177,7 @@ instance JsonConfigable (WxppInMsgParseScanCodeWaitMsg m a) where
 
 type instance WxppInMsgProcessResult (WxppInMsgParseScanCodeWaitMsg m a) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad m, MonadCatch m) =>
+instance (WxppApiMonad env m, MonadCatch m) =>
     IsWxppInMsgProcessor m (WxppInMsgParseScanCodeWaitMsg m a)
     where
 
@@ -1210,7 +1210,7 @@ instance IsWxppInMsgProcessor m (WxppInMsgProcessorFunc m h) where
 -- 结果中不包含 WxppInMsgParseScanCodePush, WxppInMsgParseScanCodeWaitMsg
 -- 因为不想传入太多不相关的参数
 allBasicWxppInMsgHandlerPrototypes ::
-    ( WxppApiMonad m, Functor m, MonadCatch m ) =>
+    ( WxppApiMonad env m, Functor m, MonadCatch m ) =>
     WxppAppID
     -> NonEmpty FilePath
     -> MVar ForwardUrlMap
@@ -1231,7 +1231,7 @@ allBasicWxppInMsgHandlerPrototypes app_id msg_dirs mvar =
 
 -- | 用于解释 SomeWxppInMsgPredictor 的类型信息
 allBasicWxppInMsgPredictorPrototypes ::
-    ( WxppApiMonad m, MonadCatch m ) =>
+    ( WxppApiMonad env m, MonadCatch m ) =>
     [WxppInMsgPredictorPrototype m]
 allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()

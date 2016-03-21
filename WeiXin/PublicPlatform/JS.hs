@@ -13,6 +13,7 @@ import Data.Time                            (NominalDiffTime, addUTCTime)
 import Data.Time.Clock.POSIX                (getPOSIXTime)
 import Text.Julius                          (julius, JavascriptUrl)
 import Control.Monad.Logger
+import Control.Monad.Reader                 (asks)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
@@ -29,7 +30,7 @@ instance FromJSON JsTicketResult where
                         <$> o .: "ticket"
                         <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
 
-wxppGetJsTicket :: (WxppApiMonad m)
+wxppGetJsTicket :: (WxppApiMonad env m)
                 => AccessToken
                 -> m JsTicketResult
 wxppGetJsTicket (AccessToken atk _app_id) = do
@@ -37,7 +38,7 @@ wxppGetJsTicket (AccessToken atk _app_id) = do
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ "jsapi" ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftM snd $ liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal2'
 
 
@@ -110,7 +111,7 @@ wxppJsApiConfig app_id ticket debug url api_list = do
         });|]
 
 
-wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad m, MonadCatch m
+wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad env m, MonadCatch m
                                 , WxppCacheTokenUpdater c, WxppCacheTokenReader c
                                 )
                                 => c

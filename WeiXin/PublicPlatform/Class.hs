@@ -264,6 +264,9 @@ class HasWreqSession a where
 instance HasWreqSession WS.Session where
     getWreqSession = id
 
+instance HasWreqSession a => HasWreqSession (a, b) where
+    getWreqSession = getWreqSession .fst
+
 class HasSomeWxppCacheBackend a where
     getSomeWxppCacheBackend :: a -> SomeWxppCacheClient
 

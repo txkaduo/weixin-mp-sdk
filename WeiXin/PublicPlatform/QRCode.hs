@@ -4,17 +4,18 @@ import ClassyPrelude
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
+import Control.Monad.Reader                 (asks)
 import Data.Aeson
 import Data.Aeson.Types                     (Pair)
 
-import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import Network.HTTP.Types                   (renderQueryText)
 import qualified Blaze.ByteString.Builder   as BBB
 
 
 -- | 创建永久场景二维码
-wxppQrCodeCreatePersist :: (WxppApiMonad m)
+wxppQrCodeCreatePersist :: (WxppApiMonad env m)
                         => AccessToken
                         -> WxppScene
                         -> m WxppMakeSceneResult
@@ -29,7 +30,7 @@ wxppQrCodeCreatePersist atk scene = do
 
 
 -- | 创建短期场景二维码
-wxppQrCodeCreateTransient :: (WxppApiMonad m)
+wxppQrCodeCreateTransient :: (WxppApiMonad env m)
                           => AccessToken
                           -> Int      -- ^ TTL in seconds
                           -> WxppIntSceneID
@@ -43,7 +44,7 @@ wxppQrCodeCreateTransient atk ttl scene_int_id =
         atk
         (WxppSceneInt scene_int_id)
 
-wxppQrCodeCreateInternal :: (WxppApiMonad m)
+wxppQrCodeCreateInternal :: (WxppApiMonad env m)
                          => [Pair]
                          -> AccessToken
                          -> WxppScene
@@ -52,7 +53,7 @@ wxppQrCodeCreateInternal js_pairs (AccessToken { accessTokenData = atk }) scene 
     let url = wxppRemoteApiBaseUrl ++ "/qrcode/create"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ toJSON $ object $
                 ( "action_info" .= object [ "scene" .= scene ] ) : js_pairs)
         >>= asWxppWsResponseNormal'

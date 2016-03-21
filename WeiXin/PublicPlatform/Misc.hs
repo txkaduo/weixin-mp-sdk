@@ -173,8 +173,8 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                             bs ime
 
 
-defaultInMsgProcMiddlewares :: forall m.
-    (WxppApiMonad m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
+defaultInMsgProcMiddlewares :: forall env m.
+    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
     WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
@@ -240,7 +240,7 @@ logWxppWsExcThen op_name on_err on_ok f = do
 
 
 -- | 这个函数用于创建一个长期运行的线程
-loopCleanupTimedOutForwardUrl :: (WxppApiMonad m, MonadCatch m, MonadBaseControl IO m)
+loopCleanupTimedOutForwardUrl :: (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
                               => (WxppAppID -> IO (Maybe AccessToken))
                               -> MVar ForwardUrlMap
                               -> m ()

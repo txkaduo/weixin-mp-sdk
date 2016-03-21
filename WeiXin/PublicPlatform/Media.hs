@@ -10,6 +10,7 @@ import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens
 import Control.Monad.Logger
+import Control.Monad.Reader                 (asks)
 import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
 import Control.Monad.Catch                  (catch, catches, Handler(..))
@@ -42,7 +43,7 @@ wxppDownloadMediaUrl if_ssl (AccessToken { accessTokenData = atk }) mid =
 
 
 -- | 下载一个多媒体文件
-wxppDownloadMedia :: ( WxppApiMonad m, MonadCatch m )
+wxppDownloadMedia :: ( WxppApiMonad env m, MonadCatch m )
                   => Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
                   -> AccessToken
                   -> WxppBriefMediaID
@@ -52,7 +53,7 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppBriefMediaID mid ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     rb <- liftIO $ WS.getWith opts sess url
 
     -- 需要某种方法区别正常和异常的返回
@@ -71,7 +72,7 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
                     (\(_ :: JSONError) -> return rb)
 
 
-wxppUploadMediaInternal :: ( WxppApiMonad m )
+wxppUploadMediaInternal :: ( WxppApiMonad env m )
                         => AccessToken
                         -> WxppMediaType
                         -> Part
@@ -81,13 +82,13 @@ wxppUploadMediaInternal (AccessToken { accessTokenData = atk }) mtype fpart = do
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ wxppMediaTypeString mtype :: Text]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess  url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
 
 
 -- | 上传本地一个文件
-wxppUploadMedia :: ( WxppApiMonad m )
+wxppUploadMedia :: ( WxppApiMonad env m )
                 => AccessToken
                 -> WxppMediaType
                 -> FilePath
@@ -98,7 +99,7 @@ wxppUploadMedia atk mtype fp = do
             & partContentType .~ Just (defaultMimeLookup $ fromString $ takeFileName fp)
 
 -- | 上传已在内存中的 ByteString
-wxppUploadMediaBS :: ( WxppApiMonad m )
+wxppUploadMediaBS :: ( WxppApiMonad env m )
                   => AccessToken
                   -> WxppMediaType
                   -> MimeType
@@ -110,7 +111,7 @@ wxppUploadMediaBS atk mtype mime filename bs = do
         partBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
-wxppUploadMediaLBS :: (WxppApiMonad m)
+wxppUploadMediaLBS :: (WxppApiMonad env m)
                    => AccessToken
                    -> WxppMediaType
                    -> MimeType
@@ -122,7 +123,7 @@ wxppUploadMediaLBS atk mtype mime filename bs = do
         partLBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
-wxppUploadMediaCached :: ( WxppApiMonad m, WxppCacheTokenReader c, WxppCacheTemp c)
+wxppUploadMediaCached :: ( WxppApiMonad env m, WxppCacheTokenReader c, WxppCacheTemp c)
                       => c
                       -> AccessToken
                       -> WxppMediaType
@@ -150,7 +151,7 @@ wxppUploadMediaCached cache atk mtype fp = do
 
 
 -- | 这里有个问题：如果之前上传过的文件的 mime 发生变化，可能会使用旧的文件 media id
-wxppUploadMediaCachedBS :: ( WxppApiMonad m, WxppCacheTokenReader c, WxppCacheTemp c )
+wxppUploadMediaCachedBS :: ( WxppApiMonad env m, WxppCacheTokenReader c, WxppCacheTemp c )
                         => c
                         -> AccessToken
                         -> WxppMediaType
@@ -184,7 +185,7 @@ instance FromJSON UploadImgResult where
 -- | 这是在群发文档中描述的特别接口，只用于上传图片，jpg/png格式
 -- 不占用永久素材限额
 -- 回复得到一个 URL，用于图文消息中
-wxppUploadImageGetUrlInternal :: ( WxppApiMonad m )
+wxppUploadImageGetUrlInternal :: ( WxppApiMonad env m )
                               => AccessToken
                               -> Part
                               -> m UrlText
@@ -192,19 +193,19 @@ wxppUploadImageGetUrlInternal (AccessToken { accessTokenData = atk }) fpart = do
     let url = wxppRemoteApiBaseUrl <> "/media/uploadimg"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     UploadImgResult media_url <- liftIO (WS.postWith opts sess url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
     return media_url
 
-wxppUploadImageGetUrl :: (WxppApiMonad m)
+wxppUploadImageGetUrl :: (WxppApiMonad env m)
                       => AccessToken
                       -> FilePath
                       -> m UrlText
 wxppUploadImageGetUrl atk fp = do
     wxppUploadImageGetUrlInternal atk $ partFileSource "media" fp
 
-wxppUploadImageGetUrlBS :: (WxppApiMonad m)
+wxppUploadImageGetUrlBS :: (WxppApiMonad env m)
                         => AccessToken
                         -> MimeType
                         -> FilePath
@@ -222,7 +223,7 @@ wxppUploadImageGetUrlBS atk mime filename bs = do
 -- * 执行必要的延迟加载
 -- 这个函数会抛出异常 见 tryWxppWsResult
 -- 下面还有个尽量不抛出异常的版本
-fromWxppOutMsgL :: (WxppApiMonad m, WxppCacheTokenReader c, WxppCacheTemp c)
+fromWxppOutMsgL :: (WxppApiMonad env m, WxppCacheTokenReader c, WxppCacheTemp c)
                 => NonEmpty FilePath
                 -> c
                 -> m AccessToken
@@ -283,7 +284,7 @@ fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
 
 
-fromWxppOutMsgL' :: (WxppApiMonad m, MonadCatch m, WxppCacheTokenReader c, WxppCacheTemp c)
+fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenReader c, WxppCacheTemp c)
                  => NonEmpty FilePath
                  -> c
                  -> m AccessToken

@@ -24,6 +24,7 @@ import Crypto.Cipher                        ( makeIV, IV, cbcEncrypt
                                             , cbcDecrypt, cipherInit)
 import Crypto.Cipher.AES                    (AES)
 import Control.Monad.Logger
+import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import System.Random                        (randomIO)
 import Data.Byteable                        (toBytes)
@@ -50,7 +51,7 @@ instance FromJSON AccessTokenResp where
 
 
 -- | Refresh/update access token from WeiXin server.
-refreshAccessToken :: (WxppApiMonad m)
+refreshAccessToken :: (WxppApiMonad env m)
                    => WxppAppConfig
                    -> m AccessTokenResp
 refreshAccessToken wac = refreshAccessToken' app_id app_secret
@@ -58,7 +59,7 @@ refreshAccessToken wac = refreshAccessToken' app_id app_secret
         app_id      = wxppAppConfigAppID wac
         app_secret  = wxppConfigAppSecret wac
 
-refreshAccessToken' :: ( WxppApiMonad m )
+refreshAccessToken' :: ( WxppApiMonad env m )
                     => WxppAppID
                     -> WxppAppSecret
                     -> m AccessTokenResp
@@ -68,14 +69,14 @@ refreshAccessToken' app_id app_secret = do
                         & param "appid" .~ [ unWxppAppID app_id ]
                         & param "secret" .~ [ unWxppAppSecret app_secret ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     atk <- liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
     $(logDebugS) wxppLogSource $ "access token has been refreshed."
     return atk
 
 
-wxppAcquireAndSaveAccessToken :: (WxppApiMonad m, MonadCatch m
+wxppAcquireAndSaveAccessToken :: (WxppApiMonad env m, MonadCatch m
                                  , WxppCacheTokenUpdater c)
                               => c
                               -> WxppAppID

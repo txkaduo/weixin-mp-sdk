@@ -366,7 +366,7 @@ start opts sess = do
                         wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
             putStrLn $ fromString $ show msg_id
 
-editNewsDurable :: (WxppApiMonad m, MonadCatch m) =>
+editNewsDurable :: (WxppApiMonad env m, MonadCatch m) =>
     AccessToken -> WxppDurableMediaID -> [WxppDurableArticleS] -> m ()
 editNewsDurable atk mid articles = do
     let go bs = do

@@ -22,6 +22,7 @@ import qualified Data.Text                  as T
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens
+import Control.Monad.Reader                 (asks)
 import Network.URI                          ( parseAbsoluteURI, uriQuery, uriFragment
                                             , uriToString
                                             )
@@ -101,7 +102,7 @@ wxppOAuthRequestAuthImpl api_url app_id scope return_url state =
 
 
 -- | 根据 code 取 access token
-wxppOAuthGetAccessToken :: (WxppApiMonad m)
+wxppOAuthGetAccessToken :: (WxppApiMonad env m)
                         => WxppAppID
                         -> WxppAppSecret
                         -> OAuthCode
@@ -113,13 +114,13 @@ wxppOAuthGetAccessToken app_id secret code = do
                         & param "code" .~ [ unOAuthCode code ]
                         & param "grant_type" .~ [ "authorization_code" ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
 
 -- | Refresh AccessToken
-wxppOAuthRefreshAccessToken :: (WxppApiMonad m)
+wxppOAuthRefreshAccessToken :: (WxppApiMonad env m)
                             => WxppAppID
                             -> OAuthRefreshToken
                             -> m OAuthRefreshAccessTokenResult
@@ -129,12 +130,12 @@ wxppOAuthRefreshAccessToken app_id rtk = do
                         & param "refresh_token" .~ [ unOAuthRefreshToken rtk ]
                         & param "grant_type" .~ [ "refresh_token" ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
 
-wxppOAuthGetUserInfo :: (WxppApiMonad m)
+wxppOAuthGetUserInfo :: (WxppApiMonad env m)
                     => Lang
                     -> OAuthAccessTokenPkg
                     -> m OAuthGetUserInfoResult
@@ -143,12 +144,12 @@ wxppOAuthGetUserInfo lang atk_p = do
         opts = defaults & param "access_token" .~ [ unOAuthAccessToken $ oauthAtkPRaw atk_p ]
                         & param "openid" .~ [ unWxppOpenID $ oauthAtkPOpenID atk_p ]
                         & param "lang" .~ [ lang ]
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
 -- | call wxppOAuthGetUserInfo and save it in cache
-wxppOAuthGetUserInfoCached :: (WxppApiMonad m, WxppCacheTemp c)
+wxppOAuthGetUserInfoCached :: (WxppApiMonad env m, WxppCacheTemp c)
                             => c
                             -> NominalDiffTime
                             -> Lang
@@ -167,7 +168,7 @@ wxppOAuthGetUserInfoCached cache ttl lang atk_p = do
         app_id = oauthAtkPAppID atk_p
         open_id = oauthAtkPOpenID atk_p
 
-wxppOAuthCheckAccessToken :: (WxppApiMonad m)
+wxppOAuthCheckAccessToken :: (WxppApiMonad env m)
                             => OAuthAccessTokenPkg
                             -> m ()
 wxppOAuthCheckAccessToken atk_p = do
@@ -175,6 +176,6 @@ wxppOAuthCheckAccessToken atk_p = do
         opts = defaults & param "access_token" .~ [ unOAuthAccessToken $ oauthAtkPRaw atk_p ]
                         & param "openid" .~ [ unWxppOpenID $ oauthAtkPOpenID atk_p ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseVoid

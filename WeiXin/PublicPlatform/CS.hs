@@ -4,6 +4,7 @@ import ClassyPrelude
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
+import Control.Monad.Reader                 (asks)
 import Data.Aeson
 
 import WeiXin.PublicPlatform.Class
@@ -13,7 +14,7 @@ import qualified Data.HashMap.Strict        as HM
 
 -- | 使用客服接口发送消息给指定用户
 -- 只能用于用户主动发消息给我们之后的一段时间内使用（文档说是48小时）
-wxppCsSendOutMsg2 :: (WxppApiMonad m)
+wxppCsSendOutMsg2 :: (WxppApiMonad env m)
                   => AccessToken
                   -> Maybe WxppKfAccount
                   -> WxppOpenID
@@ -24,7 +25,7 @@ wxppCsSendOutMsg2 (AccessToken { accessTokenData = atk }) m_kf_account to_open_i
     let url = wxppRemoteApiBaseUrl <> "/message/custom/send"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ toJSON $ mk_out_obj)
         >>= asWxppWsResponseVoid
     where
@@ -93,7 +94,7 @@ wxppCsSendOutMsg2 (AccessToken { accessTokenData = atk }) m_kf_account to_open_i
 
 
 {-# DEPRECATED wxppCsSendOutMsg "use wxppCsSendOutMsg2 instead" #-}
-wxppCsSendOutMsg :: (WxppApiMonad m)
+wxppCsSendOutMsg :: (WxppApiMonad env m)
                  => AccessToken
                  -> Maybe WxppKfAccount
                  -> WxppOutMsgEntity

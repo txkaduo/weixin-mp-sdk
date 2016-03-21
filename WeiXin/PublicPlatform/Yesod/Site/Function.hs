@@ -142,7 +142,7 @@ instance (MonadIO m
         return []
 
 
-instance (WxppApiMonad m
+instance (WxppApiMonad env m
     , MonadCatch m
     , Functor m
     , MonadBaseControl IO m

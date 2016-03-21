@@ -3,7 +3,6 @@ module WeiXin.PublicPlatform.WS where
 
 import ClassyPrelude hiding (catch)
 import Network.Wreq
-import qualified Network.Wreq.Session       as WS
 import Control.Monad.Except
 import Control.Monad.Logger
 import Control.Lens hiding ((.=))
@@ -20,9 +19,10 @@ import Data.Aeson                           ( withObject, (.:)
                                             )
 
 import WeiXin.PublicPlatform.Error
+import WeiXin.PublicPlatform.Class
 
 
-type WxppApiMonad m = (MonadIO m, MonadLogger m, MonadThrow m, MonadReader WS.Session m)
+type WxppApiMonad r m = (MonadIO m, MonadLogger m, MonadThrow m, MonadReader r m, HasWreqSession r)
 
 
 -- | 平台服务器返回错误的通用格式

@@ -21,6 +21,7 @@ import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
+import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
 import Data.Conduit                         (Source, yield)
@@ -31,7 +32,7 @@ import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 
 -- | 调用服务器接口，查询用户基础信息
-wxppQueryEndUserInfo :: (WxppApiMonad m) =>
+wxppQueryEndUserInfo :: (WxppApiMonad env m) =>
     AccessToken -> WxppOpenID -> m EndUserQueryResult
 wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id) = do
     let url = wxppRemoteApiBaseUrl <> "/user/info"
@@ -39,7 +40,7 @@ wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id
                         & param "openid" .~ [ open_id ]
                         & param "lang" .~ [ "zh_CN" :: Text ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
 
@@ -71,7 +72,7 @@ wxppOpenIdListInGetUserResult :: GetUserResult -> [WxppOpenID]
 wxppOpenIdListInGetUserResult (GetUserResult _ _ x _) = x
 
 -- | 调用服务器接口，查询所有订阅用户
-wxppGetEndUserSource :: (WxppApiMonad m)
+wxppGetEndUserSource :: (WxppApiMonad env m)
                      => AccessToken
                      -> Source m GetUserResult
 wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
@@ -85,7 +86,7 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
                                         param "next_openid" .~ [ start_open_id ]
                                     )
 
-            sess <- ask
+            sess <- asks getWreqSession
             r@(GetUserResult _ _ _ m_next_id) <-
                 liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal'
             yield r
@@ -123,7 +124,7 @@ wxppLookupAllCacheForUnionID cache app_id open_id =
 -- 先从缓存找，找不到或找到的记录太旧，则调用接口
 -- 如果调用接口取得最新的数据，立刻缓存之
 wxppCachedGetEndUserUnionID ::
-    ( WxppApiMonad m, WxppCacheTemp c) =>
+    ( WxppApiMonad env m, WxppCacheTemp c) =>
     c
     -> NominalDiffTime
     -> AccessToken
@@ -133,7 +134,7 @@ wxppCachedGetEndUserUnionID cache ttl atk open_id = do
     liftM endUserQueryResultUnionID $ wxppCachedQueryEndUserInfo cache ttl atk open_id
 
 wxppCachedQueryEndUserInfo ::
-    (WxppApiMonad m, WxppCacheTemp c) =>
+    (WxppApiMonad env m, WxppCacheTemp c) =>
     c
     -> NominalDiffTime
     -> AccessToken
@@ -191,12 +192,12 @@ instance FromJSON ListGroupResult where
                     ListGroupResult <$> o .: "groups"
 
 -- | 取所有分组的基本信息
-wxppListUserGroups :: (WxppApiMonad m) => AccessToken -> m [GroupBasicInfo]
+wxppListUserGroups :: (WxppApiMonad env m) => AccessToken -> m [GroupBasicInfo]
 wxppListUserGroups (AccessToken { accessTokenData = atk }) = do
     let url = wxppRemoteApiBaseUrl <> "/groups/get"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
                 >>= return . unListGroupResult
@@ -212,7 +213,7 @@ instance FromJSON CreateGroupResult where
 
 
 -- | 取所有分组的基本信息
-wxppCreateUserGroup :: (WxppApiMonad m)
+wxppCreateUserGroup :: (WxppApiMonad env m)
                     => AccessToken
                     -> Text
                     -> m WxppUserGroupID
@@ -220,7 +221,7 @@ wxppCreateUserGroup (AccessToken { accessTokenData = atk }) name = do
     let url = wxppRemoteApiBaseUrl <> "/groups/create"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     CreateGroupResult grp_id name' <-
         liftIO (WS.postWith opts sess url $ object [ "group" .= object [ "name" .= name ] ])
                 >>= asWxppWsResponseNormal'
@@ -233,7 +234,7 @@ wxppCreateUserGroup (AccessToken { accessTokenData = atk }) name = do
 
 
 -- | 删除一个用户分组
-wxppDeleteUserGroup :: (WxppApiMonad m)
+wxppDeleteUserGroup :: (WxppApiMonad env m)
                     => AccessToken
                     -> WxppUserGroupID
                     -> m ()
@@ -241,13 +242,13 @@ wxppDeleteUserGroup (AccessToken { accessTokenData = atk }) grp_id = do
     let url = wxppRemoteApiBaseUrl <> "/groups/delete"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "group" .= object [ "id" .= grp_id ] ])
             >>= asWxppWsResponseVoid
 
 
 -- | 修改分组名
-wxppRenameUserGroup :: (WxppApiMonad m)
+wxppRenameUserGroup :: (WxppApiMonad env m)
                     => AccessToken
                     -> WxppUserGroupID
                     -> Text
@@ -256,7 +257,7 @@ wxppRenameUserGroup (AccessToken { accessTokenData = atk }) grp_id name = do
     let url = wxppRemoteApiBaseUrl <> "/groups/update"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "group" .= object [ "id" .= grp_id, "name" .= name ] ])
             >>= asWxppWsResponseVoid
 
@@ -268,7 +269,7 @@ instance FromJSON GetGroupResult where
                     GetGroupResult <$> o .: "groupid"
 
 -- | 查询用户所在分组
-wxppGetGroupOfUser :: (WxppApiMonad m)
+wxppGetGroupOfUser :: (WxppApiMonad env m)
                    => AccessToken
                    -> WxppOpenID
                    -> m WxppUserGroupID
@@ -276,7 +277,7 @@ wxppGetGroupOfUser (AccessToken { accessTokenData = atk }) open_id = do
     let url = wxppRemoteApiBaseUrl <> "/groups/getid"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     GetGroupResult grp_id <-
         liftIO (WS.postWith opts sess url $ object [ "openid" .= open_id ])
             >>= asWxppWsResponseNormal'
@@ -284,7 +285,7 @@ wxppGetGroupOfUser (AccessToken { accessTokenData = atk }) open_id = do
 
 
 -- | 移动用户至指定分组
-wxppSetUserGroup :: (WxppApiMonad m)
+wxppSetUserGroup :: (WxppApiMonad env m)
                  => AccessToken
                  -> WxppUserGroupID
                  -> WxppOpenID
@@ -293,13 +294,13 @@ wxppSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id = do
     let url = wxppRemoteApiBaseUrl <> "/groups/members/update"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "to_groupid" .= grp_id, "openid" .= open_id ])
             >>= asWxppWsResponseVoid
 
 
 -- | 批量移动用户至指定分组
-wxppBatchSetUserGroup :: (WxppApiMonad m)
+wxppBatchSetUserGroup :: (WxppApiMonad env m)
                       => AccessToken
                       -> WxppUserGroupID
                       -> [WxppOpenID]
@@ -308,6 +309,6 @@ wxppBatchSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id_lis
     let url = wxppRemoteApiBaseUrl <> "/groups/members/batchupdate"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- ask
+    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "to_groupid" .= grp_id, "openid_list" .= open_id_list ])
             >>= asWxppWsResponseVoid
