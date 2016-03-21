@@ -11,15 +11,15 @@ import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Media
-import WeiXin.PublicPlatform.WS
 
 
-type LoadMsgMonad m = (WxppApiMonad m, MonadLoggerIO m, MonadCatch m)
+type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, MonadCatch m)
 
 type LoadMsgEnv r = ( HasWxppOutMsgDir r
                     , HasSomeWxppCacheBackend r
                     , HasAccessToken r
                     , HasWxppAppID r
+                    , HasWreqSession r
                     )
 
 
@@ -33,10 +33,14 @@ loadTalkMessage env sub_path = runExceptT $ do
     msg_l <- ExceptT $ runDelayedYamlLoaderL
                 (talkerMessageDir env)
                 (mkDelayedYamlLoader $ setExtIfNotExist "yml" $ sub_path)
-    fromWxppOutMsgL
+
+    let sess = getWreqSession env
+
+    flip runReaderT sess $ do
+      fromWxppOutMsgL
         (getWxppOutMsgDir env)
         (getSomeWxppCacheBackend env)
-        (ExceptT $ wxTalkGetAccessToken env)
+        (lift $ ExceptT $ wxTalkGetAccessToken env)
         msg_l
 
 loadTalkMessage' :: ( LoadMsgMonad m, LoadMsgEnv r) =>
@@ -56,10 +60,14 @@ loadTalkMessage_IOE env sub_path = runExceptT $ do
     msg_l <- withExceptT err_to_str $ ExceptT $ runDelayedYamlLoaderL_IOE
                 (talkerMessageDir env)
                 (mkDelayedYamlLoader $ setExtIfNotExist "yml" $ sub_path)
-    fromWxppOutMsgL
+
+    let sess = getWreqSession env
+
+    flip runReaderT sess $ do
+      fromWxppOutMsgL
         (getWxppOutMsgDir env)
         (getSomeWxppCacheBackend env)
-        (ExceptT $ wxTalkGetAccessToken env)
+        (lift $ ExceptT $ wxTalkGetAccessToken env)
         msg_l
     where
         err_to_str err = "failed to load '" <> sub_path <> "': " <> show err

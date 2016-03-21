@@ -8,6 +8,7 @@ import Text.Shakespeare.I18N                (Lang)
 import Data.Time                            (NominalDiffTime, diffUTCTime)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
+import qualified Network.Wreq.Session       as WS
 
 import WeiXin.PublicPlatform.Types
 import Data.List.NonEmpty                   as LNE
@@ -256,6 +257,12 @@ instance HasWxppOpenID WxppOpenID where
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst
 
+
+class HasWreqSession a where
+    getWreqSession :: a -> WS.Session
+
+instance HasWreqSession WS.Session where
+    getWreqSession = id
 
 class HasSomeWxppCacheBackend a where
     getSomeWxppCacheBackend :: a -> SomeWxppCacheClient
