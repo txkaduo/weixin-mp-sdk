@@ -4,6 +4,7 @@ module WeiXin.PublicPlatform.Yesod.Model where
 
 import ClassyPrelude.Yesod
 import qualified Data.Conduit.List          as CL
+import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
 import Database.Persist.Quasi
 import Database.Persist.Sql                 (Migration)
@@ -13,6 +14,7 @@ import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
+import WeiXin.PublicPlatform.Message        (wxppInMsgEntityFromLbs)
 
 
 wxppSubModelsDefBasic ::
@@ -288,3 +290,18 @@ toWxppCachedUserInfoExt app_id created_time
         subs_time
         created_time
 
+
+-- | Read history from WxppInMsgRecord table, generate WxppInMsgEntity
+wxppSourceInMsgEntityFromHistory :: (MonadReader env m, MonadResource m, HasPersistBackend env SqlBackend)
+                                 => [Filter WxppInMsgRecord]
+                                 -> [SelectOpt WxppInMsgRecord]
+                                 -> Source m (Either String (UTCTime, (WxppAppID, WxppInMsgEntity)))
+
+wxppSourceInMsgEntityFromHistory filters opts = do
+  selectSource filters opts
+    =$= CL.map parse_ime
+  where
+    parse_ime (Entity _ rec) = do
+      ime <- wxppInMsgEntityFromLbs $ LB.fromStrict $ wxppInMsgRecordBlob rec
+      let app_id = wxppInMsgRecordApp rec
+      return (wxppInMsgRecordNotifyTime rec, (app_id, ime))
