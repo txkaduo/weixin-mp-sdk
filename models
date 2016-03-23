@@ -57,6 +57,7 @@ WxppCachedSnsUserInfo
     app                 WxppAppID maxlen=200
     openId              WxppOpenID maxlen=200
     unionId             WxppUnionID Maybe maxlen=200
+                            -- ^ need INDEX manually
     lang                Lang maxlen=200
 
     gender              Gender Maybe

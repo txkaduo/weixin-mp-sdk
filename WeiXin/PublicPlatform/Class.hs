@@ -106,6 +106,12 @@ class WxppCacheTemp a where
         -> IO (Maybe (EndUserQueryResult, UTCTime))
 
 
+    -- | 由于微信没提供从union id找相关open id的接口
+    -- 这个接口应尽一切可能, 根据union id找到所有已知的open id, 但不用保证结果是完整的
+    wxppCacheLookupAllOpenIdByUid :: a
+                                  -> WxppUnionID
+                                  -> IO [WxppAppOpenID]
+
     wxppCacheSaveUploadedMediaID ::
         a
         -> WxppAppID
@@ -195,6 +201,7 @@ instance WxppCacheTemp SomeWxppCacheClient where
     wxppCacheAddSnsUserInfo (SomeWxppCacheClient x)        = wxppCacheAddSnsUserInfo x
     wxppCacheSaveUserInfo   (SomeWxppCacheClient x)        = wxppCacheSaveUserInfo x
     wxppCacheLookupUserInfo (SomeWxppCacheClient x)        = wxppCacheLookupUserInfo x
+    wxppCacheLookupAllOpenIdByUid (SomeWxppCacheClient x)  = wxppCacheLookupAllOpenIdByUid x
     wxppCacheGetSnsUserInfo (SomeWxppCacheClient x)        = wxppCacheGetSnsUserInfo x
     wxppCacheSaveUploadedMediaID
                             (SomeWxppCacheClient x)        = wxppCacheSaveUploadedMediaID x
@@ -230,6 +237,7 @@ instance WxppCacheTemp SomeWxppCacheFull where
     wxppCacheAddSnsUserInfo (SomeWxppCacheFull x)        = wxppCacheAddSnsUserInfo x
     wxppCacheSaveUserInfo   (SomeWxppCacheFull x)        = wxppCacheSaveUserInfo x
     wxppCacheLookupUserInfo (SomeWxppCacheFull x)        = wxppCacheLookupUserInfo x
+    wxppCacheLookupAllOpenIdByUid (SomeWxppCacheFull x)  = wxppCacheLookupAllOpenIdByUid x
     wxppCacheGetSnsUserInfo (SomeWxppCacheFull x)        = wxppCacheGetSnsUserInfo x
     wxppCacheSaveUploadedMediaID
                             (SomeWxppCacheFull x)        = wxppCacheSaveUploadedMediaID x
@@ -324,6 +332,8 @@ instance WxppCacheTemp FakeWxppCache where
     wxppCacheSaveUserInfo _ _ _ = return ()
 
     wxppCacheLookupUserInfo _ _ _ = return Nothing
+
+    wxppCacheLookupAllOpenIdByUid _ _ = return []
 
     wxppCacheSaveUploadedMediaID _ _ _ _ = return ()
 

@@ -186,6 +186,22 @@ wxppAcidLookupCachedUnionID open_id app_id =
             Map.lookup (open_id, app_id) .
             _wxppAcidStateCachedUserInfo
 
+
+wxppAcidLookupAllOpenIdByUid :: WxppUnionID -> Query WxppAcidState [WxppAppOpenID]
+wxppAcidLookupAllOpenIdByUid uid = do
+  lst1 <- asks $ fmap swap .
+                 Map.keys .
+                 Map.filter ((== Just uid) . endUserQueryResultUnionID . _unTimeTag) .
+                 _wxppAcidStateCachedUserInfo
+
+  lst2 <- asks $ fmap swap .
+                 fmap fst .
+                 Map.keys .
+                 Map.filter ((== Just uid) . oauthUserInfoUnionID . _unTimeTag) .
+                 _wxppAcidStateCachedSnsUserInfo
+
+  return $ fmap (uncurry WxppAppOpenID) $  ordNub $ lst1 <> lst2
+
 $(makeAcidic ''WxppAcidState
     [ 'wxppAcidGetAcccessTokens
     , 'wxppAcidGetAcccessToken
@@ -204,6 +220,7 @@ $(makeAcidic ''WxppAcidState
     , 'wxppAcidLookupCachedUnionID
     , 'wxppAcidGetCachedSnsUserInfo
     , 'wxppAcidAddCachedSnsUserInfo
+    , 'wxppAcidLookupAllOpenIdByUid
     ])
 
 
@@ -252,6 +269,9 @@ instance WxppCacheTemp WxppCacheByAcid where
         now <- liftIO getCurrentTime
         let open_id = endUserQueryResultOpenID qres
         update acid $ WxppAcidSetCachedUserInfo now app_id open_id qres
+
+    wxppCacheLookupAllOpenIdByUid (WxppCacheByAcid acid) uid = do
+        query acid $ WxppAcidLookupAllOpenIdByUid uid
 
     wxppCacheLookupUploadedMediaIDByHash (WxppCacheByAcid acid) app_id h = do
         query acid $ WxppAcidLookupUploadedMediaIDByHash app_id h

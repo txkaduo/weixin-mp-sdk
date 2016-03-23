@@ -163,6 +163,50 @@ instance WxppCacheTemp WxppDbRunner where
                 ) $
                 getBy $ UniqueWxppCachedUserInfoExt open_id app_id
 
+    wxppCacheLookupAllOpenIdByUid (WxppDbRunner run_db) uid = do
+        run_db $ do
+          -- 因为现在有多个cache了用户open_id/union_id的表
+          -- 目前大部分都有更新(依赖具体使用sdk程序的逻辑),
+          -- 但不排除以后为优化而去掉其中某个表
+          -- 这里用一种简单粗暴的方式: 能找的都找了
+          list0 <- by_table_WxppUserCachedInfo
+          let app_id_list0 = map fst list0
+
+          -- WxppCachedUserInfoExt 是经常更新的
+          list1 <- fmap
+                    (fmap $
+                        (wxppCachedUserInfoExtApp &&& wxppCachedUserInfoExtOpenId) .
+                        entityVal
+                    )
+                    (selectList [ WxppCachedUserInfoExtUnionId ==. Just uid
+                                , WxppCachedUserInfoExtApp /<-. app_id_list0
+                                ]
+                               [])
+
+          let app_id_list1 = map fst $ list0 <> list1
+
+          list2<- fmap
+                    (fmap $
+                        (wxppCachedSnsUserInfoApp &&& wxppCachedSnsUserInfoOpenId) .
+                        entityVal
+                    )
+                    (selectList [ WxppCachedSnsUserInfoUnionId ==. Just uid
+                                , WxppCachedSnsUserInfoApp /<-. app_id_list1
+                                ]
+                                [])
+
+          return $ fmap (uncurry WxppAppOpenID) $ ordNub $ list0 <> list1 <> list2
+
+        where
+          by_table_WxppUserCachedInfo = do
+            -- 这个表的结构就是为这种反查而做的,效率最高,先找它
+            fmap
+                (fmap $
+                    (wxppUserCachedInfoApp &&& wxppUserCachedInfoOpenId) .
+                    entityVal
+                )
+                (selectList [ WxppUserCachedInfoUnionId ==. Just uid ] [])
+
     wxppCacheSaveUserInfo (WxppDbRunner run_db) app_id qres = do
         now <- liftIO getCurrentTime
         run_db $ do
