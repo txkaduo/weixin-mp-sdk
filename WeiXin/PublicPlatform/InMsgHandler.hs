@@ -1275,7 +1275,7 @@ testWithPosixREList :: [Regex] -> String -> Bool
 testWithPosixREList lst t = not $ null $ catMaybes $ rights $ map (flip execute t) lst
 
 -- | 取事件推送消息中可能带有的场景信息
-getSceneInEvent :: WxppEvent -> Maybe (WxppScene, QRTicket)
+getSceneInEvent :: WxppEvent -> Maybe (WxppScene, Maybe QRTicket)
 getSceneInEvent (WxppEvtSubscribeAtScene scene ticket)  = Just (scene, ticket)
 getSceneInEvent (WxppEvtScan scene ticket)              = Just (scene, ticket)
 getSceneInEvent _                                       = Nothing

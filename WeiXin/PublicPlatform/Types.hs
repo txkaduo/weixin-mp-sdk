@@ -544,8 +544,8 @@ instance SimpleStringRep GroupSendStatus where
 -- | 事件推送的各种值
 data WxppEvent = WxppEvtSubscribe
                 | WxppEvtUnsubscribe
-                | WxppEvtSubscribeAtScene WxppScene QRTicket
-                | WxppEvtScan WxppScene QRTicket
+                | WxppEvtSubscribeAtScene WxppScene (Maybe QRTicket)
+                | WxppEvtScan WxppScene (Maybe QRTicket)
                 | WxppEvtScanCodePush Text Text Text
                     -- ^ event key, scan type, scan result
                     -- XXX: 文档有提到这个事件类型，但没有消息的具体细节
@@ -631,11 +631,11 @@ instance FromJSON WxppEvent where
 
           "subscribe_at_scene" -> liftM2 WxppEvtSubscribeAtScene
                                       (obj .: "scene")
-                                      (obj .: "qr_ticket")
+                                      (obj .:? "qr_ticket")
 
           "scan"  -> liftM2 WxppEvtScan
                               (obj .: "scene")
-                              (obj .: "qr_ticket")
+                              (obj .:? "qr_ticket")
 
           "scancode_push" -> WxppEvtScanCodePush <$> obj .: "key"
                                                 <*> obj .: "scan_type"

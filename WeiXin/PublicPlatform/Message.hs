@@ -232,7 +232,7 @@ wxppEventFromDocument doc = do
                     -- 实测证明，普通的订阅事件通知也会发个 EventKey 过来，只是为空而已
                     return WxppEvtSubscribe
                 else do
-                    ticket <- fmap QRTicket $ get_ele_s "Ticket"
+                    let ticket = fmap QRTicket $ getElementContentMaybe cursor "Ticket"
                     scene_id <- case parse simpleParser "" ek_s of
                         Left err    -> Left $ "Failed to parse scene id: " ++ show err
                         Right sid   -> return sid
@@ -246,7 +246,7 @@ wxppEventFromDocument doc = do
                     scene_id <- case parse simpleParser "" ek_s of
                         Left err    -> Left $ "Failed to parse scene id: " ++ show err
                         Right sid   -> return sid
-                    ticket <- fmap QRTicket $ get_ele_s "Ticket"
+                    let ticket = fmap QRTicket $ getElementContentMaybe cursor "Ticket"
                     return $ WxppEvtScan scene_id ticket
 
         "LOCATION"  -> do
