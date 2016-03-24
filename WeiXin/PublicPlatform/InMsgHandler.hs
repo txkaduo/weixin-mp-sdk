@@ -235,6 +235,18 @@ readWxppInMsgHandlers tmps data_dirs fp = runExceptT $ do
                 . parseEither (parseWxppInMsgProcessors tmps)
 
 
+readWxppInMsgHandlersCached :: (CachedYamlInfoState s)
+                            => s
+                            -> [WxppInMsgHandlerPrototype m]
+                            -> NonEmpty FilePath
+                            -> FilePath
+                            -> IO (Either YamlFileParseException [SomeWxppInMsgHandler m])
+readWxppInMsgHandlersCached st tmps data_dirs fp = runExceptT $ do
+    ExceptT (runDelayedCachedYamlLoaderL_IOE st data_dirs $ mkDelayedCachedYamlLoader fp)
+        >>= either (throwE . YamlFileParseException fp . AesonException) return
+                . parseEither (parseWxppInMsgProcessors tmps)
+
+
 -- | 用于在配置文件中，读取出一系列响应算法
 parseWxppInMsgProcMiddlewares ::
     [WxppInMsgProcMiddlewarePrototype m]

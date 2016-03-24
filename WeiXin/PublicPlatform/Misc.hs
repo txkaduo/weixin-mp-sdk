@@ -34,6 +34,7 @@ import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Site.Function
 import WeiXin.PublicPlatform.Yesod.Model
+import WeiXin.PublicPlatform.Utils          (CachedYamlInfoState)
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
@@ -133,6 +134,94 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
             err_or_in_msg_handlers <- liftIO $ do
                     protos <- get_protos wac
                     readWxppInMsgHandlers
+                        protos
+                        data_dirs
+                        (T.unpack "msg-handlers.yml")
+
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_id
+            m_in_msg_handlers <- case err_or_in_msg_handlers of
+                Left err -> do
+                    $logErrorS wxppLogSource $ fromString $
+                        "cannot parse msg-handlers.yml: " ++ show err
+                    m_cached_handlers <- liftIO $ fmap join $
+                                            mapM SV.get m_last_handlers_ref
+                    case m_cached_handlers of
+                        Nothing -> do
+                            $logWarnS wxppLogSource $
+                                "no cached message handlers available"
+                            return Nothing
+
+                        Just x -> do
+                            $logDebugS wxppLogSource $
+                                "using last message handlers"
+                            return $ Just x
+
+                Right x -> return $ Just x
+
+            case m_in_msg_handlers of
+                Nothing -> do
+                    return $ Left "msg-handlers.yml error"
+
+                Just in_msg_handlers -> do
+                    liftIO $ mapM_ (SV.$= Just in_msg_handlers) m_last_handlers_ref
+
+                    -- 这里可以选择使用 tryEveryInMsgHandler'
+                    -- 那样就会所有 handler 保证处理一次
+                    -- tryEveryInMsgHandler'
+                    tryInMsgHandlerUntilFirstPrimary'
+                            cache
+                            in_msg_handlers
+                            bs ime
+
+
+-- mkMaybeWxppSub with cache
+mkMaybeWxppSubC ::
+    ( LoggingTRunner app
+    , DBActionRunner app
+    , DBAction app ~ ReaderT WxppDbBackend
+    , WxppCacheTokenReader c, WxppCacheTemp c
+    , SV.HasSetter hvar (Maybe (InMsgHandlerList m)), SV.HasGetter hvar (Maybe (InMsgHandlerList m))
+    , CachedYamlInfoState s
+    , MonadIO m, MonadLogger m
+    ) =>
+    (forall a. m a -> IO (Either String a))
+    -> app
+    -> c
+    -> s  -- ^ cache parsed Yaml content
+    -> (WxppAppID -> IO (Maybe hvar))
+            -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
+    -> IO (Maybe WxppAppConfig)
+            -- ^ 找到相应配置的函数
+    -> (WxppAppConfig -> IO [WxppInMsgHandlerPrototype m])
+    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
+    -> WxppSubsiteOpts
+    -> WS.Session
+    -> MaybeWxppSub
+mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts sess =
+    MaybeWxppSub $ runMaybeT $ do
+        wac <- MaybeT $ get_wxpp_config
+        let app_id      = wxppConfigAppID wac
+        let data_dirs   = wxppAppConfigDataDir wac
+        middlewares <- liftIO $ get_middleware app_id
+        return $ WxppSub
+                    wac
+                    (SomeWxppCacheClient cache)
+                    (WxppDbRunner $ runDBWith foundation)
+                    (send_msg app_id)
+                    (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
+                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
+                    (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                    (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                    (runLoggingTWith foundation)
+                    opts
+                    sess
+    where
+        handle_msg wac data_dirs bs ime = do
+            let app_id      = wxppConfigAppID wac
+            err_or_in_msg_handlers <- liftIO $ do
+                    protos <- get_protos wac
+                    readWxppInMsgHandlersCached cache_yaml
                         protos
                         data_dirs
                         (T.unpack "msg-handlers.yml")

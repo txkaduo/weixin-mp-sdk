@@ -9,6 +9,10 @@ import qualified Codec.Picture              as P -- from `JuicyPixel' package
 import qualified Codec.Picture.Saving       as P -- from `JuicyPixel' package
 import qualified Data.Text                  as T
 import qualified Data.Serialize             as S
+import qualified Data.StateVar              as SV
+import qualified Data.Aeson                 as A
+import qualified Data.Yaml                  as Y
+import qualified Data.HashMap.Strict        as HM
 
 import Data.Array                           (bounds,(!), array)
 import Data.List                            ((!!))
@@ -16,15 +20,19 @@ import Data.Time                            (NominalDiffTime)
 import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
                                             , utcTimeToPOSIXSeconds)
 import System.FilePath                      (hasExtension)
+import System.Directory                     (doesFileExist)
 import Network.Mime                         (MimeType, defaultMimeType)
 import Network.Wreq                         (Response, responseBody, responseHeader)
 import Control.Lens                         ((^.), (^?))
+import Control.Monad.Trans.Maybe
 import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, prettyPrintParseException)
 import qualified Data.Yaml                  as Yaml
 import Control.Monad.Catch                  ( Handler(..) )
 import Data.List.NonEmpty                   as LNE hiding (length, (!!))
+
+import Crypto.Hash.TX.Utils                 (MD5Hash(..), md5HashBS)
 
 epochIntToUtcTime :: Int64 -> UTCTime
 epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
@@ -54,6 +62,21 @@ type DelayedYamlLoader a = ReaderT
                                 (Either YamlFileParseException a)
 
 
+-- | Cache read result from file system
+type CachedYamlInfo = HashMap
+                        FilePath  -- full file path
+                        (MD5Hash, Value)
+                                  -- file content md5 and its Yaml parsing result
+
+type CachedYamlLoader s a = ReaderT s IO a
+
+-- | intend to obsolete DelayedYamlLoader
+type DelayedCachedYamlLoader s a = NonEmpty FilePath -> CachedYamlLoader s a
+
+type CachedYamlInfoState s = ( SV.HasUpdate s CachedYamlInfo CachedYamlInfo
+                             , SV.HasGetter s CachedYamlInfo
+                             )
+
 setExtIfNotExist :: String -> FilePath -> FilePath
 setExtIfNotExist def_ext fp =
     if hasExtension fp
@@ -78,6 +101,7 @@ parseDelayedYamlLoader m_direct_field indirect_field obj =
             (return . Right <$> obj .: direct_field) <|> parse_indirect
     where
         parse_indirect = mkDelayedYamlLoader . setExtIfNotExist "yml" . T.unpack <$> obj .: indirect_field
+
 
 mkDelayedYamlLoader :: forall a. FromJSON a => FilePath -> DelayedYamlLoader a
 mkDelayedYamlLoader fp = do
@@ -149,6 +173,73 @@ runDelayedYamlLoaderExc :: (MonadIO m, FromJSON a, MonadThrow m) =>
     -> DelayedYamlLoader a
     -> m a
 runDelayedYamlLoaderExc base_dir = runDelayedYamlLoaderExcL (base_dir :| [])
+
+
+findFirstMatchedFile :: (Functor t, Foldable t)
+                     => t FilePath  -- ^ base dirs to try
+                     -> FilePath    -- ^ sub-path
+                     -> IO (Maybe FilePath)
+                      -- ^ get the first fullpath that exists
+findFirstMatchedFile base_dir_list fp = do
+  runMaybeT $ asum $ fmap (MaybeT . try_dir) $ base_dir_list
+  where
+    try_dir bp = do
+        let full_path = bp </> fp
+
+        exists <- doesFileExist full_path
+        return $ if exists
+                   then Just full_path
+                   else Nothing
+
+
+mkDelayedCachedYamlLoader :: ( FromJSON a, CachedYamlInfoState s)
+                          => FilePath
+                          -> DelayedCachedYamlLoader s a
+mkDelayedCachedYamlLoader fp base_dir_list = do
+  full_path <- liftIO (findFirstMatchedFile base_dir_list fp)
+                >>= maybe
+                    (throwM $ mkIOError doesNotExistErrorType "mkDelayedCachedYamlLoader" Nothing (Just fp))
+                    return
+
+  bs <- liftIO $ B.readFile full_path
+  let md5sum = md5HashBS bs
+
+  st <- ask
+  cache_map <- SV.get st
+  jv <- case HM.lookup full_path cache_map of
+          Just (md5sum2, jv) | md5sum == md5sum2 -> do
+            return jv
+
+          _ -> do
+            new_jv <- either (throwM . YamlFileParseException full_path) return $ Y.decodeEither' bs
+            st SV.$~! (HM.insert full_path (md5sum, new_jv))
+            return new_jv
+
+  case A.fromJSON jv of
+    A.Error err -> throwM $ YamlFileParseException full_path (Y.AesonException err)
+    A.Success x -> return x
+
+
+-- | May throw IOError
+runDelayedCachedYamlLoaderL_IOE :: ( MonadIO m, FromJSON a, CachedYamlInfoState s)
+                                => s
+                                -> NonEmpty FilePath    -- ^ 消息文件存放目录
+                                -> DelayedCachedYamlLoader s a
+                                -> m (Either YamlFileParseException a)
+runDelayedCachedYamlLoaderL_IOE st base_dirs f = liftIO $ try $ runReaderT (f base_dirs) st
+
+-- | Don't throw IOError
+runDelayedCachedYamlLoaderL :: ( MonadIO m, FromJSON a, CachedYamlInfoState s)
+                            => s
+                            -> NonEmpty FilePath    -- ^ 消息文件存放目录
+                            -> DelayedCachedYamlLoader s a
+                            -> m (Either String a)
+runDelayedCachedYamlLoaderL st base_dirs f = liftIO $ do
+  err_or_x <- tryIOError $ try $ runReaderT (f base_dirs) st
+  case err_or_x of
+      Left err    -> return $ Left $ "failed to load from file: " ++ show err
+      Right x     -> return $ parseMsgErrorToString x
+
 
 parseMsgErrorToString :: Either YamlFileParseException a -> Either String a
 parseMsgErrorToString (Left err)    = Left $ "failed to parse from file: " ++ show err
