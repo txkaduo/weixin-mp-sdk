@@ -334,7 +334,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
     let sess = wxppSubWreqSession sub
     case fmap OAuthCode m_code of
-        Just code | not (null $ unOAuthCode code) -> do
+        Just code | not (deniedOAuthCode code) -> do
             -- 用户同意授权
             err_or_atk_info <- tryWxppWsResult $ flip runReaderT sess $
                                   wxppOAuthGetAccessToken app_id secret code

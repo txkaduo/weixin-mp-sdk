@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.OAuth
     ( OAuthCode(..)
+    , deniedOAuthCode
     , WxppAuthConfig(..)
     , OAuthAccessToken(..)
     , OAuthAccessTokenPkg(..)
@@ -36,6 +37,11 @@ import Yesod.Helpers.Parsec
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
+
+
+-- | 文档说用户拒绝授权, code 为空,实际上会出现 authdeny 这样的字串
+deniedOAuthCode :: OAuthCode -> Bool
+deniedOAuthCode (OAuthCode x) = null x || x == "authdeny"
 
 
 -- | 当仅需要做 OAuth 认证时，不需要 WxppAppConfig 那么多信息
