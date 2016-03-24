@@ -1478,6 +1478,16 @@ packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes _expiry) =
     OAuthAccessTokenPkg atk rtk scopes open_id app_id
 
 
+fromOAuthAccessTokenResult :: UTCTime
+                           -> OAuthAccessTokenResult
+                           -> OAuthTokenInfo
+fromOAuthAccessTokenResult now r = OAuthTokenInfo
+                                    (oauthAtkToken r)
+                                    (oauthAtkRefreshToken r)
+                                    (oauthAtkScopes r)
+                                    (addUTCTime (oauthAtkTTL r) now)
+
+
 data OAuthAccessTokenResult = OAuthAccessTokenResult {
                                 oauthAtkToken           :: OAuthAccessToken
                                 , oauthAtkTTL           :: NominalDiffTime
