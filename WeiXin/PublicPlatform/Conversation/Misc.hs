@@ -4,7 +4,6 @@ module WeiXin.PublicPlatform.Conversation.Misc where
 import ClassyPrelude
 import Data.Proxy
 import qualified Data.Text                  as T
-import qualified Network.Wreq.Session       as WS
 import Control.Monad.Logger
 import Control.Monad.Except
 import Control.Monad.State                  (StateT(..))
@@ -16,16 +15,20 @@ import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Conversation.TextParser
 import WeiXin.PublicPlatform.Conversation.Message
 import WeiXin.PublicPlatform.Class
+import WeiXin.PublicPlatform.WS
 
 
 data CommonTalkEnv = CommonTalkEnv
-                        WS.Session
+                        WxppApiEnv
                         SomeWxppCacheClient
                         WxppAppID
                         (NonEmpty FilePath)     -- ^ base dir of message files
 
+instance HasWxppUrlConfig CommonTalkEnv where
+    getWxppUrlConfig (CommonTalkEnv x _ _ _) = getWxppUrlConfig x
+
 instance HasWreqSession CommonTalkEnv where
-    getWreqSession (CommonTalkEnv sess _ _ _) = sess
+    getWreqSession (CommonTalkEnv x _ _ _) = getWreqSession x
 
 instance HasAccessToken CommonTalkEnv where
     wxppGetAccessToken (CommonTalkEnv _ cache app_id _ ) =
