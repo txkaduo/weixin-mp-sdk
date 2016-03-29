@@ -74,10 +74,10 @@ instance Default WxppUrlConfig where
 instance FromJSON WxppUrlConfig where
   parseJSON = withObject "WxppUrlConfig" $ \o -> do
     fmap (($ def) . appEndo . mconcat) $ sequenceA
-      [ o .:? "secure-base"     >>= maybe mempty (return . Endo . upd_wxppUrlConfSecureBase) . chk_empty
-      , o .:? "non-secure-base" >>= maybe mempty (return . Endo . upd_wxppUrlConfNonSecureBase) . chk_empty
-      , o .:? "sns-base"        >>= maybe mempty (return . Endo . upd_wxppUrlConfSnsApiBase) . chk_empty
-      , o .:? "file-base"       >>= maybe mempty (return . Endo . upd_wxppUrlConfFileApiBase) . chk_empty
+      [ o .:? "secure-base"     >>= return . maybe mempty (Endo . upd_wxppUrlConfSecureBase) . chk_empty
+      , o .:? "non-secure-base" >>= return . maybe mempty (Endo . upd_wxppUrlConfNonSecureBase) . chk_empty
+      , o .:? "sns-base"        >>= return . maybe mempty (Endo . upd_wxppUrlConfSnsApiBase) . chk_empty
+      , o .:? "file-base"       >>= return . maybe mempty (Endo . upd_wxppUrlConfFileApiBase) . chk_empty
       ]
     where
         null_to_empty s                  = if null s then Nothing else Just s
