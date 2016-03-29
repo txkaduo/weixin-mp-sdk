@@ -80,12 +80,12 @@ instance FromJSON WxppUrlConfig where
       , o .:? "file-base"       >>= maybe mempty (return . Endo . upd_wxppUrlConfFileApiBase) . chk_empty
       ]
     where
-        null_to_empty s = if null s then Nothing else Just s
-        chk_empty = join . fmap null_to_empty
-        upd_wxppUrlConfSecureBase x c = c { wxppUrlConfSecureApiBase = x }
+        null_to_empty s                  = if null s then Nothing else Just s
+        chk_empty                        = join . fmap null_to_empty
+        upd_wxppUrlConfSecureBase x c    = c { wxppUrlConfSecureApiBase = x }
         upd_wxppUrlConfNonSecureBase x c = c { wxppUrlConfNonSecureApiBase = x }
-        upd_wxppUrlConfSnsApiBase x c = c { wxppUrlConfSnsApiBase = x }
-        upd_wxppUrlConfFileApiBase x c = c { wxppUrlConfFileApiBase = x }
+        upd_wxppUrlConfSnsApiBase x c    = c { wxppUrlConfSnsApiBase = x }
+        upd_wxppUrlConfFileApiBase x c   = c { wxppUrlConfFileApiBase = x }
 
 
 -- | 微信用户名
