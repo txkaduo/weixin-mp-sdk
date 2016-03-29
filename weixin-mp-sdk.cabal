@@ -209,6 +209,7 @@ executable wxpp-manage
                      , process
                      , semigroups
                      , wreq
+                     , data-default
 
   default-extensions:  NoImplicitPrelude
                        CPP

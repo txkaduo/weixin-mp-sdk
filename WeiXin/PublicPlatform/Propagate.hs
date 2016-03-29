@@ -170,10 +170,10 @@ wxppPropagateUploadNews :: (WxppApiMonad env m)
                             --        真正上传的结果只是一个临时的素材
                         -> m WxppBriefMediaID
 wxppPropagateUploadNews (AccessToken { accessTokenData = atk }) news = do
-    let url = wxppRemoteApiBaseUrl <> "/media/uploadnews"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/media/uploadnews"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     PUploadNewsResult _mtype media_id _ <-
         liftIO (WS.postWith opts sess url $ toJSON news)
             >>= asWxppWsResponseNormal'
@@ -204,10 +204,10 @@ wxppPropagateNewVideoID :: (WxppApiMonad env m)
                         -> Text     -- ^ description
                         -> m WxppPropagateVideoMediaID
 wxppPropagateNewVideoID (AccessToken { accessTokenData = atk }) media_id title desc = do
-    let url = "https://file.api.weixin.qq.com/cgi-bin/media/uploadvideo"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfFileApiBase url_conf <> "/media/uploadvideo"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     CreateVideoMediaIDResult _typ v_media_id _created_at
         <- liftIO (WS.postWith opts sess url $ object
                     [ "type" .= ("video" :: Text)
@@ -260,7 +260,8 @@ wxppPropagateMsg :: (WxppApiMonad env m)
                  -> WxppPropagateMsg
                  -> m PropagateMsgID
 wxppPropagateMsg (AccessToken { accessTokenData = atk }) m_grp_id p_msg = do
-    let url = wxppRemoteApiBaseUrl <> "/message/mass/sendall"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/message/mass/sendall"
         opts = defaults & param "access_token" .~ [ atk ]
     let post_v = object $
                     [
@@ -269,7 +270,6 @@ wxppPropagateMsg (AccessToken { accessTokenData = atk }) m_grp_id p_msg = do
                     ] ++
                     [ wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg) ]
 
-    sess <- asks getWreqSession
     (_, PropagateCallResult msg_id) <-
         liftIO (WS.postWith opts sess url post_v)
             >>= asWxppWsResponseNormal2'
@@ -283,7 +283,8 @@ wxppPreviewPropagateMsg :: (WxppApiMonad env m)
                         -> WxppPropagateMsg
                         -> m ()
 wxppPreviewPropagateMsg (AccessToken { accessTokenData = atk }) openid_or_name p_msg = do
-    let url = wxppRemoteApiBaseUrl <> "/message/mass/preview"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/message/mass/preview"
         opts = defaults & param "access_token" .~ [ atk ]
         to_spec = case openid_or_name of
                     Left openid -> "touser" .= openid
@@ -295,7 +296,6 @@ wxppPreviewPropagateMsg (AccessToken { accessTokenData = atk }) openid_or_name p
                     , wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg)
                     ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url post_v)
             >>= asWxppWsResponseVoid
 
@@ -307,10 +307,10 @@ wxppDropPropagateMsg :: (WxppApiMonad env m)
                      -> PropagateMsgID
                      -> m ()
 wxppDropPropagateMsg (AccessToken { accessTokenData = atk }) msg_id = do
-    let url = wxppRemoteApiBaseUrl <> "/message/mass/delete"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/message/mass/delete"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "msg_id" .= msg_id ])
             >>= asWxppWsResponseVoid
 
@@ -328,10 +328,10 @@ wxppGetPropagateMsgStatus :: (WxppApiMonad env m)
                           -> PropagateMsgID
                           -> m PropagateMsgStatus
 wxppGetPropagateMsgStatus (AccessToken { accessTokenData = atk }) msg_id = do
-    let url = wxppRemoteApiBaseUrl <> "/message/mass/get"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/message/mass/get"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     r <- liftIO $ WS.postWith opts sess url $ object [ "msg_id" .= msg_id ]
     -- $logDebugS wxppLogSource $ LT.toStrict $ decodeUtf8 $ r ^. responseBody
     asWxppWsResponseNormal' r

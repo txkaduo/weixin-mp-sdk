@@ -21,7 +21,6 @@ import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
-import qualified Network.Wreq.Session       as WS
 import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
 import System.Random                        (randomIO)
@@ -332,11 +331,11 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
     let state = fromMaybe state' $ T.stripPrefix ":" state'
 
-    let sess = wxppSubWreqSession sub
+    let api_env = wxppSubApiEnv sub
     case fmap OAuthCode m_code of
         Just code | not (deniedOAuthCode code) -> do
             -- 用户同意授权
-            err_or_atk_info <- tryWxppWsResult $ flip runReaderT sess $
+            err_or_atk_info <- tryWxppWsResult $ flip runReaderT api_env $
                                   wxppOAuthGetAccessToken app_id secret code
             atk_info <- case err_or_atk_info of
                             Left err -> do
@@ -506,9 +505,9 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     atk <- getAccessTokenSubHandler' foundation
 
-    let sess = wxppSubWreqSession foundation
+    let api_env = wxppSubApiEnv foundation
     _ <- liftIO $ forkIO $ wxppSubRunLoggingT foundation $ do
-                _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp sess atk
+                _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp api_env atk
                 return ()
 
     return $ toJSON ("run in background" :: Text)
@@ -527,7 +526,7 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
                 else qres
 
     tryWxppWsResult
-      (flip runReaderT (wxppSubWreqSession foundation) $ wxppQueryEndUserInfo atk open_id)
+      (flip runReaderT (wxppSubApiEnv foundation) $ wxppQueryEndUserInfo atk open_id)
       >>= return . fix_uid
       >>= forwardWsResult "wxppQueryEndUserInfo"
 
@@ -536,7 +535,7 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
 -- 输入仅仅是一个 WxppScene
 postCreateQrCodePersistR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
 postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
-    let sess = wxppSubWreqSession foundation
+    let api_env = wxppSubApiEnv foundation
     alreadyExpired
     scene <- decodePostBodyAsYaml
     let sm_mode = wxppSubFakeQRTicket $ wxppSubOptions foundation
@@ -550,7 +549,7 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
 
         else do
             atk <- getAccessTokenSubHandler' foundation
-            flip runReaderT sess $ do
+            flip runReaderT api_env $ do
               liftM toJSON $ wxppQrCodeCreatePersist atk scene
 
 
@@ -640,9 +639,9 @@ fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
 -- | initialize db table: WxppUserCachedInfo
 initWxppUserDbCacheOfApp ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    WS.Session -> AccessToken -> ReaderT WxppDbBackend m Int
-initWxppUserDbCacheOfApp sess atk = do
-    flip runReaderT sess $ do
+    WxppApiEnv -> AccessToken -> ReaderT WxppDbBackend m Int
+initWxppUserDbCacheOfApp api_env atk = do
+    flip runReaderT api_env $ do
       wxppGetEndUserSource atk
           =$= CL.concatMap wxppOpenIdListInGetUserResult
           =$= save_to_db

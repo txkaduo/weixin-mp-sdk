@@ -22,10 +22,10 @@ wxppCsSendOutMsg2 :: (WxppApiMonad env m)
                           -- ^ 其中的 wxppOutFromUserName 字段是没用到的
                   -> m ()
 wxppCsSendOutMsg2 (AccessToken { accessTokenData = atk }) m_kf_account to_open_id out_msg = do
-    let url = wxppRemoteApiBaseUrl <> "/message/custom/send"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/message/custom/send"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ toJSON $ mk_out_obj)
         >>= asWxppWsResponseVoid
     where

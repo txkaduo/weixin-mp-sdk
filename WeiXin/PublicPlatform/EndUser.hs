@@ -35,12 +35,12 @@ import WeiXin.PublicPlatform.WS
 wxppQueryEndUserInfo :: (WxppApiMonad env m) =>
     AccessToken -> WxppOpenID -> m EndUserQueryResult
 wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id) = do
-    let url = wxppRemoteApiBaseUrl <> "/user/info"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/user/info"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "openid" .~ [ open_id ]
                         & param "lang" .~ [ "zh_CN" :: Text ]
 
-    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
 
@@ -75,9 +75,10 @@ wxppOpenIdListInGetUserResult (GetUserResult _ _ x _) = x
 wxppGetEndUserSource :: (WxppApiMonad env m)
                      => AccessToken
                      -> Source m GetUserResult
-wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
-    where
-        url         = wxppRemoteApiBaseUrl <> "/user/get"
+wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = do
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+
+    let url         = wxppUrlConfSecureApiBase url_conf <> "/user/get"
         loop m_start_id = do
             let opts = defaults & param "access_token" .~ [ atk ]
                                 & (case m_start_id of
@@ -86,7 +87,6 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
                                         param "next_openid" .~ [ start_open_id ]
                                     )
 
-            sess <- asks getWreqSession
             r@(GetUserResult _ _ _ m_next_id) <-
                 liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal'
             yield r
@@ -99,6 +99,8 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = loop Nothing
                         else m_next_id
 
             maybe (return ()) (loop . Just) $ m_next_id'
+
+    loop Nothing
 
 
 -- | 只找 cache: 根据 app id, open_id 找 union id
@@ -194,10 +196,10 @@ instance FromJSON ListGroupResult where
 -- | 取所有分组的基本信息
 wxppListUserGroups :: (WxppApiMonad env m) => AccessToken -> m [GroupBasicInfo]
 wxppListUserGroups (AccessToken { accessTokenData = atk }) = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/get"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/get"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
                 >>= return . unListGroupResult
@@ -218,10 +220,10 @@ wxppCreateUserGroup :: (WxppApiMonad env m)
                     -> Text
                     -> m WxppUserGroupID
 wxppCreateUserGroup (AccessToken { accessTokenData = atk }) name = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/create"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/create"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     CreateGroupResult grp_id name' <-
         liftIO (WS.postWith opts sess url $ object [ "group" .= object [ "name" .= name ] ])
                 >>= asWxppWsResponseNormal'
@@ -239,10 +241,10 @@ wxppDeleteUserGroup :: (WxppApiMonad env m)
                     -> WxppUserGroupID
                     -> m ()
 wxppDeleteUserGroup (AccessToken { accessTokenData = atk }) grp_id = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/delete"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/delete"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "group" .= object [ "id" .= grp_id ] ])
             >>= asWxppWsResponseVoid
 
@@ -254,10 +256,10 @@ wxppRenameUserGroup :: (WxppApiMonad env m)
                     -> Text
                     -> m ()
 wxppRenameUserGroup (AccessToken { accessTokenData = atk }) grp_id name = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/update"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/update"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "group" .= object [ "id" .= grp_id, "name" .= name ] ])
             >>= asWxppWsResponseVoid
 
@@ -274,10 +276,10 @@ wxppGetGroupOfUser :: (WxppApiMonad env m)
                    -> WxppOpenID
                    -> m WxppUserGroupID
 wxppGetGroupOfUser (AccessToken { accessTokenData = atk }) open_id = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/getid"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/getid"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     GetGroupResult grp_id <-
         liftIO (WS.postWith opts sess url $ object [ "openid" .= open_id ])
             >>= asWxppWsResponseNormal'
@@ -291,10 +293,10 @@ wxppSetUserGroup :: (WxppApiMonad env m)
                  -> WxppOpenID
                  -> m ()
 wxppSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/members/update"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/members/update"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "to_groupid" .= grp_id, "openid" .= open_id ])
             >>= asWxppWsResponseVoid
 
@@ -306,9 +308,9 @@ wxppBatchSetUserGroup :: (WxppApiMonad env m)
                       -> [WxppOpenID]
                       -> m ()
 wxppBatchSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id_list = do
-    let url = wxppRemoteApiBaseUrl <> "/groups/members/batchupdate"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/groups/members/batchupdate"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object [ "to_groupid" .= grp_id, "openid_list" .= open_id_list ])
             >>= asWxppWsResponseVoid

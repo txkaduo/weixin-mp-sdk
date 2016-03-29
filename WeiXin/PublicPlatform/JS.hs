@@ -34,11 +34,11 @@ wxppGetJsTicket :: (WxppApiMonad env m)
                 => AccessToken
                 -> m JsTicketResult
 wxppGetJsTicket (AccessToken atk _app_id) = do
-    let url = wxppRemoteApiBaseUrl <> "/ticket/getticket"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/ticket/getticket"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ "jsapi" ]
 
-    sess <- asks getWreqSession
     liftM snd $ liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal2'
 
 

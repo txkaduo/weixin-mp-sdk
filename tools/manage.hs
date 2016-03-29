@@ -4,6 +4,7 @@ import ClassyPrelude hiding ((<>))
 import Control.Monad.Logger
 import Options.Applicative
 import Data.Aeson
+import Data.Default                         (def)
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Yaml                  as Y
@@ -202,9 +203,9 @@ optionsParse = Options
 
 start :: (MonadLogger m, MonadThrow m, MonadCatch m, MonadIO m)
       => Options
-      -> WS.Session
+      -> WxppApiEnv
       -> m ()
-start opts sess = do
+start opts api_env = do
     let app_id = optAppID opts
         m_app_secret = optAppSecret opts
         get_atk = do
@@ -214,7 +215,7 @@ start opts sess = do
                         Nothing -> do
                             throwM $ userError "need either app secret or access token"
                         Just app_secret -> do
-                            AccessTokenResp atk_p _ttl <- flip runReaderT sess $
+                            AccessTokenResp atk_p _ttl <- flip runReaderT api_env $
                                                             refreshAccessToken' app_id app_secret
                             return $ atk_p app_id
 
@@ -225,17 +226,17 @@ start opts sess = do
 
         QueryAutoReplyRules -> do
             atk <- get_atk
-            obj <- flip runReaderT sess $ wxppQueryOriginAutoReplyRules atk
+            obj <- flip runReaderT api_env $ wxppQueryOriginAutoReplyRules atk
             liftIO $ B.putStr $ Y.encode obj
 
         QueryOriginMenu -> do
             atk <- get_atk
-            result <- flip runReaderT sess $ wxppQueryMenuConfig atk
+            result <- flip runReaderT api_env $ wxppQueryMenuConfig atk
             liftIO $ B.putStr $ Y.encode result
 
         LoadMenu fp -> do
             atk <- get_atk
-            result <- flip runReaderT sess $ wxppCreateMenuWithYaml atk ("." :| []) fp
+            result <- flip runReaderT api_env $ wxppCreateMenuWithYaml atk ("." :| []) fp
             case result of
                 Left err -> do
                     $logError $ fromString $
@@ -243,17 +244,17 @@ start opts sess = do
                 Right _ -> return ()
 
         QueryCurrentMenu -> do
-            result <- get_atk >>= flip runReaderT sess . wxppQueryMenu
+            result <- get_atk >>= flip runReaderT api_env . wxppQueryMenu
             liftIO $ B.putStr $ Y.encode result
 
         GetDurable mid edit_mode -> do
             atk <- get_atk
-            result <- flip runReaderT sess $ wxppGetDurableMedia atk mid
+            result <- flip runReaderT api_env $ wxppGetDurableMedia atk mid
 
             case result of
                 WxppGetDurableNews articles -> do
                     if edit_mode
-                        then flip runReaderT sess $ editNewsDurable atk mid articles
+                        then flip runReaderT api_env $ editNewsDurable atk mid articles
                         else liftIO $ B.putStr $ Y.encode articles
 
                 WxppGetDurableVideo title desc down_url -> do
@@ -276,49 +277,49 @@ start opts sess = do
 
         CountDurable -> do
             atk <- get_atk
-            result <- flip runReaderT sess $ wxppCountDurableMedia atk
+            result <- flip runReaderT api_env $ wxppCountDurableMedia atk
             liftIO $ B.putStr $ Y.encode result
 
         ListGroup -> do
             atk <- get_atk
-            result <- flip runReaderT sess $ wxppListUserGroups atk
+            result <- flip runReaderT api_env $ wxppListUserGroups atk
             liftIO $ B.putStr $ Y.encode result
 
         CreateGroup name -> do
             atk <- get_atk
-            grp_id <- flip runReaderT sess $ wxppCreateUserGroup atk name
+            grp_id <- flip runReaderT api_env $ wxppCreateUserGroup atk name
             liftIO $ putStrLn $ "group created, id is " <> (fromString $ show $ unWxppUserGroupID grp_id)
 
         DeleteGroup grp_id -> do
             atk <- get_atk
-            flip runReaderT sess $ wxppDeleteUserGroup atk grp_id
+            flip runReaderT api_env $ wxppDeleteUserGroup atk grp_id
 
         RenameGroup grp_id name -> do
             atk <- get_atk
-            flip runReaderT sess $ wxppRenameUserGroup atk grp_id name
+            flip runReaderT api_env $ wxppRenameUserGroup atk grp_id name
 
         GroupOfUser open_id -> do
             atk <- get_atk
-            grp_id <- flip runReaderT sess $ wxppGetGroupOfUser atk open_id
+            grp_id <- flip runReaderT api_env $ wxppGetGroupOfUser atk open_id
             liftIO $ putStrLn $ "user's group id is " <> (fromString $ show $ unWxppUserGroupID grp_id)
 
         SetUserGroup grp_id open_id_list -> do
             atk <- get_atk
             case open_id_list of
                 []          -> return ()
-                [open_id]   -> flip runReaderT sess $ wxppSetUserGroup atk grp_id open_id
-                _           -> flip runReaderT sess $ wxppBatchSetUserGroup atk grp_id open_id_list
+                [open_id]   -> flip runReaderT api_env $ wxppSetUserGroup atk grp_id open_id
+                _           -> flip runReaderT api_env $ wxppBatchSetUserGroup atk grp_id open_id_list
 
         ListAllDurableMedia mtype -> do
             atk <- get_atk
-            flip runReaderT sess $ do
+            flip runReaderT api_env $ do
               wxppBatchGetDurableToSrc (wxppBatchGetDurableMedia atk mtype 20)
                 $= CL.map toJSON
                 $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
 
         GetAllDurableNews show_id_only -> do
             atk <- get_atk
-            flip runReaderT sess $ do
+            flip runReaderT api_env $ do
               wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $=  CL.map (if show_id_only
                                 then toJSON . unWxppDurableMediaID . wxppBatchGetDurableNewsItemID
@@ -332,7 +333,7 @@ start opts sess = do
                     let articles = wxppBatchGetDurableNewsItemContent item
                     in any (T.isInfixOf keyword . wxppDurableArticleTitle . wxppDurableArticleSA) articles
 
-            results <- flip runReaderT sess $ do
+            results <- flip runReaderT api_env $ do
               wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
                 $= (awaitForever $ \x -> do
                         liftIO $ putStr "." >> hFlush stdout
@@ -350,19 +351,19 @@ start opts sess = do
                         Nothing -> return ()
                         Just result -> do
                             let mid = wxppBatchGetDurableNewsItemID result
-                            flip runReaderT sess $
+                            flip runReaderT api_env $
                               editNewsDurable atk mid (wxppBatchGetDurableNewsItemContent result)
                 else do
                     mapM_ (liftIO . B.putStr . Y.encode) results
 
         GetPropagateMsgStatus msg_id -> do
             atk <- get_atk
-            PropagateMsgStatus status <- flip runReaderT sess $ wxppGetPropagateMsgStatus atk msg_id
+            PropagateMsgStatus status <- flip runReaderT api_env $ wxppGetPropagateMsgStatus atk msg_id
             putStrLn status
 
         PropagateDurableNews media_id -> do
             atk <- get_atk
-            msg_id <- flip runReaderT sess $
+            msg_id <- flip runReaderT api_env $
                         wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
             putStrLn $ fromString $ show msg_id
 
@@ -436,8 +437,9 @@ extByMime mime =
 start' :: Options -> IO ()
 start' opts = WS.withSession $ \sess -> do
     logger_set <- newStderrLoggerSet 0
+    let api_env = WxppApiEnv sess def
     runLoggingT
-        (start opts sess)
+        (start opts api_env)
         (appLogger logger_set (optVerbose opts))
 
 appLogger :: LoggerSet -> Int -> Loc -> LogSource -> LogLevel -> LogStr -> IO ()

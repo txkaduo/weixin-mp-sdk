@@ -18,7 +18,6 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Data.Char
 import Network.Mime                         (MimeType)
-import qualified Network.Wreq.Session       as WS
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
 import Yesod.Core                           (HandlerSite, PathPiece(..))
@@ -108,9 +107,9 @@ mkMaybeWxppSub ::
     -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppSubsiteOpts
-    -> WS.Session
+    -> WxppApiEnv
     -> MaybeWxppSub
-mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts sess =
+mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts api_env =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config
         let app_id      = wxppConfigAppID wac
@@ -127,7 +126,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                     (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
                     (runLoggingTWith foundation)
                     opts
-                    sess
+                    api_env
     where
         handle_msg wac data_dirs bs ime = do
             let app_id      = wxppConfigAppID wac
@@ -196,9 +195,9 @@ mkMaybeWxppSubC ::
     -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppSubsiteOpts
-    -> WS.Session
+    -> WxppApiEnv
     -> MaybeWxppSub
-mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts sess =
+mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts api_env =
     MaybeWxppSub $ runMaybeT $ do
         wac <- MaybeT $ get_wxpp_config
         let app_id      = wxppConfigAppID wac
@@ -215,7 +214,7 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wx
                     (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
                     (runLoggingTWith foundation)
                     opts
-                    sess
+                    api_env
     where
         handle_msg wac data_dirs bs ime = do
             let app_id      = wxppConfigAppID wac

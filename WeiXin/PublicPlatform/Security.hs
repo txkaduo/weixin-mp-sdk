@@ -64,12 +64,12 @@ refreshAccessToken' :: ( WxppApiMonad env m )
                     -> WxppAppSecret
                     -> m AccessTokenResp
 refreshAccessToken' app_id app_secret = do
-    let url = wxppRemoteApiBaseUrl <> "/token"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/token"
         opts = defaults & param "grant_type" .~ [ "client_credential" ]
                         & param "appid" .~ [ unWxppAppID app_id ]
                         & param "secret" .~ [ unWxppAppSecret app_secret ]
 
-    sess <- asks getWreqSession
     atk <- liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
     $(logDebugS) wxppLogSource $ "access token has been refreshed."

@@ -41,10 +41,10 @@ wxppCreateMenu :: (WxppApiMonad env m)
                -> [MenuItem]
                -> m ()
 wxppCreateMenu (AccessToken { accessTokenData = atk }) menus = do
-    let url = wxppRemoteApiBaseUrl <> "/menu/create"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/menu/create"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ toJSON $ object [ "button" .= menus ])
         >>= asWxppWsResponseVoid
 
@@ -56,10 +56,10 @@ wxppQueryMenu :: (WxppApiMonad env m)
               => AccessToken
             -> m [MenuItem]
 wxppQueryMenu (AccessToken { accessTokenData = atk }) = do
-    let url = wxppRemoteApiBaseUrl <> "/menu/get"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/menu/get"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     MenuDef items <- liftIO (WS.getWith opts sess url)
                         >>= asWxppWsResponseNormal'
     return items
@@ -78,10 +78,10 @@ wxppQueryMenuConfig :: (WxppApiMonad env m)
                     => AccessToken
                   -> m Value
 wxppQueryMenuConfig (AccessToken { accessTokenData = atk }) = do
-    let url = wxppRemoteApiBaseUrl <> "/get_current_selfmenu_info"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/get_current_selfmenu_info"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal'
 
 
@@ -90,10 +90,10 @@ wxppDeleteMenu :: (WxppApiMonad env m)
                => AccessToken
                -> m ()
 wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
-    let url = wxppRemoteApiBaseUrl <> "/menu/delete"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/menu/delete"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseVoid
 

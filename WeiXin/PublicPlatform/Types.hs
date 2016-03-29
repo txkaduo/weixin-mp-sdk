@@ -21,6 +21,8 @@ import Data.Binary                          (Binary)
 import Data.Binary.Orphans                  ()
 import Data.Byteable                        (toBytes)
 import Data.Char                            (isSpace)
+import Data.Default                         (Default(..))
+import Data.Monoid                          (Endo(..))
 import Crypto.Cipher                        (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
@@ -50,6 +52,38 @@ import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 
 import WeiXin.PublicPlatform.Utils
+
+
+data WxppUrlConfig = WxppUrlConfig
+  { wxppUrlConfSecureApiBase    :: String
+  , wxppUrlConfNonSecureApiBase :: String
+  , wxppUrlConfSnsApiBase       :: String
+  , wxppUrlConfFileApiBase      :: String
+  }
+  deriving (Show)
+
+instance Default WxppUrlConfig where
+  def = WxppUrlConfig
+    { wxppUrlConfSecureApiBase    = "https://api.weixin.qq.com/cgi-bin"
+    , wxppUrlConfNonSecureApiBase = "http://api.weixin.qq.com/cgi-bin"
+    , wxppUrlConfSnsApiBase       = "https://api.weixin.qq.com/sns"
+    , wxppUrlConfFileApiBase      = "https://file.api.weixin.qq.com/cgi-bin"
+    }
+
+-- | allow use JSON/Yaml to override any field of WxppUrlConfig
+instance FromJSON WxppUrlConfig where
+  parseJSON = withObject "WxppUrlConfig" $ \o -> do
+    fmap (($ def) . appEndo . mconcat) $ sequenceA
+      [ o .:? "secure-base"     >>= maybe mempty (return . Endo . upd_wxppUrlConfSecureBase)
+      , o .:? "non-secure-base" >>= maybe mempty (return . Endo . upd_wxppUrlConfNonSecureBase)
+      , o .:? "sns-base"        >>= maybe mempty (return . Endo . upd_wxppUrlConfSnsApiBase)
+      , o .:? "file-base"       >>= maybe mempty (return . Endo . upd_wxppUrlConfFileApiBase)
+      ]
+    where
+        upd_wxppUrlConfSecureBase x c = c { wxppUrlConfSecureApiBase = x }
+        upd_wxppUrlConfNonSecureBase x c = c { wxppUrlConfNonSecureApiBase = x }
+        upd_wxppUrlConfSnsApiBase x c = c { wxppUrlConfSnsApiBase = x }
+        upd_wxppUrlConfFileApiBase x c = c { wxppUrlConfFileApiBase = x }
 
 
 -- | 微信用户名

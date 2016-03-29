@@ -50,10 +50,10 @@ wxppQrCodeCreateInternal :: (WxppApiMonad env m)
                          -> WxppScene
                          -> m WxppMakeSceneResult
 wxppQrCodeCreateInternal js_pairs (AccessToken { accessTokenData = atk }) scene = do
-    let url = wxppRemoteApiBaseUrl ++ "/qrcode/create"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf ++ "/qrcode/create"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ toJSON $ object $
                 ( "action_info" .= object [ "scene" .= scene ] ) : js_pairs)
         >>= asWxppWsResponseNormal'

@@ -19,9 +19,9 @@ wxppQueryOriginAutoReplyRules :: (WxppApiMonad env m)
                               => AccessToken
                               -> m Object
 wxppQueryOriginAutoReplyRules (AccessToken { accessTokenData = atk }) = do
-    let url = wxppRemoteApiBaseUrl <> "/get_current_autoreply_info"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/get_current_autoreply_info"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
             >>= asWxppWsResponseNormal'

@@ -110,10 +110,10 @@ wxppUploadDurableMediaInternalLBS :: (WxppApiMonad env m)
                                   -> Part                 -- ^ the @Part@ of uploaded file
                                   -> m DurableUploadResult
 wxppUploadDurableMediaInternalLBS (AccessToken { accessTokenData = atk }) mtype m_title_intro fpart = do
-    let url = wxppRemoteApiBaseUrl <> "/material/add_material"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/add_material"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $
                 [ fpart & partName .~ "media"
                 , partText "type" (wxppMediaTypeString mtype)
@@ -190,10 +190,10 @@ wxppUploadDurableNews :: (WxppApiMonad env m)
                       -> WxppDurableNews
                       -> m DurableUploadResult
 wxppUploadDurableNews (AccessToken { accessTokenData = atk }) news = do
-    let url = wxppRemoteApiBaseUrl <> "/material/add_news"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/add_news"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ encode $ toJSON news)
             >>= asWxppWsResponseNormal'
 
@@ -223,10 +223,10 @@ wxppGetDurableMedia :: (WxppApiMonad env m, MonadCatch m)
                     -> WxppDurableMediaID
                     -> m WxppGetDurableResult
 wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID mid) = do
-    let url = wxppRemoteApiBaseUrl <> "/material/get_material"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/get_material"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     r <- liftIO $ WS.postWith opts sess url $ object [ "media_id" .= mid ]
     asWxppWsResponseNormal' r
         `catch`
@@ -314,10 +314,10 @@ wxppCountDurableMedia :: (WxppApiMonad env m, MonadCatch m)
                       => AccessToken
                       -> m WxppDurableCount
 wxppCountDurableMedia (AccessToken { accessTokenData = atk }) = do
-    let url = wxppRemoteApiBaseUrl <> "/material/get_materialcount"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/get_materialcount"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.getWith opts sess url)
             >>= asWxppWsResponseNormal'
 
@@ -370,10 +370,10 @@ wxppBatchGetDurableMedia :: (WxppApiMonad env m, MonadCatch m)
                          -> Int      -- ^ offset
                          -> m (WxppBatchGetDurableResult WxppBatchGetDurableMediaItem)
 wxppBatchGetDurableMedia (AccessToken { accessTokenData = atk }) mtype limit' offset' = do
-    let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object $
                 [ "type"    .= (wxppMediaTypeString mtype :: Text)
                 , "count"   .= show limit
@@ -416,10 +416,10 @@ wxppBatchGetDurableNews :: (WxppApiMonad env m, MonadCatch m)
                         -> Int      -- ^ offset
                         -> m (WxppBatchGetDurableResult WxppBatchGetDurableNewsItem)
 wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' = do
-    let url = wxppRemoteApiBaseUrl <> "/material/batchget_material"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/batchget_material"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object $
                 [ "type"    .= ("news" :: Text)
                 , "count"   .= limit
@@ -464,10 +464,10 @@ wxppReplaceArticleOfDurableNews :: (WxppApiMonad env m, MonadCatch m )
                                 -> WxppDurableArticle
                                 -> m ()
 wxppReplaceArticleOfDurableNews (AccessToken { accessTokenData = atk }) material_id idx article = do
-    let url = wxppRemoteApiBaseUrl <> "/material/update_news"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/material/update_news"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess url $ object $
                 [ "media_id"    .= unWxppDurableMediaID material_id
                 , "index"       .= idx

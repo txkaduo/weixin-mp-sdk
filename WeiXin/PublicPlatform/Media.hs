@@ -28,14 +28,16 @@ import WeiXin.PublicPlatform.Utils
 
 -- | 生成直接下载临时素材的URL，可用于从第三方平台直接下载
 -- CAUTION: URL 包含 access token 敏感信息，不要交给不可信的第三方
-wxppDownloadMediaUrl :: Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
-                    -> AccessToken
-                    -> WxppBriefMediaID
-                    -> UrlText
-wxppDownloadMediaUrl if_ssl (AccessToken { accessTokenData = atk }) mid =
+wxppDownloadMediaUrl :: WxppUrlConfig
+                     -> Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
+                     -> AccessToken
+                     -> WxppBriefMediaID
+                     -> UrlText
+wxppDownloadMediaUrl url_conf if_ssl (AccessToken { accessTokenData = atk }) mid =
     UrlText $ fromString $ url0 <> "?" <> qs
     where
-        url0 = (if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl) <> "/media/get"
+        url0 = (if if_ssl then wxppUrlConfSecureApiBase else wxppUrlConfNonSecureApiBase) url_conf
+                <> "/media/get"
         vars =  [ ("access_token", T.unpack atk)
                 , ("media_id", T.unpack (unWxppBriefMediaID mid))
                 ]
@@ -49,11 +51,12 @@ wxppDownloadMedia :: ( WxppApiMonad env m, MonadCatch m )
                   -> WxppBriefMediaID
                   -> m (Response LB.ByteString)
 wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
-    let url = (if if_ssl then wxppRemoteApiBaseUrl else wxppRemoteApiBaseUrlNoSsl) <> "/media/get"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = (if if_ssl then wxppUrlConfSecureApiBase else wxppUrlConfNonSecureApiBase) url_conf
+                <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppBriefMediaID mid ]
 
-    sess <- asks getWreqSession
     rb <- liftIO $ WS.getWith opts sess url
 
     -- 需要某种方法区别正常和异常的返回
@@ -78,11 +81,11 @@ wxppUploadMediaInternal :: ( WxppApiMonad env m )
                         -> Part
                         -> m UploadResult
 wxppUploadMediaInternal (AccessToken { accessTokenData = atk }) mtype fpart = do
-    let url = wxppRemoteApiBaseUrl <> "/media/upload"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/media/upload"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "type" .~ [ wxppMediaTypeString mtype :: Text]
 
-    sess <- asks getWreqSession
     liftIO (WS.postWith opts sess  url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
 
@@ -190,10 +193,10 @@ wxppUploadImageGetUrlInternal :: ( WxppApiMonad env m )
                               -> Part
                               -> m UrlText
 wxppUploadImageGetUrlInternal (AccessToken { accessTokenData = atk }) fpart = do
-    let url = wxppRemoteApiBaseUrl <> "/media/uploadimg"
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSecureApiBase url_conf <> "/media/uploadimg"
         opts = defaults & param "access_token" .~ [ atk ]
 
-    sess <- asks getWreqSession
     UploadImgResult media_url <- liftIO (WS.postWith opts sess url $ fpart & partName .~ "media")
         >>= asWxppWsResponseNormal'
     return media_url

@@ -10,6 +10,7 @@ import Data.List.NonEmpty                   as LNE hiding (insert)
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Class
+import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
 
 
@@ -20,6 +21,7 @@ type LoadMsgEnv r = ( HasWxppOutMsgDir r
                     , HasAccessToken r
                     , HasWxppAppID r
                     , HasWreqSession r
+                    , HasWxppUrlConfig r
                     )
 
 
@@ -34,9 +36,9 @@ loadTalkMessage env sub_path = runExceptT $ do
                 (talkerMessageDir env)
                 (mkDelayedYamlLoader $ setExtIfNotExist "yml" $ sub_path)
 
-    let sess = getWreqSession env
+    let api_env = uncurry WxppApiEnv $ (getWreqSession &&& getWxppUrlConfig) env
 
-    flip runReaderT sess $ do
+    flip runReaderT api_env $ do
       fromWxppOutMsgL
         (getWxppOutMsgDir env)
         (getSomeWxppCacheBackend env)
@@ -61,9 +63,9 @@ loadTalkMessage_IOE env sub_path = runExceptT $ do
                 (talkerMessageDir env)
                 (mkDelayedYamlLoader $ setExtIfNotExist "yml" $ sub_path)
 
-    let sess = getWreqSession env
+    let api_env = uncurry WxppApiEnv $ (getWreqSession &&& getWxppUrlConfig) env
 
-    flip runReaderT sess $ do
+    flip runReaderT api_env $ do
       fromWxppOutMsgL
         (getWxppOutMsgDir env)
         (getSomeWxppCacheBackend env)

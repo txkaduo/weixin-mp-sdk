@@ -275,6 +275,17 @@ instance HasWreqSession WS.Session where
 instance HasWreqSession a => HasWreqSession (a, b) where
     getWreqSession = getWreqSession .fst
 
+
+class HasWxppUrlConfig a where
+    getWxppUrlConfig :: a -> WxppUrlConfig
+
+instance HasWxppUrlConfig WxppUrlConfig where
+    getWxppUrlConfig = id
+
+instance HasWxppUrlConfig a => HasWxppUrlConfig (a, b) where
+    getWxppUrlConfig = getWxppUrlConfig . fst
+
+
 class HasSomeWxppCacheBackend a where
     getSomeWxppCacheBackend :: a -> SomeWxppCacheClient
 

@@ -11,6 +11,7 @@ import Control.Monad.Catch                  ( Handler(..), catches )
 --import Control.Monad.Trans.Control          (MonadBaseControl)
 
 import Network.HTTP.Client                  (HttpException(..))
+import qualified Network.Wreq.Session       as WS
 import Data.Aeson                           ( withObject, (.:)
                                             , FromJSON(..)
                                             , ToJSON(..)
@@ -22,7 +23,20 @@ import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Class
 
 
-type WxppApiMonad r m = (MonadIO m, MonadLogger m, MonadThrow m, MonadReader r m, HasWreqSession r)
+data WxppApiEnv = WxppApiEnv WS.Session WxppUrlConfig
+
+instance HasWreqSession WxppApiEnv where
+  getWreqSession (WxppApiEnv sess _) = sess
+
+instance HasWxppUrlConfig WxppApiEnv where
+  getWxppUrlConfig (WxppApiEnv _ c) = c
+
+
+type WxppApiMonad r m = ( MonadIO m, MonadLogger m, MonadThrow m
+                        , MonadReader r m
+                        , HasWreqSession r
+                        , HasWxppUrlConfig r
+                        )
 
 
 -- | 平台服务器返回错误的通用格式
@@ -157,13 +171,3 @@ asWxppWsResponseNormal2' :: (MonadThrow m, FromJSON a) =>
 asWxppWsResponseNormal2' =
     asWxppWsResponseNormal2
         >=> either throwM return . unWxppWsResp2
-
-
-wxppRemoteApiBaseUrl :: IsString a => a
-wxppRemoteApiBaseUrl = "https://api.weixin.qq.com/cgi-bin"
-
-wxppRemoteApiBaseUrlNoSsl :: IsString a => a
-wxppRemoteApiBaseUrlNoSsl = "http://api.weixin.qq.com/cgi-bin"
-
-wxppRemoteFileApiBaseUrl :: IsString a => a
-wxppRemoteFileApiBaseUrl = "https://file.api.weixin.qq.com/cgi-bin"
