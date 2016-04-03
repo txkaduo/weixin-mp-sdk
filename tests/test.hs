@@ -148,7 +148,8 @@ testWxPaySign :: IO ()
 testWxPaySign = do
   let app_key = WxPayAppKey "192006250b4c09247ec02edce69f6a2d"
       nonce = Nonce "ibuaiVcKdpRxkhJA"
-      params =  [ ("appid", "wxd930ea5d5a258f4f")
+      params = mapFromList
+                [ ("appid", "wxd930ea5d5a258f4f")
                 , ("mch_id", "10000100")
                 , ("device_info", "1000")
                 , ("body", "test")
@@ -163,9 +164,20 @@ testWxPaySign = do
         else
             putStrLn $ "pay signature OK: " <> tshow sign
 
+  let doc = wxPayOutgoingXmlDoc app_key params nonce
+  let doc_t = wxPayRenderOutgoingXmlDoc app_key params nonce
   putStrLn $ "WX Pay call document:"
-  putStrLn $ LT.toStrict $ wxPayRenderOutgoingXmlDoc app_key params nonce
+  putStrLn $ LT.toStrict doc_t
 
+  case wxPayParseIncmingXmlDoc app_key doc of
+    Left err -> do
+      putStrLn $ "Failed to parse pay doc: " <> err
+      exitFailure
+
+    Right params' -> do
+      when ( params /= params' ) $ do
+        putStrLn $ "Failed to parse pay doc: params is not expected"
+        exitFailure
 
 main :: IO ()
 main = do
