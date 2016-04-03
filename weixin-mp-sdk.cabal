@@ -238,6 +238,7 @@ test-suite test
                      , aeson
                      , yesod-helpers
                      , base16-bytestring
+                     , time
 
   if flag(parsec3)
       build-depends:   parsec3

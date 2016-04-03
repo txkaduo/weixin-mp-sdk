@@ -15,6 +15,7 @@ import qualified Data.Text.Lazy             as LT
 import qualified Data.Text                  as T
 import qualified Data.Aeson                 as A
 import Data.Aeson                           (ToJSON(..))
+import Data.Time
 
 import Text.Parsec
 import Yesod.Helpers.Parsec
@@ -179,9 +180,28 @@ testWxPaySign = do
         putStrLn $ "Failed to parse pay doc: params is not expected"
         exitFailure
 
+
+testWxPayParseTime :: IO ()
+testWxPayParseTime = do
+  let test_it s lt = do
+        case wxPayParseTimeStr s of
+          Nothing -> do
+            putStrLn $ "Failed to parse time string: " <> fromString s
+            exitFailure
+
+          Just lt0 -> do
+            when ( lt0 /= lt ) $ do
+              putStrLn $ "Time string parse result is wrong: " <> tshow lt0
+              exitFailure
+
+  let lt = LocalTime (fromGregorian 2015 5 19) (TimeOfDay 15 26 59)
+  test_it "2015-05-19 15：26：59" lt
+  test_it "2015-05-19 15:26:59" lt
+
 main :: IO ()
 main = do
     testWxPaySign
+    testWxPayParseTime
     testJsApiTicket
     testMsgToXml
     -- testLikeJava
