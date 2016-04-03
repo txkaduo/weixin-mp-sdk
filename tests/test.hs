@@ -146,14 +146,15 @@ testJsApiTicket = do
 
 testWxPaySign :: IO ()
 testWxPaySign = do
-  let sign = wxPaySign
-              (WxPayAppKey "192006250b4c09247ec02edce69f6a2d")
-              [ ("appid", "wxd930ea5d5a258f4f")
-              , ("mch_id", "10000100")
-              , ("device_info", "1000")
-              , ("body", "test")
-              ]
-              (Nonce "ibuaiVcKdpRxkhJA")
+  let app_key = WxPayAppKey "192006250b4c09247ec02edce69f6a2d"
+      nonce = Nonce "ibuaiVcKdpRxkhJA"
+      params =  [ ("appid", "wxd930ea5d5a258f4f")
+                , ("mch_id", "10000100")
+                , ("device_info", "1000")
+                , ("body", "test")
+                ]
+
+  let sign = wxPaySign app_key params nonce
 
   if sign /= WxPaySignature "9A0A8659F005D6984697E2CA0A9CF3B7"
         then do
@@ -161,6 +162,9 @@ testWxPaySign = do
             exitFailure
         else
             putStrLn $ "pay signature OK: " <> tshow sign
+
+  putStrLn $ "WX Pay call document:"
+  putStrLn $ LT.toStrict $ wxPayRenderCallXmlDoc app_key params nonce
 
 
 main :: IO ()

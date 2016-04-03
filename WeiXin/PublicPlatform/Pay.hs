@@ -8,8 +8,13 @@ import qualified Crypto.Hash.MD5        as MD5
 import           Data.Binary            (Binary)
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8  as C8
+import           Data.Default           (def)
+import qualified Data.Text.Lazy         as LT
 import           Text.Blaze.Html        (ToMarkup (..))
 import           Text.Shakespeare.I18N  (ToMessage (..))
+import           Text.XML               ( Document(..), Node(..), Element(..)
+                                        , Name(..), Prologue(..), renderText
+                                        )
 
 import           Text.Parsec.TX.Utils   (SimpleStringRep (..), deriveJsonS,
                                          derivePersistFieldS,
@@ -90,3 +95,29 @@ wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
                     map (uncurry mks) $
                       filter (not . null . snd) $
                         (sortBy (comparing fst) params_all) <> [ ("key", ak) ]
+
+
+-- | 微信支付调用XML
+wxPayCallXmlDoc :: WxPayAppKey
+                -> [(Text, Text)]
+                -> Nonce
+                -> Document
+wxPayCallXmlDoc app_key params nonce@(Nonce raw_nonce) =
+  Document (Prologue [] Nothing []) root []
+  where
+    root        = Element "xml" mempty nodes
+    nodes       = map (uncurry mk_node) params <> [ node_nonce, node_sign ]
+    node_nonce  = mk_node "nonce_str" raw_nonce
+    sign        = wxPaySign app_key params nonce
+    node_sign   = mk_node "sign" (unWxPaySignature sign)
+    mk_node k v = NodeElement $
+                    Element (Name k Nothing Nothing) mempty
+                      [ NodeContent v ]
+
+
+wxPayRenderCallXmlDoc :: WxPayAppKey
+                      -> [(Text, Text)]
+                      -> Nonce
+                      -> LT.Text
+wxPayRenderCallXmlDoc app_key params nonce =
+  renderText def $ wxPayCallXmlDoc app_key params nonce
