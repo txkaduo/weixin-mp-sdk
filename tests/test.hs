@@ -164,7 +164,7 @@ testWxPaySign = do
             putStrLn $ "pay signature OK: " <> tshow sign
 
   putStrLn $ "WX Pay call document:"
-  putStrLn $ LT.toStrict $ wxPayRenderCallXmlDoc app_key params nonce
+  putStrLn $ LT.toStrict $ wxPayRenderOutgoingXmlDoc app_key params nonce
 
 
 main :: IO ()

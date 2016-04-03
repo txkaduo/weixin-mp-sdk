@@ -82,7 +82,7 @@ newtype WxPayErrorCode = WxPayErrorCode { unWxPayErrorCode :: Text }
 -- | 微信签名算法
 wxPaySign :: WxPayAppKey
           -> [(Text, Text)]
-          -- ^ not including: nonce_str
+          -- ^ not including: nonce_str, key
           -> Nonce
           -> WxPaySignature
 wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
@@ -98,11 +98,12 @@ wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
 
 
 -- | 微信支付调用XML
-wxPayCallXmlDoc :: WxPayAppKey
+wxPayOutgoingXmlDoc :: WxPayAppKey
                 -> [(Text, Text)]
+                -- ^ not including: nonce_str, key
                 -> Nonce
                 -> Document
-wxPayCallXmlDoc app_key params nonce@(Nonce raw_nonce) =
+wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
   Document (Prologue [] Nothing []) root []
   where
     root        = Element "xml" mempty nodes
@@ -115,9 +116,10 @@ wxPayCallXmlDoc app_key params nonce@(Nonce raw_nonce) =
                       [ NodeContent v ]
 
 
-wxPayRenderCallXmlDoc :: WxPayAppKey
-                      -> [(Text, Text)]
-                      -> Nonce
-                      -> LT.Text
-wxPayRenderCallXmlDoc app_key params nonce =
-  renderText def $ wxPayCallXmlDoc app_key params nonce
+wxPayRenderOutgoingXmlDoc :: WxPayAppKey
+                          -> [(Text, Text)]
+                          -- ^ not including: nonce_str, key
+                          -> Nonce
+                          -> LT.Text
+wxPayRenderOutgoingXmlDoc app_key params nonce =
+  renderText def $ wxPayOutgoingXmlDoc app_key params nonce
