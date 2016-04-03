@@ -59,6 +59,7 @@ data WxppUrlConfig = WxppUrlConfig
   , wxppUrlConfNonSecureApiBase :: String
   , wxppUrlConfSnsApiBase       :: String
   , wxppUrlConfFileApiBase      :: String
+  , wxppUrlConfPayApiBase       :: String
   }
   deriving (Show)
 
@@ -68,6 +69,7 @@ instance Default WxppUrlConfig where
     , wxppUrlConfNonSecureApiBase = "http://api.weixin.qq.com/cgi-bin"
     , wxppUrlConfSnsApiBase       = "https://api.weixin.qq.com/sns"
     , wxppUrlConfFileApiBase      = "https://file.api.weixin.qq.com/cgi-bin"
+    , wxppUrlConfPayApiBase       = "https://api.mch.weixin.qq.com/mmpaymkttransfers"
     }
 
 -- | allow use JSON/Yaml to override any field of WxppUrlConfig
@@ -78,6 +80,7 @@ instance FromJSON WxppUrlConfig where
       , o .:? "non-secure-base" >>= return . maybe mempty (Endo . upd_wxppUrlConfNonSecureBase) . chk_empty
       , o .:? "sns-base"        >>= return . maybe mempty (Endo . upd_wxppUrlConfSnsApiBase) . chk_empty
       , o .:? "file-base"       >>= return . maybe mempty (Endo . upd_wxppUrlConfFileApiBase) . chk_empty
+      , o .:? "pay-base"        >>= return . maybe mempty (Endo . upd_wxppUrlConfPayApiBase) . chk_empty
       ]
     where
         null_to_empty s                  = if null s then Nothing else Just s
@@ -86,6 +89,7 @@ instance FromJSON WxppUrlConfig where
         upd_wxppUrlConfNonSecureBase x c = c { wxppUrlConfNonSecureApiBase = x }
         upd_wxppUrlConfSnsApiBase x c    = c { wxppUrlConfSnsApiBase = x }
         upd_wxppUrlConfFileApiBase x c   = c { wxppUrlConfFileApiBase = x }
+        upd_wxppUrlConfPayApiBase x c    = c { wxppUrlConfPayApiBase = x }
 
 
 -- | 微信用户名
