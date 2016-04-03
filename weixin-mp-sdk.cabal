@@ -69,6 +69,7 @@ library
                        WeiXin.PublicPlatform.Center
                        WeiXin.PublicPlatform.OAuth
                        WeiXin.PublicPlatform.JS
+                       WeiXin.PublicPlatform.Pay
                        WeiXin.PublicPlatform
 
   -- other-modules:       

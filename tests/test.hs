@@ -144,8 +144,28 @@ testJsApiTicket = do
         else
             putStrLn $ "js signature OK: " <> fromString sign_str
 
+testWxPaySign :: IO ()
+testWxPaySign = do
+  let sign = wxPaySign
+              (WxPayAppKey "192006250b4c09247ec02edce69f6a2d")
+              [ ("appid", "wxd930ea5d5a258f4f")
+              , ("mch_id", "10000100")
+              , ("device_info", "1000")
+              , ("body", "test")
+              ]
+              (Nonce "ibuaiVcKdpRxkhJA")
+
+  if sign /= WxPaySignature "9A0A8659F005D6984697E2CA0A9CF3B7"
+        then do
+            putStrLn $ "wrong pay signature: " <> tshow sign
+            exitFailure
+        else
+            putStrLn $ "pay signature OK: " <> tshow sign
+
+
 main :: IO ()
 main = do
+    testWxPaySign
     testJsApiTicket
     testMsgToXml
     -- testLikeJava

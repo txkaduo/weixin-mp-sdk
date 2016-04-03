@@ -31,6 +31,7 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Center
     , module WeiXin.PublicPlatform.OAuth
     , module WeiXin.PublicPlatform.JS
+    , module WeiXin.PublicPlatform.Pay
 #if defined(CLOUD_HASKELL)
     , module WeiXin.PublicPlatform.CloudHaskell
 #endif
@@ -67,6 +68,7 @@ import WeiXin.PublicPlatform.Conversation.Message
 import WeiXin.PublicPlatform.Center
 import WeiXin.PublicPlatform.OAuth
 import WeiXin.PublicPlatform.JS
+import WeiXin.PublicPlatform.Pay
 
 #if defined(CLOUD_HASKELL)
 import WeiXin.PublicPlatform.CloudHaskell
