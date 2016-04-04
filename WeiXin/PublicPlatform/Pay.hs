@@ -16,8 +16,10 @@ import           Data.Default           (def)
 import           Data.Monoid            (Endo (..))
 import qualified Data.Text              as T
 import qualified Data.Text.Lazy         as LT
-import           Data.Time              (hoursToTimeZone, localTimeToUTC, LocalTime)
+import           Data.Time              (LocalTime, hoursToTimeZone,
+                                         localTimeToUTC)
 import           Data.Time.Format       (parseTimeM)
+import           Database.Persist.Sql   (PersistField (..), PersistFieldSql (..))
 import           Network.Wreq           (responseBody)
 import qualified Network.Wreq.Session   as WS
 import           Text.Blaze.Html        (ToMarkup (..))
@@ -42,6 +44,7 @@ import WeiXin.PublicPlatform.Security
 -- | 微信企业支付所产生的订单号
 newtype WxMchTransWxNo = WxMchTransWxNo { unWxMchTransWxNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
 
@@ -59,6 +62,7 @@ newtype WxMchTransDetailNo = WxMchTransDetailNo { unWxMchTransDetailNo :: Text }
 
 newtype WxPayAppKey = WxPayAppKey { unWxPayAppKey :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
 
@@ -72,6 +76,7 @@ newtype WxPaySignature = WxPaySignature { unWxPaySignature :: Text }
 -- | 微信支付商户号
 newtype WxPayMchID = WxPayMchID { unWxPayMchID :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
 
@@ -80,6 +85,7 @@ newtype WxPayMchID = WxPayMchID { unWxPayMchID :: Text }
 -- 至于 Info 这个词是因为文档也是用这个词的
 newtype WxPayDeviceInfo = WxPayDeviceInfo { unWxPayDeviceInfo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
 
@@ -108,6 +114,7 @@ instance SimpleStringRep WxPayResultCode where
 -- | 微信支付错误代码
 newtype WxPayErrorCode = WxPayErrorCode { unWxPayErrorCode :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
 
@@ -230,6 +237,7 @@ data WxPayCallResultError = WxPayCallResultError
 -- | 支付时的商户订单号
 newtype WxMchTransMchNo = WxMchTransMchNo { unWxMchTransMchNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
 
