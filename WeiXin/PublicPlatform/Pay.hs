@@ -212,6 +212,29 @@ newtype WxPayMoneyAmount = WxPayMoneyAmount { unWxPayMoneyAmount :: Int }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary, NFData)
 
 
+-- | 从单位是元的数字转成 WxPayMoneyAmount
+wxPayMoneyAmountFromYuanEither :: (Show a, Num a, RealFrac a, IsString s)
+                               => a
+                               -> Either s WxPayMoneyAmount
+wxPayMoneyAmountFromYuanEither y =
+  if fromIntegral fen_int /= fen
+     then Left $ fromString $ "Cannot convert to convert to WxPayMoneyAmount loselessly: " <> show y
+     else Right $ WxPayMoneyAmount fen_int
+  where
+    fen = y * fromIntegral (100 :: Int)
+    fen_int = round fen
+
+wxPayMoneyAmountFromYuan :: (Show a, Num a, RealFrac a)
+                         => a
+                         -> WxPayMoneyAmount
+wxPayMoneyAmountFromYuan y =
+  either error id $ wxPayMoneyAmountFromYuanEither y
+
+
+wxPayMoneyAmountToYuan :: Integral a => WxPayMoneyAmount -> a
+wxPayMoneyAmountToYuan = fromIntegral . unWxPayMoneyAmount
+
+
 -- | 调用时的"通信标识" 为 FAIL 时的数据
 -- 出现这种错误时, 认为是程序错误, 直接抛出异常
 data WxPayCallReturnError = WxPayCallReturnError
