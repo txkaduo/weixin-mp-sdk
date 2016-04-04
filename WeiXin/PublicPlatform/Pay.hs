@@ -40,13 +40,13 @@ import WeiXin.PublicPlatform.Security
 
 
 -- | 微信企业支付所产生的订单号
-newtype WxMchTransTradeNo = WxMchTransTradeNo { unWxMchTransTradeNo :: Text }
+newtype WxMchTransWxNo = WxMchTransWxNo { unWxMchTransWxNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , NFData
            , ToMessage, ToMarkup)
 
 
--- | 企业支付的查询接口返回了个 detail_id 不知道是否就是前面的 WxMchTransTradeNo
+-- | 企业支付的查询接口返回了个 detail_id 不知道是否就是前面的 WxMchTransWxNo
 -- 如果不是一样的东西，就应该用新的类型对应
 -- 但估计是一样的东西
 {-
@@ -228,7 +228,7 @@ data WxPayCallResultError = WxPayCallResultError
 
 
 -- | 支付时的商户订单号
-newtype WxPayMchTradeNo = WxPayMchTradeNo { unWxPayMchTradeNo :: Text }
+newtype WxMchTransMchNo = WxMchTransMchNo { unWxMchTransMchNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , NFData
            , ToMessage, ToMarkup)
@@ -236,8 +236,8 @@ newtype WxPayMchTradeNo = WxPayMchTradeNo { unWxPayMchTradeNo :: Text }
 
 -- | 微信企业支付成功调用返回的结果
 data WxPayTransOk = WxPayTransOk
-  { wxPayTransOkPartnerTradeNo :: WxPayMchTradeNo
-  , wxPayTransOkWxTradeNo      :: WxMchTransTradeNo
+  { wxPayTransOkPartnerTradeNo :: WxMchTransMchNo
+  , wxPayTransOkWxTradeNo      :: WxMchTransWxNo
   , wxPayTransOkPaidTime       :: UTCTime
     -- ^ 这个时间的意义不明，不一定是真正成功的时间
     -- 因为还有一个查询接口，有可能返回＂处理中＂的状态
@@ -253,7 +253,7 @@ wxPayMchTransfer :: (WxppApiMonad env m)
                  => WxPayAppKey
                  -> WxPayMchID
                  -> Maybe WxPayDeviceInfo
-                 -> WxPayMchTradeNo
+                 -> WxMchTransMchNo
                  -> WxppAppID
                  -> WxppOpenID
                  -> WxCheckName
@@ -272,7 +272,7 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
                     , Just $ Endo $ insertMap "mch_appid" (unWxppAppID app_id)
                     , flip fmap m_dev_info $ \dev -> Endo $ insertMap "device_info" (unWxPayDeviceInfo dev)
 
-                    , Just $ Endo $ insertMap "partner_trade_no" (unWxPayMchTradeNo mch_trade_no)
+                    , Just $ Endo $ insertMap "partner_trade_no" (unWxMchTransMchNo mch_trade_no)
 
                     , Just $ Endo $ insertMap "openid" (unWxppOpenID open_id)
 
@@ -304,13 +304,13 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
                           return
                           (lookup n resp_params)
 
-    mch_out_trade_no <- fmap WxPayMchTradeNo $ lookup_param "partner_trade_no"
+    mch_out_trade_no <- fmap WxMchTransMchNo $ lookup_param "partner_trade_no"
     unless (mch_out_trade_no == mch_trade_no) $ do
       throwM $ WxPayDiagError $
                 "Unexpected response data: partner_trade_no is not the same as input: "
                 <> tshow mch_out_trade_no
 
-    wx_trade_no <- fmap WxMchTransTradeNo $ lookup_param "payment_no"
+    wx_trade_no <- fmap WxMchTransWxNo $ lookup_param "payment_no"
     pay_time_t <- lookup_param "payment_time"
     local_time <- maybe
                     (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> pay_time_t)
@@ -332,16 +332,17 @@ data WxPayStatus = WxPayStatusSccess
                 deriving (Show)
 
 
-data WxPayTransInfo = WxPayTransInfo
-  { wxPayTransInfoMchTradeNo :: WxPayMchTradeNo
-  , wxPayTransInfoTradeNo    :: WxMchTransTradeNo
+-- | 微信企业支付的查询接口成功时的有效返回内容
+data WxPayMchTransInfo = WxPayMchTransInfo
+  { wxPayMchTransInfoMchNo      :: WxMchTransMchNo
+  , wxPayMchTransInfoWxNo       :: WxMchTransWxNo
   -- ^ detail_id
-  , wxPayTransInfoStatus     :: WxPayStatus
-  , wxPayTransInfoOpenID     :: WxppOpenID
-  , wxPayTransInfoRecvName   :: Maybe Text
-  , wxPayTransInfoAmount     :: WxPayMoneyAmount
-  , wxPayTransInfoTransTime  :: UTCTime
-  , wxPayTransInfoTransDesc  :: Text
+  , wxPayMchTransInfoStatus     :: WxPayStatus
+  , wxPayMchTransInfoOpenID     :: WxppOpenID
+  , wxPayMchTransInfoRecvName   :: Maybe Text
+  , wxPayMchTransInfoAmount     :: WxPayMoneyAmount
+  , wxPayMchTransInfoTransTime  :: UTCTime
+  , wxPayMchTransInfoTransDesc  :: Text
   }
   deriving (Show)
 
@@ -353,9 +354,9 @@ data WxPayTransInfo = WxPayTransInfo
 wxPayMchTransferInfo :: (WxppApiMonad env m)
                      => WxPayAppKey
                      -> WxPayMchID
-                     -> WxPayMchTradeNo
+                     -> WxMchTransMchNo
                      -> WxppAppID
-                     -> m (Either WxPayCallResultError WxPayTransInfo)
+                     -> m (Either WxPayCallResultError WxPayMchTransInfo)
 wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfPayApiBase url_conf <> "/gettransferinfo"
@@ -364,7 +365,7 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
                 (appEndo $ mconcat $ catMaybes
                     [ Just $ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
                     , Just $ Endo $ insertMap "appid" (unWxppAppID app_id)
-                    , Just $ Endo $ insertMap "partner_trade_no" (unWxPayMchTradeNo mch_trade_no)
+                    , Just $ Endo $ insertMap "partner_trade_no" (unWxMchTransMchNo mch_trade_no)
                     ])
 
   runExceptT $ do
@@ -374,14 +375,14 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
                           return
                           (lookup n resp_params)
 
-    mch_out_trade_no <- fmap WxPayMchTradeNo $ lookup_param "partner_trade_no"
+    mch_out_trade_no <- fmap WxMchTransMchNo $ lookup_param "partner_trade_no"
     unless (mch_out_trade_no == mch_trade_no) $ do
       throwM $ WxPayDiagError $
                 "Unexpected response data: partner_trade_no is not the same as input: "
                 <> tshow mch_out_trade_no
 
     -- 关于 detai_id 的意义不明，暂时认为这就是之前的 payment_no
-    wx_trade_no <- fmap WxMchTransTradeNo $ lookup_param "detail_id"
+    wx_trade_no <- fmap WxMchTransWxNo $ lookup_param "detail_id"
 
     st <- lookup_param "status"
     status <- case st of
@@ -410,7 +411,7 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
 
     desc <- lookup_param "desc"
 
-    return $ WxPayTransInfo
+    return $ WxPayMchTransInfo
                 mch_out_trade_no
                 wx_trade_no
                 status
