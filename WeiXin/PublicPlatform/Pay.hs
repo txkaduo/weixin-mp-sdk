@@ -46,6 +46,17 @@ newtype WxMchTransTradeNo = WxMchTransTradeNo { unWxMchTransTradeNo :: Text }
            , ToMessage, ToMarkup)
 
 
+-- | 企业支付的查询接口返回了个 detail_id 不知道是否就是前面的 WxMchTransTradeNo
+-- 如果不是一样的东西，就应该用新的类型对应
+-- 但估计是一样的东西
+{-
+newtype WxMchTransDetailNo = WxMchTransDetailNo { unWxMchTransDetailNo :: Text }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , NFData
+           , ToMessage, ToMarkup)
+--}
+
+
 newtype WxPayAppKey = WxPayAppKey { unWxPayAppKey :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , NFData
@@ -190,7 +201,8 @@ data WxCheckName =  WxNoCheckName
                   deriving (Eq, Show)
 
 -- | 金额指定用分作单位
-data WxPayMoneyAmount = WxPayMoneyAmount { unWxPayMoneyAmount :: Int }
+newtype WxPayMoneyAmount = WxPayMoneyAmount { unWxPayMoneyAmount :: Int }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary, NFData)
 
 
 -- | 调用时的"通信标识" 为 FAIL 时的数据
@@ -292,8 +304,12 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
                           return
                           (lookup n resp_params)
 
-
     mch_out_trade_no <- fmap WxPayMchTradeNo $ lookup_param "partner_trade_no"
+    unless (mch_out_trade_no == mch_trade_no) $ do
+      throwM $ WxPayDiagError $
+                "Unexpected response data: partner_trade_no is not the same as input: "
+                <> tshow mch_out_trade_no
+
     wx_trade_no <- fmap WxMchTransTradeNo $ lookup_param "payment_no"
     pay_time_t <- lookup_param "payment_time"
     local_time <- maybe
@@ -304,6 +320,105 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
     let pay_time = localTimeToUTC tz local_time
 
     return $ WxPayTransOk mch_out_trade_no wx_trade_no pay_time
+
+  where
+    tz = hoursToTimeZone 8
+
+
+-- | 支付转账状态
+data WxPayStatus = WxPayStatusSccess
+                | WxPayStatusFailed Text  -- ^ 失败及其原因
+                | WxPayStatusProcessing
+                deriving (Show)
+
+
+data WxPayTransInfo = WxPayTransInfo
+  { wxPayTransInfoMchTradeNo :: WxPayMchTradeNo
+  , wxPayTransInfoTradeNo    :: WxMchTransTradeNo
+  -- ^ detail_id
+  , wxPayTransInfoStatus     :: WxPayStatus
+  , wxPayTransInfoOpenID     :: WxppOpenID
+  , wxPayTransInfoRecvName   :: Maybe Text
+  , wxPayTransInfoAmount     :: WxPayMoneyAmount
+  , wxPayTransInfoTransTime  :: UTCTime
+  , wxPayTransInfoTransDesc  :: Text
+  }
+  deriving (Show)
+
+
+-- | 微信企业支付结果查询
+-- CAUTION: 目前未实现双向数字证书认证
+--          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
+--          我们这里只发起普通的http/https请求
+wxPayMchTransferInfo :: (WxppApiMonad env m)
+                     => WxPayAppKey
+                     -> WxPayMchID
+                     -> WxPayMchTradeNo
+                     -> WxppAppID
+                     -> m (Either WxPayCallResultError WxPayTransInfo)
+wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
+  url_conf <- asks getWxppUrlConfig
+  let url = wxppUrlConfPayApiBase url_conf <> "/gettransferinfo"
+  let params :: WxPayParams
+      params = mempty &
+                (appEndo $ mconcat $ catMaybes
+                    [ Just $ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Just $ Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , Just $ Endo $ insertMap "partner_trade_no" (unWxPayMchTradeNo mch_trade_no)
+                    ])
+
+  runExceptT $ do
+    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+    let lookup_param n = maybe
+                          (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
+                          return
+                          (lookup n resp_params)
+
+    mch_out_trade_no <- fmap WxPayMchTradeNo $ lookup_param "partner_trade_no"
+    unless (mch_out_trade_no == mch_trade_no) $ do
+      throwM $ WxPayDiagError $
+                "Unexpected response data: partner_trade_no is not the same as input: "
+                <> tshow mch_out_trade_no
+
+    -- 关于 detai_id 的意义不明，暂时认为这就是之前的 payment_no
+    wx_trade_no <- fmap WxMchTransTradeNo $ lookup_param "detail_id"
+
+    st <- lookup_param "status"
+    status <- case st of
+                "SUCCESS"     -> return WxPayStatusSccess
+                "PROCESSING"  -> return WxPayStatusProcessing
+                "FAILED"      -> WxPayStatusFailed <$> lookup_param "reason"
+                _             -> throwM $ WxPayDiagError $ "status is recognized: " <> st
+
+    open_id <- WxppOpenID <$> lookup_param "openid"
+    let m_recv_name = lookup "transfer_name" resp_params
+
+    amount_t <- lookup_param "payment_amount"
+    amount <- fmap WxPayMoneyAmount $
+                maybe
+                  (throwM $ WxPayDiagError $ "payment_amount is not an integer: " <> amount_t)
+                  return
+                  (readMay amount_t)
+
+    trans_time_t <- lookup_param "transfer_time"
+    local_time <- maybe
+                    (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> trans_time_t)
+                    return
+                    (wxPayParseTimeStr $ T.unpack trans_time_t)
+
+    let trans_time = localTimeToUTC tz local_time
+
+    desc <- lookup_param "desc"
+
+    return $ WxPayTransInfo
+                mch_out_trade_no
+                wx_trade_no
+                status
+                open_id
+                m_recv_name
+                amount
+                trans_time
+                desc
 
   where
     tz = hoursToTimeZone 8
