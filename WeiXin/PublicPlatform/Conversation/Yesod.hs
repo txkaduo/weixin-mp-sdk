@@ -207,12 +207,11 @@ data WxppTalkerStateEntry r0 m = forall s r.
 -- 所有输入都应经过这个处理器处理一次
 -- 如果在对话中，则有相应的处理
 -- 不在对话中，则相当于空操作
-data WxppTalkHandlerGeneral r m =
-            WxppTalkHandlerGeneral
-                    WxppDbRunner
-                            -- ^ to run db functions
-                    r       -- ^ read only data/environment
-                    [WxppTalkerStateEntry r m]
+data WxppTalkHandlerGeneral r m = WxppTalkHandlerGeneral
+  { wxppTalkDbRunner      :: WxppDbRunner -- ^ to run db functions
+  , wxppTalkDbReadOnlyEnv :: r            -- ^ read only data/environment
+  , wxppTalkDStateEntry   :: [WxppTalkerStateEntry r m]
+  }
 
 instance JsonConfigable (WxppTalkHandlerGeneral r m) where
     type JsonConfigableUnconfigData (WxppTalkHandlerGeneral r m) =
@@ -269,9 +268,10 @@ instance (MonadBaseControl IO m, WxppApiMonad env m) =>
 -- 因为它本身不带条件，所以常常配合条件判断器使用
 -- 但也条件判断也可以在 wxTalkInitiate 里实现
 data WxppTalkInitiator r s = WxppTalkInitiator
-                            WxppDbRunner
-                            r                           -- ^ 与对话种类无关的环境值
-                            (WxppTalkStateExtraEnv s)     -- ^ 对话特定相关的环境值
+  { wxppTalkInitDbRunner   :: WxppDbRunner
+  , wxppTalkInitEnv        :: r                           -- ^ 与对话种类无关的环境值
+  , wxppTalkInitStateEnv   :: (WxppTalkStateExtraEnv s)     -- ^ 对话特定相关的环境值
+  }
 
 instance HasStateType s => JsonConfigable (WxppTalkInitiator r s) where
     type JsonConfigableUnconfigData (WxppTalkInitiator r s) =
@@ -337,9 +337,10 @@ wxppTalkerFreshStateEntryToStateEntry (WxppTalkerFreshStateEntry p x) = WxppTalk
 -- * WxppTalkInitiator 本身不带判断条件，
 --   WxppTalkEvtKeyInitiator 则根据 event key 内容选择合适的对话类型
 data WxppTalkEvtKeyInitiator r m = WxppTalkEvtKeyInitiator
-                                    WxppDbRunner
-                                    r                           -- ^ 与对话种类无关的环境值
-                                    [WxppTalkerFreshStateEntry r m]
+  { wxppTalkEvtKeyInitDbRunner   :: WxppDbRunner
+  , wxppTalkEvtKeyInitEventEnv   :: r                           -- ^ 与对话种类无关的环境值
+  , wxppTalkEvtKeyInitStateEntry :: [WxppTalkerFreshStateEntry r m]
+  }
 
 instance JsonConfigable (WxppTalkEvtKeyInitiator r m) where
     type JsonConfigableUnconfigData (WxppTalkEvtKeyInitiator r m) =
@@ -402,11 +403,12 @@ instance
 
 -- | 消息处理器：调用后会无条件结束当前会话
 data WxppTalkTerminator = WxppTalkTerminator
-                            WxppAppID
-                            (NonEmpty FilePath) -- ^ out-msg dir path
-                            WxppDbRunner
-                            Bool                -- ^ if primary
-                            WxppOutMsgLoader    -- ^ 打算回复用户的消息
+  { wxppTalkTermAppId    :: WxppAppID
+  , wxppTalkTermDir      :: (NonEmpty FilePath) -- ^ out-msg dir path
+  , wxppTalkTermDbRunner :: WxppDbRunner
+  , wxppTalkTermPrimary  :: Bool                -- ^ if primary
+  , wxppTalkTermOurMsg   :: WxppOutMsgLoader    -- ^ 打算回复用户的消息
+  }
 
 instance JsonConfigable WxppTalkTerminator where
     type JsonConfigableUnconfigData WxppTalkTerminator = (WxppAppID, NonEmpty FilePath, WxppDbRunner)

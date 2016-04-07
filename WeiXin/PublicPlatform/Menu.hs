@@ -209,7 +209,7 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
                                 else do
                                     load
                         else do
-                            -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+                            --- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
                             return ()
 
         load = do
@@ -327,7 +327,7 @@ wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event
                     let evt_fp = normalise $ FN.eventPath evt
                     if evt_fp `elem` fp'
                         then do
-                            -- $logDebugS wxppLogSource $ fromString (show evt)
+                            --- $logDebugS wxppLogSource $ fromString (show evt)
                             -- 用 vim 在线修改文件时，总是收到一个 Removed 的事件
                             -- 干脆不理会 event 的类型，直接检查文件是否存在
                             exists <- liftIO $ threadDelay (500 * 1000) >> doesFileExist evt_fp
@@ -340,7 +340,7 @@ wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event
                                 else do
                                     load get_atk' fp'
                         else do
-                            -- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
+                            --- $logDebugS wxppLogSource $ fromString $ "skipping notification for path: " <> evt_fp
                             return ()
 
         load :: IO (Maybe AccessToken) -> [FilePath] -> m ()
