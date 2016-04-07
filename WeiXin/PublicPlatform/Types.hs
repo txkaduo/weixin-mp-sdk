@@ -37,6 +37,7 @@ import Data.Proxy                           (Proxy(..))
 import Text.Shakespeare.I18N                (ToMessage(..))
 import Text.Blaze.Html                      (ToMarkup(..))
 import Language.Haskell.TH.Lift             (deriveLift)
+import Web.HttpApiData                      (ToHttpApiData, FromHttpApiData)
 
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
 import Yesod.Helpers.Utils                  (emptyTextToNothing)
@@ -187,6 +188,7 @@ instance FromJSON WxppMediaID where
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , ToHttpApiData, FromHttpApiData
                              , NFData
                              , ToMessage, ToMarkup)
 
@@ -218,6 +220,7 @@ instance PathPiece WxppOpenID where
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+                             , ToHttpApiData, FromHttpApiData
                              , NFData
                              , ToMessage, ToMarkup)
 
@@ -408,6 +411,7 @@ newtype Nonce = Nonce { unNounce :: Text }
 
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , ToHttpApiData, FromHttpApiData
                              , NFData
                              , ToMessage, ToMarkup)
 

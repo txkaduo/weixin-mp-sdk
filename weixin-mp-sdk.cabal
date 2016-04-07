@@ -157,6 +157,7 @@ library
                      , deepseq
                      , cereal
                      , binary
+                     , http-api-data
                      , binary-orphans
                      , hash-tx-utils
                      , parsec-tx-utils
