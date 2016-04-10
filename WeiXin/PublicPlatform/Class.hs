@@ -8,9 +8,9 @@ import Text.Shakespeare.I18N                (Lang)
 import Data.Time                            (NominalDiffTime, diffUTCTime)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
-import qualified Network.Wreq.Session       as WS
 
 import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.WS
 import Data.List.NonEmpty                   as LNE
 
 
@@ -164,6 +164,23 @@ instance WxppCacheAppRegistry SomeWxppCacheAppRegistry where
     wxppCacheRegistryEnable (SomeWxppCacheAppRegistry x)  = wxppCacheRegistryEnable x
 
 
+-- | 有些接口调用需要用到 Secret，但又不想各个程序都配置一份secret
+-- 可以由一个代理服务程序，代替其它程序去调用这种需要 Secret 的接口
+class WxppApiBroker a where
+  wxppApiBrokerOAuthGetAccessToken :: a
+                                   -> WxppAppID
+                                   -> OAuthCode
+                                   -> IO (Maybe (WxppWsResp OAuthAccessTokenResult))
+                                    -- ^ Nothing: if no such App
+
+
+data SomeWxppApiBroker = forall a. WxppApiBroker a => SomeWxppApiBroker a
+
+instance WxppApiBroker SomeWxppApiBroker where
+  wxppApiBrokerOAuthGetAccessToken (SomeWxppApiBroker x) = wxppApiBrokerOAuthGetAccessToken x
+
+
+
 class HasAccessToken a where
     wxppGetAccessToken :: a -> IO (Maybe (AccessToken, UTCTime))
 
@@ -265,25 +282,6 @@ instance HasWxppOpenID WxppOpenID where
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst
 
-
-class HasWreqSession a where
-    getWreqSession :: a -> WS.Session
-
-instance HasWreqSession WS.Session where
-    getWreqSession = id
-
-instance HasWreqSession a => HasWreqSession (a, b) where
-    getWreqSession = getWreqSession .fst
-
-
-class HasWxppUrlConfig a where
-    getWxppUrlConfig :: a -> WxppUrlConfig
-
-instance HasWxppUrlConfig WxppUrlConfig where
-    getWxppUrlConfig = id
-
-instance HasWxppUrlConfig a => HasWxppUrlConfig (a, b) where
-    getWxppUrlConfig = getWxppUrlConfig . fst
 
 
 class HasSomeWxppCacheBackend a where

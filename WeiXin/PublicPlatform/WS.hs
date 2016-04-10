@@ -20,7 +20,27 @@ import Data.Aeson                           ( withObject, (.:)
                                             )
 
 import WeiXin.PublicPlatform.Error
-import WeiXin.PublicPlatform.Class
+import WeiXin.PublicPlatform.Types
+
+
+class HasWreqSession a where
+    getWreqSession :: a -> WS.Session
+
+instance HasWreqSession WS.Session where
+    getWreqSession = id
+
+instance HasWreqSession a => HasWreqSession (a, b) where
+    getWreqSession = getWreqSession .fst
+
+
+class HasWxppUrlConfig a where
+    getWxppUrlConfig :: a -> WxppUrlConfig
+
+instance HasWxppUrlConfig WxppUrlConfig where
+    getWxppUrlConfig = id
+
+instance HasWxppUrlConfig a => HasWxppUrlConfig (a, b) where
+    getWxppUrlConfig = getWxppUrlConfig . fst
 
 
 data WxppApiEnv = WxppApiEnv WS.Session WxppUrlConfig
