@@ -132,12 +132,12 @@ class WxppCacheAppRegistry a where
     wxppCacheRegistryAdd :: a
                             -> WxppAppID
                             -> WxppAppSecret
-                            -> Token
+                            -> Maybe Token
                             -> IO ()
 
     wxppCacheRegistryGet :: a
                             -> WxppAppID
-                            -> IO (Maybe (WxppAppSecret, Token))
+                            -> IO (Maybe (WxppAppSecret, Maybe Token))
 
     wxppCacheRegistryDel :: a
                             -> WxppAppID
