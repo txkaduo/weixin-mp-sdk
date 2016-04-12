@@ -349,6 +349,9 @@ instance WxppCacheTemp FakeWxppCache where
     wxppCacheLookupUploadedMediaIDByHash _ _ _ = return Nothing
 
 
+instance WxppApiBroker FakeWxppCache where
+    wxppApiBrokerOAuthGetAccessToken _ _ _ = return Nothing
+
 instance WxppCacheAppRegistry FakeWxppCache where
     wxppCacheRegistryAdd _ _ _ _ = return ()
 
