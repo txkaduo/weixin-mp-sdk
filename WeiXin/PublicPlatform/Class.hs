@@ -239,6 +239,13 @@ instance WxppCacheTokenReader SomeWxppCacheClient where
     wxppCacheGetJsTicket (SomeWxppCacheClient x)         = wxppCacheGetJsTicket x
 
 
+class HasWxppCacheClient a where
+  getWxppCacheClient :: a -> SomeWxppCacheClient
+
+instance HasWxppCacheClient SomeWxppCacheClient where
+  getWxppCacheClient = id
+
+
 data SomeWxppCacheFull = forall a.
                                     ( WxppCacheTokenUpdater a
                                     , WxppCacheTokenReader a
