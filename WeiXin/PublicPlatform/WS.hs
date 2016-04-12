@@ -52,6 +52,13 @@ instance HasWxppUrlConfig WxppApiEnv where
   getWxppUrlConfig (WxppApiEnv _ c) = c
 
 
+class HasWxppApiEnv a where
+  getWxppApiEnv :: a -> WxppApiEnv
+
+instance HasWxppApiEnv WxppApiEnv where
+  getWxppApiEnv = id
+
+
 type WxppApiMonad r m = ( MonadIO m, MonadLogger m, MonadThrow m
                         , MonadReader r m
                         , HasWreqSession r
