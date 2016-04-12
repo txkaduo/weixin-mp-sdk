@@ -383,6 +383,46 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
                 $(widgetFileReload def "oauth/user_denied")
 
 
+-- | 比较通用的处理从 oauth 重定向回来时的Handler的逻辑
+-- 如果用户通过授权，则返回 open id 及 oauth token 相关信息
+wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, RenderMessage (HandlerSite m) FormMessage, MonadLogger m, MonadCatch m)
+                              => SomeWxppApiBroker
+                              -> WxppAppID
+                              -> m (Maybe (WxppOpenID, OAuthTokenInfo))
+wxppHandlerOAuthReturnGetInfo broker app_id = do
+  m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt textField "code"
+  case m_code of
+      Just code | not (deniedOAuthCode code) -> do
+          -- 用户同意授权
+          err_or_muid <- runExceptT $ do
+            err_or_atk_res <- liftIO $ wxppApiBrokerOAuthGetAccessToken broker app_id code
+            atk_res <- case err_or_atk_res of
+                        Nothing -> do
+                          $logErrorS wxppLogSource $ "Broker call failed: no such app"
+                          throwError $ asString "no such app"
+
+                        Just (WxppWsResp (Left err)) -> do
+                          $logErrorS wxppLogSource $
+                              "wxppApiBrokerOAuthGetAccessToken failed: " <> tshow err
+                          throwError "wxppApiBrokerOAuthGetAccessToken failed"
+
+                        Just (WxppWsResp (Right x)) -> return x
+
+            let open_id = oauthAtkOpenID atk_res
+            now <- liftIO getCurrentTime
+            let atk_info = fromOAuthAccessTokenResult now atk_res
+
+            lift $ setSession (sessionKeyWxppUser app_id) (unWxppOpenID open_id)
+
+            return (open_id, atk_info)
+
+          return $ either (const Nothing) Just $ err_or_muid
+
+      _ -> do
+        $logError "should never reach here"
+        return Nothing
+
+
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数
 -- 否则重定向至微信授权页面，待用户授权成功后再重定向回到当前页面
 wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
