@@ -17,6 +17,7 @@ import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
 import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
+import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
@@ -307,10 +308,21 @@ sessionMarkWxppUser app_id open_id m_union_id = do
         Just union_id | not (null union_id) -> setSession sessionKeyWxppUnionId union_id
         _                                   -> deleteSession sessionKeyWxppUnionId
 
+
+-- | 从 session 里找已登录的 WxppOpenID
 sessionGetWxppUser :: MonadHandler m
                     => WxppAppID
                     -> m (Maybe WxppOpenID)
 sessionGetWxppUser app_id = fmap (fmap WxppOpenID) $ lookupSession (sessionKeyWxppUser app_id)
+
+
+-- | 从 session 里找已登录的 WxppOpenID 及 WxppUnionID
+sessionGetWxppUserU :: MonadHandler m => WxppAppID -> m (Maybe (WxppAppOpenID, Maybe WxppUnionID))
+sessionGetWxppUserU app_id = runMaybeT $ do
+  open_id <- MaybeT $ sessionGetWxppUser app_id
+  m_union_id <- lift $ fmap WxppUnionID <$> lookupSession sessionKeyWxppUnionId
+  return (WxppAppOpenID app_id open_id, m_union_id)
+
 
 getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
