@@ -180,6 +180,12 @@ instance WxppApiBroker SomeWxppApiBroker where
   wxppApiBrokerOAuthGetAccessToken (SomeWxppApiBroker x) = wxppApiBrokerOAuthGetAccessToken x
 
 
+class HasWxppApiBroker a where
+  getWxppApiBroker :: a -> SomeWxppApiBroker
+
+instance HasWxppApiBroker SomeWxppApiBroker where
+  getWxppApiBroker = id
+
 
 class HasAccessToken a where
     wxppGetAccessToken :: a -> IO (Maybe (AccessToken, UTCTime))
