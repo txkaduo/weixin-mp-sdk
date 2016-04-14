@@ -17,6 +17,7 @@ import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
 import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
+import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Control.Concurrent.Async             (async)
 import Control.Concurrent                   (threadDelay, forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
@@ -307,10 +308,21 @@ sessionMarkWxppUser app_id open_id m_union_id = do
         Just union_id | not (null union_id) -> setSession sessionKeyWxppUnionId union_id
         _                                   -> deleteSession sessionKeyWxppUnionId
 
+
+-- | 从 session 里找已登录的 WxppOpenID
 sessionGetWxppUser :: MonadHandler m
                     => WxppAppID
                     -> m (Maybe WxppOpenID)
 sessionGetWxppUser app_id = fmap (fmap WxppOpenID) $ lookupSession (sessionKeyWxppUser app_id)
+
+
+-- | 从 session 里找已登录的 WxppOpenID 及 WxppUnionID
+sessionGetWxppUserU :: MonadHandler m => WxppAppID -> m (Maybe (WxppAppOpenID, Maybe WxppUnionID))
+sessionGetWxppUserU app_id = runMaybeT $ do
+  open_id <- MaybeT $ sessionGetWxppUser app_id
+  m_union_id <- lift $ fmap WxppUnionID <$> lookupSession sessionKeyWxppUnionId
+  return (WxppAppOpenID app_id open_id, m_union_id)
+
 
 getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
@@ -374,13 +386,53 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
                     _ -> return_url
 
-            -- $logDebugS wxppLogSource $ "redirecting to: " <> T.pack rdr_url
+            --- $logDebugS wxppLogSource $ "redirecting to: " <> T.pack rdr_url
             redirect rdr_url
 
         _ -> do
             -- 授权失败
             defaultLayoutSub $ do
                 $(widgetFileReload def "oauth/user_denied")
+
+
+-- | 比较通用的处理从 oauth 重定向回来时的Handler的逻辑
+-- 如果用户通过授权，则返回 open id 及 oauth token 相关信息
+wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, RenderMessage (HandlerSite m) FormMessage, MonadLogger m, MonadCatch m)
+                              => SomeWxppApiBroker
+                              -> WxppAppID
+                              -> m (Maybe (WxppOpenID, OAuthTokenInfo))
+wxppHandlerOAuthReturnGetInfo broker app_id = do
+  m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt textField "code"
+  case m_code of
+      Just code | not (deniedOAuthCode code) -> do
+          -- 用户同意授权
+          err_or_muid <- runExceptT $ do
+            err_or_atk_res <- liftIO $ wxppApiBrokerOAuthGetAccessToken broker app_id code
+            atk_res <- case err_or_atk_res of
+                        Nothing -> do
+                          $logErrorS wxppLogSource $ "Broker call failed: no such app"
+                          throwError $ asString "no such app"
+
+                        Just (WxppWsResp (Left err)) -> do
+                          $logErrorS wxppLogSource $
+                              "wxppApiBrokerOAuthGetAccessToken failed: " <> tshow err
+                          throwError "wxppApiBrokerOAuthGetAccessToken failed"
+
+                        Just (WxppWsResp (Right x)) -> return x
+
+            let open_id = oauthAtkOpenID atk_res
+            now <- liftIO getCurrentTime
+            let atk_info = fromOAuthAccessTokenResult now atk_res
+
+            lift $ setSession (sessionKeyWxppUser app_id) (unWxppOpenID open_id)
+
+            return (open_id, atk_info)
+
+          return $ either (const Nothing) Just $ err_or_muid
+
+      _ -> do
+        $logError "should never reach here"
+        return Nothing
 
 
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数

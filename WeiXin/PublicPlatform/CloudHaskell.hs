@@ -20,10 +20,9 @@ import           WeiXin.PublicPlatform.Class
 
 -- | 代表一种能找到接收 w 信息的 Process/SendPort 信息
 data CloudBackendInfo w = CloudBackendInfo
-                            (IO LocalNode)
-                              -- ^ create new LocalNode
-                            (IO [SendPort w])
-                              -- ^ 与这些 Process 通讯来处理真正的业务逻辑
+  { cloudBackendCreateLocalNode :: IO LocalNode    -- ^ create new LocalNode
+  , cloudBackendSendPortProcess :: IO [SendPort w] -- ^ 与这些 Process 通讯来处理真正的业务逻辑
+  }
 
 -- | A middleware to send event notifications of some types to the cloud (async)
 data TeeEventToCloud = TeeEventToCloud
@@ -97,13 +96,13 @@ instance JsonConfigable (DelegateInMsgToCloud m) where
     -- 然后从 json 数据中反解出相应的值
     isNameOfInMsgHandler _ = (== "deletgate-to-cloud")
 
+    -- | timeout number is a float in seconds
     parseWithExtraData _ (x1, x2) o = DelegateInMsgToCloud x1 x2
                                   <$> (fmap (round . (* 1000000)) $
                                           o .:? "timeout" .!= (3 :: Float)
-                                          -- ^ 选择 3 秒超时是因为微信5秒超时
+                                          -- 选择 3 秒超时是因为微信5秒超时
                                           -- 加上网络通讯等其它一些开销
                                       )
-                                      -- ^ timeout number is a float in seconds
 
 type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandlerResult
 

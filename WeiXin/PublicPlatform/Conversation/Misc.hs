@@ -74,9 +74,9 @@ generalConfirmDontUnderstandMsg = $(loadTalkMessageTH "default-msgs" ("common" <
 -- 其对应的会话逻辑则是等待用户确认某种操作。
 -- 如果用户同意，则执行其内的状态的 wxTalkDone 函数
 data ConfirmState a = ConfirmState
-                        a               -- ^ read-only state
-                        (Maybe Bool)    -- ^ confirmed or not
-                        deriving (Eq)
+  { confirmStateReadOnlyState :: a           -- ^ read-only state
+  , confirmStateConfirmed     :: Maybe Bool  -- ^ confirmed or not
+  } deriving (Eq)
 
 instance FromJSON a => FromJSON (ConfirmState a) where
     parseJSON = fmap (uncurry ConfirmState) . parseJSON
