@@ -11,7 +11,6 @@ import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
-import Control.Concurrent                   (threadDelay)
 import Control.DeepSeq                      (($!!))
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Maybe
