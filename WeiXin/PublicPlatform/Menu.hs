@@ -17,7 +17,6 @@ import qualified Control.Concurrent.Async   as Async
 import qualified Data.Map.Strict            as Map
 import Control.Monad.Trans.Control
 import System.Directory                     (doesFileExist, doesDirectoryExist, canonicalizePath)
-import Control.Concurrent                   (threadDelay)
 import Data.List.NonEmpty                   (NonEmpty(..))
 import qualified Data.List.NonEmpty         as LNE
 

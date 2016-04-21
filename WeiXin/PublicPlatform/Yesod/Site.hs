@@ -19,7 +19,7 @@ import qualified Data.Set                   as Set
 import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Control.Concurrent.Async             (async)
-import Control.Concurrent                   (threadDelay, forkIO)
+import Control.Concurrent                   (forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
 import Yesod.Default.Util                   ( widgetFileReload )

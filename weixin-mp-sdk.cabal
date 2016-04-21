@@ -91,7 +91,7 @@ library
 
   build-depends:       base >=4.7
                      , template-haskell
-                     , classy-prelude
+                     , classy-prelude >= 0.12.7
                      , classy-prelude-yesod
                      , yesod
                      , persistent >= 2.0 && < 2.3
