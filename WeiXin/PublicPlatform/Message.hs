@@ -1,6 +1,7 @@
 module WeiXin.PublicPlatform.Message where
 
 import ClassyPrelude hiding (Element)
+import Control.Arrow (left)
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Base16     as B16
@@ -16,7 +17,6 @@ import Numeric                              (readDec, readFloat)
 import Text.Parsec
 
 import Yesod.Helpers.Parsec                 (SimpleStringRep(..), strictParseSimpleEncoded)
-import Yesod.Helpers.Utils                  (mapLeft)
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Utils
@@ -288,7 +288,7 @@ wxppEventFromDocument doc = do
 
         "MASSSENDJOBFINISH" -> do
                     status <- get_ele_s "Status"
-                                >>= mapLeft (\x -> "failed to parse Status: " ++ show x)
+                                >>= left (\x -> "failed to parse Status: " ++ show x)
                                     . strictParseSimpleEncoded
                     total <- get_ele_s "TotalCount"
                                 >>= maybe (Left $ "failed to parse TotalCount") Right
