@@ -60,6 +60,7 @@ library
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
                        WeiXin.PublicPlatform.Utils
+                       WeiXin.PublicPlatform.XmlUtils
                        WeiXin.PublicPlatform.Misc
                        WeiXin.PublicPlatform.Conversation
                        WeiXin.PublicPlatform.Conversation.Misc

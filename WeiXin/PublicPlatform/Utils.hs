@@ -30,7 +30,8 @@ import Data.Aeson
 import Data.Yaml                            (ParseException, prettyPrintParseException)
 import qualified Data.Yaml                  as Yaml
 import Control.Monad.Catch                  ( Handler(..) )
-import Data.List.NonEmpty                   as LNE hiding (length, (!!))
+import Data.List.NonEmpty                   as LNE hiding (length, (!!), filter)
+import Numeric                              (readDec, readFloat)
 
 import Crypto.Hash.TX.Utils                 (MD5Hash(..), md5HashBS)
 
@@ -311,3 +312,16 @@ loadWreqResponseContentAndMime :: (MonadIO m)
 loadWreqResponseContentAndMime h = liftIO $ do
     lbs <- LB.hGetContents h
     either (const $ throwM $ userError "cannot decode file as FileContentAndMime") return $ S.decodeLazy lbs
+
+
+simpleParseDec :: (Eq a, Num a) => String -> Maybe a
+simpleParseDec = fmap fst . listToMaybe . filter (null . snd) . readDec
+
+simpleParseDecT :: (Eq a, Num a) => Text -> Maybe a
+simpleParseDecT = simpleParseDec . T.unpack
+
+simpleParseFloat :: (Eq a, RealFrac a) => String -> Maybe a
+simpleParseFloat = fmap fst . listToMaybe . filter ((== "") . snd) . readFloat
+
+simpleParseFloatT :: (Eq a, RealFrac a) => Text -> Maybe a
+simpleParseFloatT = simpleParseFloat . T.unpack
