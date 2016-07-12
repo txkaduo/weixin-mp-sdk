@@ -12,7 +12,7 @@ import           Control.Lens          hiding ((.=))
 import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
-import           Data.Proxy            (Proxy(..))
+import           Data.Proxy            (Proxy (..))
 import           Data.Time             (NominalDiffTime)
 import           Database.Persist.Sql  (PersistField (..), PersistFieldSql (..))
 import           Network.Wreq          hiding (Proxy)
@@ -20,6 +20,8 @@ import qualified Network.Wreq.Session  as WS
 import           Text.Blaze.Html       (ToMarkup (..))
 import           Text.Shakespeare.I18N (ToMessage (..))
 import           Text.XML.Cursor
+
+import           Yesod.Helpers.Utils   (queryTextSetParam, urlUpdateQueryText)
 
 import           WeiXin.PublicPlatform.Types
 import           WeiXin.PublicPlatform.Utils
@@ -643,6 +645,26 @@ wxppTpSetAuthOption atk target_app_id opt_val = do
 
   where
     WxppTpAccessToken atk_raw app_id = atk
+
+
+-- | 引导用户进入授权页的URL
+wxppTpAuthorizePageUrl :: WxppAppID
+                       -> ComponentPreAuthCode
+                       -> String
+                       -> String
+wxppTpAuthorizePageUrl app_id pre_auth_code return_url = do
+  case m_url of
+    Nothing -> error "wxppTpAuthorizePageUrl: failed to construct url"
+    Just x  -> x
+  where
+    base_url  = "https://mp.weixin.qq.com/cgi-bin/componentloginpage"
+    m_url     = urlUpdateQueryText
+                  (queryTextSetParam
+                    [ ("component_appid", Just (unWxppAppID app_id))
+                    , ("pre_auth_code", Just (unComponentPreAuthCode pre_auth_code))
+                    , ("redirect_uri", Just (pack return_url))
+                    ])
+                  base_url
 
 
 --------------------------------------------------------------------------------
