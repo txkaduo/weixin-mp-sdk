@@ -95,6 +95,10 @@ instance HasWxppToken WxppSub where
 -- 结果就是个 Maybe。
 newtype MaybeWxppSub = MaybeWxppSub { unMaybeWxppSub :: IO (Maybe WxppSub) }
 
+instance RenderMessage MaybeWxppSub FormMessage where
+  renderMessage _ _ = defaultFormMessage
+
+
 mkYesodSubData "MaybeWxppSub" [parseRoutes|
 /msg                        MessageR            GET POST
 /p/oauth/callback           OAuthCallbackR      GET
