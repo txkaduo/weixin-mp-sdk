@@ -74,9 +74,12 @@ withWxppSubHandler f = do
         >>= maybe notFound return
         >>= f
 
-checkSignature :: (Yesod master, HasWxppToken a, RenderMessage site FormMessage) =>
-  a -> Text -> HandlerT site (HandlerT master IO) ()
-checkSignature foundation msg = do
+checkSignature :: (Yesod master, HasWxppToken a, RenderMessage site FormMessage)
+               => a
+               -> Text  -- ^ GET param name of signature
+               -> Text  -- ^ signed message text
+               -> HandlerT site (HandlerT master IO) ()
+checkSignature foundation sign_param msg = do
 
     let token = getWxppToken foundation
 
@@ -90,7 +93,7 @@ checkSignature foundation msg = do
     (tt, nn, sign) <- runInputGet $
                         (,,) <$> (TimeStampS <$> ireq textField "timestamp")
                              <*> (Nonce <$> ireq textField "nonce")
-                             <*> ireq textField "signature"
+                             <*> ireq textField sign_param
 
     case check_sign (tt, nn, sign) of
       Left err  -> invalidArgs $ return err
@@ -110,12 +113,12 @@ withWxppSubLogging foundation h = do
 getMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getMessageR = withWxppSubHandler $ \foundation -> do
     withWxppSubLogging foundation $ do
-        checkSignature foundation ""
+        checkSignature foundation "signature" ""
         runInputGet $ ireq textField "echostr"
 
 postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
-    checkSignature foundation ""
+    checkSignature foundation "signature" ""
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
             Nothing -> return False
