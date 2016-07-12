@@ -97,13 +97,15 @@ checkSignature foundation msg = do
       Right _   -> return ()
 
 
-withWxppSubLogging ::
-    WxppSub
-    -> HandlerT MaybeWxppSub (HandlerT master m) a
-    -> HandlerT MaybeWxppSub (HandlerT master m) a
+-- | 用于修改 HandlerT 里日志的实现
+withWxppSubLogging :: LoggingTRunner r
+                   => r
+                   -> HandlerT site (HandlerT master m) a
+                   -> HandlerT site (HandlerT master m) a
 withWxppSubLogging foundation h = do
-    wxppSubRunLoggingT foundation $ LoggingT $ \log_func -> do
+    runLoggingTWith foundation $ LoggingT $ \log_func -> do
         withLogFuncInHandlerT log_func h
+
 
 getMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getMessageR = withWxppSubHandler $ \foundation -> do
