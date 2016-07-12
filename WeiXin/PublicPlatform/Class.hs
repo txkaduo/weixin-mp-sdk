@@ -320,6 +320,14 @@ instance HasWxppOutMsgDir FilePath where
     getWxppOutMsgDir x = x :| []
 
 
+class HasWxppToken a where
+  getWxppToken :: a -> Token
+
+instance HasWxppToken Token where getWxppToken = id
+
+instance HasWxppToken WxppAppConfig where
+  getWxppToken = wxppConfigAppToken
+
 
 -- | As a placeholder for testing
 data FakeWxppCache = FakeWxppCache

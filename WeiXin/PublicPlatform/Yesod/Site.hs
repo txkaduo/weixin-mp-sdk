@@ -77,11 +77,11 @@ withWxppSubHandler f = do
         >>= maybe notFound return
         >>= f
 
-checkSignature' :: Yesod master =>
-    WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) ()
+checkSignature' :: (Yesod master, HasWxppToken a) =>
+    a -> HandlerT site (HandlerT master IO) ()
 checkSignature' foundation = do
 
-    let token = wxppConfigAppToken $ wxppSubAppConfig $ foundation
+    let token = getWxppToken foundation
 
         check_sign (tt, nn, sign) =
             if B16.encode sign0 == encodeUtf8 ( T.toLower sign )
