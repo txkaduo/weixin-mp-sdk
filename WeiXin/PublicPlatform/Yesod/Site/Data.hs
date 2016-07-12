@@ -11,6 +11,8 @@ import Control.Monad.Logger
 import Data.Aeson
 import Data.Default
 
+import Yesod.Helpers.Logger (LoggingTRunner(..))
+
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.InMsgHandler
@@ -88,6 +90,9 @@ instance Show WxppSub where
 
 instance HasWxppToken WxppSub where
   getWxppToken = getWxppToken . wxppSubAppConfig
+
+instance LoggingTRunner WxppSub where
+  runLoggingTWith = wxppSubRunLoggingT
 
 
 -- | 为了支持多 app ，AppID 实际上是运行时才知道的
