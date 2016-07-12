@@ -26,10 +26,7 @@ import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
 import System.Random                        (randomIO)
 
-import Yesod.Helpers.Handler                ( httpErrorWhenParamError
-                                            , reqGetParamE'
-                                            , paramErrorFromEither
-                                            , httpErrorRetryWithValidParams
+import Yesod.Helpers.Handler                ( httpErrorRetryWithValidParams
                                             , reqPathPieceParamPostGet
                                             , getCurrentUrl
                                             )
@@ -77,9 +74,9 @@ withWxppSubHandler f = do
         >>= maybe notFound return
         >>= f
 
-checkSignature' :: (Yesod master, HasWxppToken a) =>
-    a -> HandlerT site (HandlerT master IO) ()
-checkSignature' foundation = do
+checkSignature :: (Yesod master, HasWxppToken a, RenderMessage site FormMessage) =>
+  a -> Text -> HandlerT site (HandlerT master IO) ()
+checkSignature foundation msg = do
 
     let token = getWxppToken foundation
 
@@ -88,16 +85,17 @@ checkSignature' foundation = do
                 then Right ()
                 else Left $ "invalid signature"
             where
-                sign0 = wxppSignature token tt nn ""
+                sign0 = wxppSignature token tt nn msg
 
-    (httpErrorWhenParamError =<<) $ do
-        -- check required params
-        sign <- reqGetParamE' "signature"
-        tt <- liftM (fmap TimeStampS) $ reqGetParamE' "timestamp"
-        nn <- liftM (fmap Nonce) $ reqGetParamE' "nonce"
-        let dat = (,,) <$> tt <*> nn <*> sign
-            res = dat >>= paramErrorFromEither "signature" . check_sign
-        return $ res *> pure ()
+    (tt, nn, sign) <- runInputGet $
+                        (,,) <$> (TimeStampS <$> ireq textField "timestamp")
+                             <*> (Nonce <$> ireq textField "nonce")
+                             <*> ireq textField "signature"
+
+    case check_sign (tt, nn, sign) of
+      Left err  -> invalidArgs $ return err
+      Right _   -> return ()
+
 
 withWxppSubLogging ::
     WxppSub
@@ -110,13 +108,12 @@ withWxppSubLogging foundation h = do
 getMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getMessageR = withWxppSubHandler $ \foundation -> do
     withWxppSubLogging foundation $ do
-        checkSignature' foundation
-        (httpErrorWhenParamError =<<) $ do
-            reqGetParamE' "echostr"
+        checkSignature foundation ""
+        runInputGet $ ireq textField "echostr"
 
 postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
-    checkSignature' foundation
+    checkSignature foundation ""
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
             Nothing -> return False
