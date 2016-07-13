@@ -36,6 +36,7 @@ import Control.Monad.Logger
 
 import Network.Wai                          (lazyRequestBody)
 import Text.XML                             (renderText, parseLBS)
+import Text.XML.Cursor                      (fromDocument)
 import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
@@ -60,6 +61,7 @@ import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.OAuth
+import WeiXin.PublicPlatform.ThirdParty
 import WeiXin.PublicPlatform.Utils
 
 
@@ -640,6 +642,65 @@ getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ \foundation -> do
     liftM toJSON $ liftIO $ wxppSubNoAppUnionIdByOpenId foundation union_id
 
 
+-- | 接收第三方平台的事件通知
+-- GET 方法用于echo检验
+-- POST 方法真正处理业务逻辑
+getTpEventNoticeR :: Yesod master => HandlerT WxppTpSub (HandlerT master IO) Text
+getTpEventNoticeR = withSiteLogFuncInHandlerT $ do
+  foundation <- getYesod
+  checkSignature foundation "signature" ""
+  runInputGet $ ireq textField "echostr"
+
+postTpEventNoticeR :: Yesod master => HandlerT WxppTpSub (HandlerT master IO) Text
+postTpEventNoticeR = do
+  foundation <- getYesod
+  req <- waiRequest
+  lbs <- liftIO $ lazyRequestBody req
+  let post_body_txt = toStrict $ decodeUtf8 lbs
+  checkSignature foundation "msg_signature" post_body_txt
+
+  let enc_key   = wxppTpSubAesKey foundation
+      my_app_id = wxppTpSubComponentAppId foundation
+
+  err_or_resp <- runExceptT $ do
+      decrypted_xml0 <- either throwError
+                              (return . fromStrict)
+                              (parse_xml_lbs lbs >>= wxppDecryptByteStringDocumentE my_app_id enc_key)
+
+      let err_or_parsed = parse_xml_lbs decrypted_xml0 >>= wxppTpDiagramFromCursor . fromDocument
+      uts_or_notice <- case err_or_parsed of
+                        Left err -> do
+                            $logErrorS wxppLogSource $ fromString $ "Error when parsing incoming XML: " ++ err
+                            throwError "Cannot parse XML document"
+
+                        Right x -> return x
+
+      case uts_or_notice of
+        Left unknown_info_type -> do
+          $logErrorS wxppLogSource $
+            "Failed to handle event notice: unknown InfoType: "
+            <> unknown_info_type
+          throwError $ "Unknown or unsupported InfoType"
+
+        Right notice -> do
+          ExceptT $ wxppTpSubHandlerEventNotice foundation notice
+
+  case err_or_resp of
+      Left err -> do
+          $(logErrorS) wxppLogSource $ fromString $
+              "Cannot handle third-party event notice: " <> err
+          throwM $ HCError $
+              InternalError "Cannot handle third-party event notice"
+
+      Right output -> do
+          return output
+
+  where
+      parse_xml_lbs x  = case parseLBS def x of
+                              Left ex     -> Left $ "Failed to parse XML: " <> show ex
+                              Right xdoc  -> return xdoc
+
+
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where
         yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
@@ -648,6 +709,11 @@ instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
 instance Yesod master => YesodSubDispatch WxppSubNoApp (HandlerT master IO)
     where
         yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppSubNoApp)
+
+
+instance Yesod master => YesodSubDispatch WxppTpSub (HandlerT master IO)
+    where
+        yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppTpSub)
 
 --------------------------------------------------------------------------------
 

@@ -16,6 +16,7 @@ import Yesod.Helpers.Logger (LoggingTRunner(..))
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.InMsgHandler
+import WeiXin.PublicPlatform.ThirdParty
 import WeiXin.PublicPlatform.Yesod.Types
 import WeiXin.PublicPlatform.Yesod.Model
 
@@ -106,6 +107,7 @@ instance RenderMessage MaybeWxppSub FormMessage where
 
 mkYesodSubData "MaybeWxppSub" [parseRoutes|
 /msg                        MessageR            GET POST
+
 /p/oauth/callback           OAuthCallbackR      GET
 /p/oauth/test               OAuthTestR          GET
 -- 修改以下的路径，记得修改 WeiXin.PublicPlatform.Center 里的相应路径
@@ -128,6 +130,38 @@ data WxppSubNoApp = WxppSubNoApp {
 mkYesodSubData "WxppSubNoApp" [parseRoutes|
 /union-to-open/#WxppUnionID     LookupOpenIDByUnionIDR      GET
 |]
+
+
+-- | 第三方平台所有端点
+data WxppTpSub = WxppTpSub
+  { wxppTpSubComponentAppId     :: WxppAppID
+  , wxppTpSubToken              :: Token
+  , wxppTpSubAesKey             :: AesKey
+  , wxppTpSubRunLoggingT        :: forall a m. LoggingT m a -> m a
+  , wxppTpSubHandlerEventNotice :: forall master. Yesod master
+                                => WxppTpEventNotice
+                                -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
+  -- ^ 真正处理事件通知的逻辑
+  }
+
+instance Show WxppTpSub where
+    show x = "WxppTpSub: " ++ show (wxppTpSubComponentAppId x)
+
+instance HasWxppToken WxppTpSub where
+  getWxppToken = wxppTpSubToken
+
+instance LoggingTRunner WxppTpSub where
+  runLoggingTWith = wxppTpSubRunLoggingT
+
+instance RenderMessage WxppTpSub FormMessage where
+  renderMessage _ _ = defaultFormMessage
+
+
+mkYesodSubData "WxppTpSub" [parseRoutes|
+-- 第三方平台事件接收
+/p/notice                  TpEventNoticeR      GET POST
+|]
+
 
 -- | 把一些数据打包成字串后，作为模拟的 ticket
 type FakeQRTicket = (WxppScene, UrlText)
