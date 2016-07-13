@@ -98,6 +98,10 @@ instance LoggingTRunner WxppSub where
 instance HasWxppAppID WxppSub where
   getWxppAppID = getWxppAppID . wxppSubAppConfig
 
+instance HasAesKeys WxppSub where
+  getAesKeys = getAesKeys . wxppSubAppConfig
+
+
 -- | 为了支持多 app ，AppID 实际上是运行时才知道的
 -- 所以对应的配置也是运行时才能查找出来，因为不一定能找到对应的配置
 -- 结果就是个 Maybe。

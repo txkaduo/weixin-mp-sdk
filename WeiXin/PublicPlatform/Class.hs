@@ -11,7 +11,7 @@ import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
-import Data.List.NonEmpty                   as LNE
+import Data.List.NonEmpty                   as LNE hiding (map)
 
 
 -- | 微信要求一些类似电子令牌、票据的数据尽量全局统一更新使用
@@ -329,6 +329,18 @@ instance HasWxppToken Token where getWxppToken = id
 
 instance HasWxppToken WxppAppConfig where
   getWxppToken = wxppConfigAppToken
+
+
+class HasAesKeys a where
+  getAesKeys :: a -> [AesKey]
+
+instance HasAesKeys AesKey where getAesKeys = return
+
+instance HasAesKeys [AesKey] where getAesKeys = id
+
+instance HasAesKeys WxppAppConfig where
+  getAesKeys app_config = catMaybes $ wxppConfigAppAesKey app_config :
+                                        map Just (wxppConfigAppBackupAesKeys app_config)
 
 
 -- | As a placeholder for testing
