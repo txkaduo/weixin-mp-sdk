@@ -295,6 +295,8 @@ instance HasWxppOpenID WxppOpenID where
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst
 
+instance HasWxppAppID WxppAppConfig where
+  getWxppAppID = wxppConfigAppID
 
 
 class HasSomeWxppCacheBackend a where

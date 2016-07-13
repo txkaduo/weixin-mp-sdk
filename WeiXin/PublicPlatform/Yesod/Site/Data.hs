@@ -95,6 +95,8 @@ instance HasWxppToken WxppSub where
 instance LoggingTRunner WxppSub where
   runLoggingTWith = wxppSubRunLoggingT
 
+instance HasWxppAppID WxppSub where
+  getWxppAppID = getWxppAppID . wxppSubAppConfig
 
 -- | 为了支持多 app ，AppID 实际上是运行时才知道的
 -- 所以对应的配置也是运行时才能查找出来，因为不一定能找到对应的配置
