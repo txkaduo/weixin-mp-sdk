@@ -4,7 +4,7 @@
 -- | incoming message
 WxppInMsgRecord
     app                 WxppAppID maxlen=200
-    to                  Text Maybe
+    to                  WeixinUserName Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
     from                WxppOpenID Maybe
                             -- ^ Nothing only if we cannot parse the message propertly

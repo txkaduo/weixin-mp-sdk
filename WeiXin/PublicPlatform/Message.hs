@@ -145,7 +145,7 @@ wxppInMsgEntityFromDocumentA app_id ak doc = do
 
 wxppInMsgEntityFromDocument :: Document -> Either String WxppInMsgEntity
 wxppInMsgEntityFromDocument doc = do
-    to_user <- get_ele_s "ToUserName"
+    to_user <- fmap WeixinUserName $ get_ele_s "ToUserName"
     from_user <- fmap WxppOpenID $ get_ele_s "FromUserName"
     tt <- get_ele_s "CreateTime"
                 >>= maybe
@@ -348,7 +348,7 @@ wxppOutMsgEntityToElement me = Element "xml" mempty $ common_nodes <> msg_nodes
         msg_nodes = wxppOutMsgToNodes $ wxppOutMessage me
         common_nodes = [xml|
 <ToUserName>#{unWxppOpenID $ wxppOutToUserName me}
-<FromUserName>#{wxppOutFromUserName me}
+<FromUserName>#{unWeixinUserName $ wxppOutFromUserName me}
 <CreateTime>#{fromString $ show $ utcTimeToEpochInt $ wxppOutCreatedTime me}
 |]
 

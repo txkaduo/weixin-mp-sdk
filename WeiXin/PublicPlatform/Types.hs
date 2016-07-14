@@ -92,7 +92,7 @@ instance FromJSON WxppUrlConfig where
 -- | 微信用户名
 newtype WeixinUserName = WeixinUserName { unWeixinUserName :: Text }
                         deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql
-                                 , NFData
+                                 , NFData, Binary
                                  , ToMessage, ToMarkup
                                  )
 
@@ -814,7 +814,7 @@ instance FromJSON WxppInMsg where
 
 data WxppInMsgEntity = WxppInMsgEntity
                         {
-                            wxppInToUserName        :: Text
+                            wxppInToUserName        :: WeixinUserName
                             , wxppInFromUserName    :: WxppOpenID
                             , wxppInCreatedTime     :: UTCTime
                             , wxppInMessageID       :: Maybe WxppInMsgID
@@ -1125,7 +1125,7 @@ instance SimpleStringRep WxppMediaType where
 data WxppOutMsgEntity = WxppOutMsgEntity
                         {
                             wxppOutToUserName       :: WxppOpenID
-                            , wxppOutFromUserName   :: Text
+                            , wxppOutFromUserName   :: WeixinUserName
                             , wxppOutCreatedTime    :: UTCTime
                             , wxppOutMessage        :: WxppOutMsg
                         }
