@@ -120,6 +120,14 @@ getMessageR = withWxppSubHandler $ \foundation -> do
 
 postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
+  realHandlerMsg foundation
+
+realHandlerMsg :: forall site master a.
+               (Yesod master, RenderMessage site FormMessage, HasWxppToken a,
+               HasWxppAppID a, HasAesKeys a, HasWxppProcessor a)
+               => a
+               -> HandlerT site (HandlerT master IO) Text
+realHandlerMsg foundation = do
     checkSignature foundation "signature" ""
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
@@ -133,14 +141,12 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                             "Retry with valid parameters: encrypt_type(not supported)"
     req <- waiRequest
     lbs <- liftIO $ lazyRequestBody req
-    let app_config  = wxppSubAppConfig foundation
-        app_id      = wxppAppConfigAppID app_config
-        aks         = catMaybes $ wxppConfigAppAesKey app_config :
-                                    (map Just $ wxppConfigAppBackupAesKeys app_config)
-        app_token   = wxppConfigAppToken app_config
+    let app_id      = getWxppAppID foundation
+        aks         = getAesKeys foundation
+        app_token   = getWxppToken foundation
+        processor   = getWxppProcessor foundation
 
-
-    err_or_resp <- lift $ runExceptT $ do
+    err_or_resp <- runExceptT $ do
         (decrypted_xml0, m_enc_akey) <-
             if enc
                 then do
@@ -156,7 +162,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                         return Nothing
                     Right x -> return $ Just x
 
-        pre_result <- liftIO $ wxppSubPreProcessInMsg foundation decrypted_xml0 m_ime0
+        pre_result <- liftIO $ wxppPreProcessInMsg processor decrypted_xml0 m_ime0
         case pre_result of
             Left err -> do
                 $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
@@ -167,7 +173,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                 return ("", [])
 
             Right (Just (decrypted_xml, m_ime)) -> do
-                let handle_msg      = wxppSubMsgHandler foundation
+                let handle_msg      = wxppMsgHandler processor
                     try_handle_msg = ExceptT $ do
                                 tryAny (liftIO $ handle_msg decrypted_xml m_ime)
                                     >>= \err_or_x -> do
@@ -178,7 +184,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                                 return $ Left $ show err
                                               Right x -> return x
 
-                let post_handle_msg = wxppSubPostProcessInMsg foundation
+                let post_handle_msg = wxppPostProcessInMsg processor
                     do_post_handle_msg out_res0 = ExceptT $ do
                         tryAny (liftIO $ post_handle_msg decrypted_xml m_ime out_res0)
                             >>= \err_or_x -> do
@@ -190,7 +196,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                                       Right x -> return x
 
                 let do_on_error err = ExceptT $
-                                        liftIO (wxppSubOnProcessInMsgError foundation decrypted_xml m_ime err)
+                                        liftIO (wxppOnProcessInMsgError processor decrypted_xml m_ime err)
                 out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
                                 >>= do_post_handle_msg
 
@@ -244,7 +250,7 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
                 void $ liftIO $ async $ do
                     -- 延迟半秒只要为了让直接回复的回应能第一个到达用户
                     threadDelay $ 1000 * 500
-                    wxppSubSendOutMsgs foundation other_out_msgs
+                    wxppSendOutMsgs processor other_out_msgs
 
             return xmls
 

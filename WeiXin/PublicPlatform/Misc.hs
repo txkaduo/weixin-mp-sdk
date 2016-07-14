@@ -114,15 +114,17 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
         let app_id      = wxppConfigAppID wac
         let data_dirs   = wxppAppConfigDataDir wac
         middlewares <- liftIO $ get_middleware app_id
+        let processor = WxppProcessor
+                          (send_msg app_id)
+                          (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
+                          (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
+                          (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                          (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
         return $ WxppSub
                     wac
                     (SomeWxppCacheClient cache)
                     (WxppDbRunner $ runDBWith foundation)
-                    (send_msg app_id)
-                    (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
-                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
-                    (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
-                    (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                    processor
                     (runLoggingTWith foundation)
                     opts
                     api_env
@@ -202,15 +204,17 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wx
         let app_id      = wxppConfigAppID wac
         let data_dirs   = wxppAppConfigDataDir wac
         middlewares <- liftIO $ get_middleware app_id
+        let processor = WxppProcessor
+                          (send_msg app_id)
+                          (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
+                          (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
+                          (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                          (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
         return $ WxppSub
                     wac
                     (SomeWxppCacheClient cache)
                     (WxppDbRunner $ runDBWith foundation)
-                    (send_msg app_id)
-                    (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
-                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
-                    (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
-                    (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                    processor
                     (runLoggingTWith foundation)
                     opts
                     api_env

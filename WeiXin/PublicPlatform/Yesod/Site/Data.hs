@@ -5,7 +5,7 @@
 module WeiXin.PublicPlatform.Yesod.Site.Data where
 
 import ClassyPrelude
-import qualified Data.ByteString.Lazy       as LB
+import qualified Data.ByteString.Lazy as LB
 import Yesod
 import Control.Monad.Logger
 import Data.Aeson
@@ -47,6 +47,40 @@ instance FromJSON WxppSubsiteOpts where
                              _ -> fail $ "unknown auth-mode: " ++ mode
 
 
+
+data WxppProcessor = WxppProcessor
+  { wxppSendOutMsgs     :: [(WxppOpenID, WxppOutMsg)] -> IO ()
+                         -- ^ a computation to send outgoing messages
+
+  , wxppMsgHandler      :: WxppInMsgHandler IO
+
+  , wxppPreProcessInMsg :: LB.ByteString
+                         -- raw data of message (unparsed)
+                        -> Maybe WxppInMsgEntity
+                        -- this is nothing only if caller cannot parse the message
+                        -> IO (Either String
+                                (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+                                )
+
+  , wxppPostProcessInMsg :: LB.ByteString
+                         -- raw data of message (unparsed)
+                         -> Maybe WxppInMsgEntity
+                         -- this is nothing only if caller cannot parse the message
+                         -> WxppInMsgHandlerResult
+                         -> IO (Either String WxppInMsgHandlerResult)
+
+  , wxppOnProcessInMsgError :: LB.ByteString
+                            -- raw data of message (unparsed)
+                            -> Maybe WxppInMsgEntity
+                            -- this is nothing only if caller cannot parse the message
+
+                            -> String
+                            -> IO (Either String ())
+  }
+
+class HasWxppProcessor a where
+  getWxppProcessor :: a -> WxppProcessor
+
 -- | 为每个运行的 App 对应一个 subsite
 data WxppSub =
         WxppSub {
@@ -54,33 +88,7 @@ data WxppSub =
                     -- ^ 所有配置信息
                 , wxppSubCacheBackend   :: SomeWxppCacheClient
                 , wxppSubRunDBAction    :: WxppDbRunner -- ^ execute any DB actions
-                , wxppSubSendOutMsgs    :: [(WxppOpenID, WxppOutMsg)] -> IO ()
-                    -- ^ a computation to send outgoing messages
-                , wxppSubMsgHandler     :: WxppInMsgHandler IO
-                , wxppSubPreProcessInMsg :: ( LB.ByteString
-                                                -- raw data of message (unparsed)
-                                            -> Maybe WxppInMsgEntity
-                                                -- this is nothing only if caller cannot parse the message
-                                            -> IO (Either String
-                                                    (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
-                                                    )
-                                            )
-                , wxppSubPostProcessInMsg :: ( LB.ByteString
-                                                -- raw data of message (unparsed)
-                                                -> Maybe WxppInMsgEntity
-                                                -- this is nothing only if caller cannot parse the message
-
-                                                -> WxppInMsgHandlerResult
-                                                -> IO (Either String WxppInMsgHandlerResult)
-                                            )
-                , wxppSubOnProcessInMsgError :: ( LB.ByteString
-                                                -- raw data of message (unparsed)
-                                                -> Maybe WxppInMsgEntity
-                                                -- this is nothing only if caller cannot parse the message
-
-                                                -> String
-                                                -> IO (Either String ())
-                                            )
+                , wxppSubProcessor      :: WxppProcessor
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 , wxppSubApiEnv         :: WxppApiEnv
@@ -100,6 +108,9 @@ instance HasWxppAppID WxppSub where
 
 instance HasAesKeys WxppSub where
   getAesKeys = getAesKeys . wxppSubAppConfig
+
+instance HasWxppProcessor WxppSub where
+  getWxppProcessor = wxppSubProcessor
 
 
 -- | 为了支持多 app ，AppID 实际上是运行时才知道的
