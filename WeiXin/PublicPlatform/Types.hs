@@ -511,6 +511,10 @@ instance ToJSON WxppAppSecret where toJSON = toJSON . unWxppAppSecret
 
 instance FromJSON WxppAppSecret where parseJSON = fmap WxppAppSecret . parseJSON
 
+-- | 这个结构里包含了全部与公众号相关的设置性数据
+-- 考虑了第三方平台的需求后，现在对设置性数据作了一点区分：
+-- 有部分只是为了跟微信平台通讯的隐私数据：app id, aes key, secret
+-- 另一部分是我们特定的代码实现方式而产生的数据：data dir
 data WxppAppConfig = WxppAppConfig {
                     wxppConfigAppID         :: WxppAppID
                     , wxppConfigAppSecret   :: WxppAppSecret

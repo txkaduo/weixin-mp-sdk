@@ -12,10 +12,12 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
 import Control.DeepSeq                      (($!!))
+import Control.Monad.Except                 (runExceptT, ExceptT(..), withExceptT)
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Data.Char
+import Data.List.NonEmpty                   (NonEmpty)
 import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
@@ -86,6 +88,7 @@ lookupMultiWxppAppConfig2 (CodeNameOrAppID t) the_map =
 type InMsgHandlerList m = [SomeWxppInMsgHandler m]
 
 
+{-
 -- | 用于构造 MaybeWxppSub Subsite 的工具
 mkMaybeWxppSub ::
     ( LoggingTRunner app
@@ -115,7 +118,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
         let data_dirs   = wxppAppConfigDataDir wac
         middlewares <- liftIO $ get_middleware app_id
         let processor = WxppProcessor
-                          (send_msg app_id)
+                          send_msg
                           (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
                           (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
                           (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
@@ -172,7 +175,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                             cache
                             in_msg_handlers
                             bs ime
-
+--}
 
 -- mkMaybeWxppSub with cache
 mkMaybeWxppSubC ::
@@ -188,30 +191,32 @@ mkMaybeWxppSubC ::
     -> app
     -> c
     -> s  -- ^ cache parsed Yaml content
-    -> (WxppAppID -> IO (Maybe hvar))
+    -> (WeixinUserName -> IO (Maybe hvar))
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
-    -> IO (Maybe WxppAppConfig)
-            -- ^ 找到相应配置的函数
-    -> (WxppAppConfig -> IO [WxppInMsgHandlerPrototype m])
-    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
+    -> (WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
+    -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
+    -> (Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -> (WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
+    -> WxppAppID
+    -> Token
+    -> [AesKey]
+    -> WxppAppSecret
     -> WxppSubsiteOpts
     -> WxppApiEnv
     -> MaybeWxppSub
-mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts api_env =
+mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_protos send_msg get_middleware my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env =
     MaybeWxppSub $ runMaybeT $ do
-        wac <- MaybeT $ get_wxpp_config
-        let app_id      = wxppConfigAppID wac
-        let data_dirs   = wxppAppConfigDataDir wac
-        middlewares <- liftIO $ get_middleware app_id
         let processor = WxppProcessor
-                          (send_msg app_id)
-                          (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
-                          (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
-                          (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
-                          (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                          send_msg
+                          (\target_username x1 x2 -> liftM join $ m_to_io $ handle_msg target_username x1 x2)
+                          pre_proc_msg
+                          post_proc_msg
+                          onerr_proc_msg
         return $ WxppSub
-                    wac
+                    my_app_id
+                    my_app_token
+                    my_app_aes_keys
+                    my_app_secret
                     (SomeWxppCacheClient cache)
                     (WxppDbRunner $ runDBWith foundation)
                     processor
@@ -219,20 +224,32 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wx
                     opts
                     api_env
     where
-        handle_msg wac data_dirs bs ime = do
-            let app_id      = wxppConfigAppID wac
-            err_or_in_msg_handlers <- liftIO $ do
-                    protos <- get_protos wac
-                    readWxppInMsgHandlersCached cache_yaml
+        pre_proc_msg target_username x1 x2 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware target_username
+            preProcessInMsgByMiddlewares middlewares cache x1 x2
+
+        post_proc_msg target_username x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware target_username
+            postProcessInMsgByMiddlewares middlewares x1 x2 x3
+
+        onerr_proc_msg target_username x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware target_username
+            onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3
+
+        handle_msg target_username bs ime = do
+            err_or_in_msg_handlers <- liftIO $ runExceptT $ do
+                    (protos, data_dirs) <- ExceptT $ get_protos target_username
+                    withExceptT show $ ExceptT $
+                      readWxppInMsgHandlersCached cache_yaml
                         protos
                         data_dirs
                         (T.unpack "msg-handlers.yml")
 
-            m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_id
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref target_username
             m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $
-                        "cannot parse msg-handlers.yml: " ++ show err
+                        "cannot load or parse msg-handlers.yml: " ++ show err
                     m_cached_handlers <- liftIO $ fmap join $
                                             mapM SV.get m_last_handlers_ref
                     case m_cached_handlers of

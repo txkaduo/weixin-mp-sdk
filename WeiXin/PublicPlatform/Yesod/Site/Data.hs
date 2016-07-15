@@ -49,12 +49,15 @@ instance FromJSON WxppSubsiteOpts where
 
 
 data WxppProcessor = WxppProcessor
-  { wxppSendOutMsgs     :: [(WxppOpenID, WxppOutMsg)] -> IO ()
+  { wxppSendOutMsgs     :: Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ()
                          -- ^ a computation to send outgoing messages
 
-  , wxppMsgHandler      :: WxppInMsgHandler IO
+  , wxppMsgHandler      :: WeixinUserName -> WxppInMsgHandler IO
+  -- ^ 第一个参数是收到的报文内的 ToUserName
+  -- 可以根据这个参数找到必要的配置文件
 
-  , wxppPreProcessInMsg :: LB.ByteString
+  , wxppPreProcessInMsg :: WeixinUserName
+                        -> LB.ByteString
                          -- raw data of message (unparsed)
                         -> Maybe WxppInMsgEntity
                         -- this is nothing only if caller cannot parse the message
@@ -62,14 +65,16 @@ data WxppProcessor = WxppProcessor
                                 (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
                                 )
 
-  , wxppPostProcessInMsg :: LB.ByteString
+  , wxppPostProcessInMsg :: WeixinUserName
+                         -> LB.ByteString
                          -- raw data of message (unparsed)
                          -> Maybe WxppInMsgEntity
                          -- this is nothing only if caller cannot parse the message
                          -> WxppInMsgHandlerResult
                          -> IO (Either String WxppInMsgHandlerResult)
 
-  , wxppOnProcessInMsgError :: LB.ByteString
+  , wxppOnProcessInMsgError :: WeixinUserName
+                            -> LB.ByteString
                             -- raw data of message (unparsed)
                             -> Maybe WxppInMsgEntity
                             -- this is nothing only if caller cannot parse the message
@@ -83,9 +88,10 @@ class HasWxppProcessor a where
 
 -- | 为每个运行的 App 对应一个 subsite
 data WxppSub =
-        WxppSub {
-                wxppSubAppConfig        :: WxppAppConfig
-                    -- ^ 所有配置信息
+        WxppSub { wxppSubAppId          :: WxppAppID
+                , wxppSubAppToken       :: Token
+                , wxppSubAesKeys        :: [AesKey]
+                , wxppSubAppSecret      :: WxppAppSecret
                 , wxppSubCacheBackend   :: SomeWxppCacheClient
                 , wxppSubRunDBAction    :: WxppDbRunner -- ^ execute any DB actions
                 , wxppSubProcessor      :: WxppProcessor
@@ -95,19 +101,19 @@ data WxppSub =
                 }
 
 instance Show WxppSub where
-    show x = "WxppSub: " ++ show (wxppSubAppConfig x)
+    show x = "WxppSub: " ++ show (wxppSubAppId x)
 
 instance HasWxppToken WxppSub where
-  getWxppToken = getWxppToken . wxppSubAppConfig
+  getWxppToken = wxppSubAppToken
 
 instance LoggingTRunner WxppSub where
   runLoggingTWith = wxppSubRunLoggingT
 
 instance HasWxppAppID WxppSub where
-  getWxppAppID = getWxppAppID . wxppSubAppConfig
+  getWxppAppID = wxppSubAppId
 
 instance HasAesKeys WxppSub where
-  getAesKeys = getAesKeys . wxppSubAppConfig
+  getAesKeys = wxppSubAesKeys
 
 instance HasWxppProcessor WxppSub where
   getWxppProcessor = wxppSubProcessor

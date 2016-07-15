@@ -141,7 +141,7 @@ realHandlerMsg foundation = do
                             "Retry with valid parameters: encrypt_type(not supported)"
     req <- waiRequest
     lbs <- liftIO $ lazyRequestBody req
-    let app_id      = getWxppAppID foundation
+    let my_app_id   = getWxppAppID foundation
         aks         = getAesKeys foundation
         app_token   = getWxppToken foundation
         processor   = getWxppProcessor foundation
@@ -150,7 +150,7 @@ realHandlerMsg foundation = do
         (decrypted_xml0, m_enc_akey) <-
             if enc
                 then do
-                    (either throwError return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE app_id aks)
+                    (either throwError return $ parse_xml_lbs lbs >>= wxppTryDecryptByteStringDocumentE my_app_id aks)
                         >>= maybe (throwError $ "Internal Error: no AesKey available to decrypt")
                                 (return . (LB.fromStrict *** Just))
                 else return (lbs, Nothing)
@@ -162,7 +162,16 @@ realHandlerMsg foundation = do
                         return Nothing
                     Right x -> return $ Just x
 
-        pre_result <- liftIO $ wxppPreProcessInMsg processor decrypted_xml0 m_ime0
+        ime0 <- case m_ime0 of
+                  Nothing -> do
+                    -- cannot parse incoming XML message
+                    throwError $ "Cannot parse incoming XML"
+
+                  Just x -> return x
+
+        let target_username0 = wxppInToUserName ime0
+        pre_result <- liftIO $ wxppPreProcessInMsg processor target_username0 decrypted_xml0 m_ime0
+
         case pre_result of
             Left err -> do
                 $logErrorS wxppLogSource $ "wxppPreProcessInMsg failed: " <> fromString err
@@ -170,45 +179,46 @@ realHandlerMsg foundation = do
 
             Right Nothing -> do
                 $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
-                return ("", [])
+                return ("", Nothing)
 
             Right (Just (decrypted_xml, m_ime)) -> do
-                let handle_msg      = wxppMsgHandler processor
-                    try_handle_msg = ExceptT $ do
-                                tryAny (liftIO $ handle_msg decrypted_xml m_ime)
-                                    >>= \err_or_x -> do
-                                            case err_or_x of
-                                              Left err -> do
-                                                $logErrorS wxppLogSource $
-                                                    "error when handling incoming message: " <> tshow err
-                                                return $ Left $ show err
-                                              Right x -> return x
-
-                let post_handle_msg = wxppPostProcessInMsg processor
-                    do_post_handle_msg out_res0 = ExceptT $ do
-                        tryAny (liftIO $ post_handle_msg decrypted_xml m_ime out_res0)
-                            >>= \err_or_x -> do
-                                    case err_or_x of
-                                      Left err -> do
-                                        $logErrorS wxppLogSource $
-                                            "error when post-handling incoming message: " <> tshow err
-                                        return $ Left $ show err
-                                      Right x -> return x
-
-                let do_on_error err = ExceptT $
-                                        liftIO (wxppOnProcessInMsgError processor decrypted_xml m_ime err)
-                out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
-                                >>= do_post_handle_msg
-
                 case m_ime of
                     Nothing -> do
                         -- incoming message cannot be parsed
                         -- we don't know who send the message
-                        return ("", [])
+                        return ("", Nothing)
 
                     Just me -> do
                         let user_open_id    = wxppInFromUserName me
-                            my_name         = wxppInToUserName me
+                            target_username = wxppInToUserName me
+
+                        let handle_msg      = wxppMsgHandler processor
+                            try_handle_msg = ExceptT $ do
+                                        tryAny (liftIO $ handle_msg target_username decrypted_xml m_ime)
+                                            >>= \err_or_x -> do
+                                                    case err_or_x of
+                                                      Left err -> do
+                                                        $logErrorS wxppLogSource $
+                                                            "error when handling incoming message: " <> tshow err
+                                                        return $ Left $ show err
+                                                      Right x -> return x
+
+                        let post_handle_msg = wxppPostProcessInMsg processor
+                            do_post_handle_msg out_res0 = ExceptT $ do
+                                tryAny (liftIO $ post_handle_msg target_username decrypted_xml m_ime out_res0)
+                                    >>= \err_or_x -> do
+                                            case err_or_x of
+                                              Left err -> do
+                                                $logErrorS wxppLogSource $
+                                                    "error when post-handling incoming message: " <> tshow err
+                                                return $ Left $ show err
+                                              Right x -> return x
+
+                        let do_on_error err = ExceptT $
+                                liftIO (wxppOnProcessInMsgError processor target_username decrypted_xml m_ime err)
+
+                        out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
+                                        >>= do_post_handle_msg
 
                         let (primary_out_msgs, secondary_out_msgs) = (map snd *** map snd) $ partition fst out_res
 
@@ -225,17 +235,20 @@ realHandlerMsg foundation = do
                         now <- liftIO getCurrentTime
                         let mk_out_msg_entity x = WxppOutMsgEntity
                                                     user_open_id
-                                                    my_name
+                                                    target_username
                                                     now
                                                     x
-                        liftM (, map (user_open_id,) other_out_msgs) $
+
+                        let extra_data = (target_username, map (user_open_id,) other_out_msgs)
+
+                        liftM (, Just extra_data) $
                             fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
                                 liftM (LT.toStrict . renderText def) $ do
                                     let out_msg_entity = mk_out_msg_entity out_msg
                                     case m_enc_akey of
                                         Just enc_akey ->
                                             ExceptT $ wxppOutMsgEntityToDocumentE
-                                                            app_id app_token enc_akey out_msg_entity
+                                                            my_app_id app_token enc_akey out_msg_entity
                                         Nothing ->
                                             return $ wxppOutMsgEntityToDocument out_msg_entity
 
@@ -245,14 +258,16 @@ realHandlerMsg foundation = do
                 "cannot encode outgoing message into XML: " <> err
             throwM $ HCError $
                 InternalError "cannot encode outgoing message into XML"
-        Right (xmls, other_out_msgs) -> do
+
+        Right (xmls, m_extra_data) -> do
+          forM_ m_extra_data $ \(target_username, other_out_msgs) -> do
             when (not $ null other_out_msgs) $ do
                 void $ liftIO $ async $ do
                     -- 延迟半秒只要为了让直接回复的回应能第一个到达用户
                     threadDelay $ 1000 * 500
-                    wxppSendOutMsgs processor other_out_msgs
+                    wxppSendOutMsgs processor (Left target_username) other_out_msgs
 
-            return xmls
+          return xmls
 
     where
         parse_xml_lbs x  = case parseLBS def x of
@@ -338,9 +353,8 @@ getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) 
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
     return_url <- reqPathPieceParamPostGet "return"
-    let wac    = wxppSubAppConfig sub
-        app_id = wxppConfigAppID wac
-        secret = wxppConfigAppSecret wac
+    let app_id = getWxppAppID sub
+        secret = wxppSubAppSecret sub
         cache  = wxppSubCacheBackend sub
 
     oauth_state <- liftM (fromMaybe "") $ lookupGetParam "state"
@@ -488,8 +502,7 @@ wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
 -- | 演示/测试微信 oauth 授权的页面
 getOAuthTestR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 getOAuthTestR = withWxppSubHandler $ \sub -> do
-    let wac    = wxppSubAppConfig sub
-        app_id = wxppConfigAppID wac
+    let app_id = getWxppAppID sub
     m_oauth_st <- sessionGetWxppUser app_id
     case m_oauth_st of
         Nothing      -> return "no open id, authorization failed"
@@ -553,7 +566,7 @@ getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
         then do
             return $ toJSON $ Just $ fakeUnionID open_id
         else do
-            let app_id = wxppAppConfigAppID $ wxppSubAppConfig foundation
+            let app_id = getWxppAppID foundation
             let cache = wxppSubCacheBackend foundation
 
             (tryWxppWsResult $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id)
@@ -753,7 +766,7 @@ getAccessTokenSubHandler' :: Yesod master =>
     WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
 getAccessTokenSubHandler' foundation = do
     let cache = wxppSubCacheBackend foundation
-    let app_id = wxppAppConfigAppID $ wxppSubAppConfig foundation
+    let app_id = getWxppAppID foundation
     (liftIO $ wxppCacheGetAccessToken cache app_id)
             >>= maybe (mimicServerBusy "no access token available") (return . fst)
 
