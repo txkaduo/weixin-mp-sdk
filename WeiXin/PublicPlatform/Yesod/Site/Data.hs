@@ -59,16 +59,16 @@ data WxppProcessor = WxppProcessor
   , wxppPreProcessInMsg :: WeixinUserName
                         -> LB.ByteString
                          -- raw data of message (unparsed)
-                        -> Maybe WxppInMsgEntity
+                        -> WxppInMsgEntity
                         -- this is nothing only if caller cannot parse the message
                         -> IO (Either String
-                                (Maybe (LB.ByteString, Maybe WxppInMsgEntity))
+                                (Maybe (LB.ByteString, WxppInMsgEntity))
                                 )
 
   , wxppPostProcessInMsg :: WeixinUserName
                          -> LB.ByteString
                          -- raw data of message (unparsed)
-                         -> Maybe WxppInMsgEntity
+                         -> WxppInMsgEntity
                          -- this is nothing only if caller cannot parse the message
                          -> WxppInMsgHandlerResult
                          -> IO (Either String WxppInMsgHandlerResult)
@@ -76,7 +76,7 @@ data WxppProcessor = WxppProcessor
   , wxppOnProcessInMsgError :: WeixinUserName
                             -> LB.ByteString
                             -- raw data of message (unparsed)
-                            -> Maybe WxppInMsgEntity
+                            -> WxppInMsgEntity
                             -- this is nothing only if caller cannot parse the message
 
                             -> String

@@ -170,7 +170,7 @@ realHandlerMsg foundation = do
                   Just x -> return x
 
         let target_username0 = wxppInToUserName ime0
-        pre_result <- liftIO $ wxppPreProcessInMsg processor target_username0 decrypted_xml0 m_ime0
+        pre_result <- liftIO $ wxppPreProcessInMsg processor target_username0 decrypted_xml0 ime0
 
         case pre_result of
             Left err -> do
@@ -181,76 +181,69 @@ realHandlerMsg foundation = do
                 $logDebugS wxppLogSource $ "message handle skipped because middleware return Nothing"
                 return ("", Nothing)
 
-            Right (Just (decrypted_xml, m_ime)) -> do
-                case m_ime of
-                    Nothing -> do
-                        -- incoming message cannot be parsed
-                        -- we don't know who send the message
-                        return ("", Nothing)
+            Right (Just (decrypted_xml, ime)) -> do
+                let user_open_id    = wxppInFromUserName ime
+                    target_username = wxppInToUserName ime
 
-                    Just me -> do
-                        let user_open_id    = wxppInFromUserName me
-                            target_username = wxppInToUserName me
-
-                        let handle_msg      = wxppMsgHandler processor
-                            try_handle_msg = ExceptT $ do
-                                        tryAny (liftIO $ handle_msg target_username decrypted_xml m_ime)
-                                            >>= \err_or_x -> do
-                                                    case err_or_x of
-                                                      Left err -> do
-                                                        $logErrorS wxppLogSource $
-                                                            "error when handling incoming message: " <> tshow err
-                                                        return $ Left $ show err
-                                                      Right x -> return x
-
-                        let post_handle_msg = wxppPostProcessInMsg processor
-                            do_post_handle_msg out_res0 = ExceptT $ do
-                                tryAny (liftIO $ post_handle_msg target_username decrypted_xml m_ime out_res0)
+                let handle_msg      = wxppMsgHandler processor
+                    try_handle_msg = ExceptT $ do
+                                tryAny (liftIO $ handle_msg target_username decrypted_xml ime)
                                     >>= \err_or_x -> do
                                             case err_or_x of
                                               Left err -> do
                                                 $logErrorS wxppLogSource $
-                                                    "error when post-handling incoming message: " <> tshow err
+                                                    "error when handling incoming message: " <> tshow err
                                                 return $ Left $ show err
                                               Right x -> return x
 
-                        let do_on_error err = ExceptT $
-                                liftIO (wxppOnProcessInMsgError processor target_username decrypted_xml m_ime err)
+                let post_handle_msg = wxppPostProcessInMsg processor
+                    do_post_handle_msg out_res0 = ExceptT $ do
+                        tryAny (liftIO $ post_handle_msg target_username decrypted_xml ime out_res0)
+                            >>= \err_or_x -> do
+                                    case err_or_x of
+                                      Left err -> do
+                                        $logErrorS wxppLogSource $
+                                            "error when post-handling incoming message: " <> tshow err
+                                        return $ Left $ show err
+                                      Right x -> return x
 
-                        out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
-                                        >>= do_post_handle_msg
+                let do_on_error err = ExceptT $
+                        liftIO (wxppOnProcessInMsgError processor target_username decrypted_xml ime err)
 
-                        let (primary_out_msgs, secondary_out_msgs) = (map snd *** map snd) $ partition fst out_res
+                out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
+                                >>= do_post_handle_msg
 
-                        -- 只要有 primary 的回应，就忽略非primary的回应
-                        -- 如果没 primary 回应，而 secondary 回应有多个，则只选择第一个
-                        let split_head ls = case ls of
-                                            [] -> (Nothing, [])
-                                            (x:xs) -> (Just x, xs)
-                        let (m_resp_out_msg, other_out_msgs) =
-                                if null primary_out_msgs
-                                    then (, []) $ listToMaybe $ catMaybes secondary_out_msgs
-                                    else split_head $ catMaybes primary_out_msgs
+                let (primary_out_msgs, secondary_out_msgs) = (map snd *** map snd) $ partition fst out_res
 
-                        now <- liftIO getCurrentTime
-                        let mk_out_msg_entity x = WxppOutMsgEntity
-                                                    user_open_id
-                                                    target_username
-                                                    now
-                                                    x
+                -- 只要有 primary 的回应，就忽略非primary的回应
+                -- 如果没 primary 回应，而 secondary 回应有多个，则只选择第一个
+                let split_head ls = case ls of
+                                    [] -> (Nothing, [])
+                                    (x:xs) -> (Just x, xs)
+                let (m_resp_out_msg, other_out_msgs) =
+                        if null primary_out_msgs
+                            then (, []) $ listToMaybe $ catMaybes secondary_out_msgs
+                            else split_head $ catMaybes primary_out_msgs
 
-                        let extra_data = (target_username, map (user_open_id,) other_out_msgs)
+                now <- liftIO getCurrentTime
+                let mk_out_msg_entity x = WxppOutMsgEntity
+                                            user_open_id
+                                            target_username
+                                            now
+                                            x
 
-                        liftM (, Just extra_data) $
-                            fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
-                                liftM (LT.toStrict . renderText def) $ do
-                                    let out_msg_entity = mk_out_msg_entity out_msg
-                                    case m_enc_akey of
-                                        Just enc_akey ->
-                                            ExceptT $ wxppOutMsgEntityToDocumentE
-                                                            my_app_id app_token enc_akey out_msg_entity
-                                        Nothing ->
-                                            return $ wxppOutMsgEntityToDocument out_msg_entity
+                let extra_data = (target_username, map (user_open_id,) other_out_msgs)
+
+                liftM (, Just extra_data) $
+                    fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
+                        liftM (LT.toStrict . renderText def) $ do
+                            let out_msg_entity = mk_out_msg_entity out_msg
+                            case m_enc_akey of
+                                Just enc_akey ->
+                                    ExceptT $ wxppOutMsgEntityToDocumentE
+                                                    my_app_id app_token enc_akey out_msg_entity
+                                Nothing ->
+                                    return $ wxppOutMsgEntityToDocument out_msg_entity
 
     case err_or_resp of
         Left err -> do

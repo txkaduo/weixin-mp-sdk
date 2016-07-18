@@ -226,41 +226,38 @@ type instance WxppInMsgProcessResult (WxppTalkHandlerGeneral r m) = WxppInMsgHan
 instance (MonadBaseControl IO m, WxppApiMonad env m) =>
     IsWxppInMsgProcessor m (WxppTalkHandlerGeneral r m)
     where
-    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache _bs m_ime = runExceptT $ do
-        case m_ime of
-            Nothing -> return []
-            Just ime -> do
-                mapExceptT (runWxppDB db_runner) $ do
-                    let open_id = wxppInFromUserName ime
-                    m_state_rec <- lift $ loadWxppTalkStateCurrent open_id
-                    case m_state_rec of
-                        Nothing -> return []
-                        Just e_state_rec@(Entity state_id _) -> do
-                            let mk :: WxppTalkerStateEntry r m
-                                    -> MaybeT (ExceptT String (ReaderT WxppDbBackend m)) WxppInMsgHandlerResult
-                                mk (WxppTalkerStateEntry state_proxy rx) = MaybeT $ ExceptT $ processInMsgByWxTalk
-                                                    state_proxy
-                                                    (env, rx)
-                                                    e_state_rec
-                                                    ime
-                            m_result <- runMaybeT $ asum $ map mk entries
-                            case m_result of
-                                Nothing -> do
-                                    $logWarn $ "no handler could handle talk state: state_id="
-                                                <> toPathPiece state_id
-                                    return []
-                                Just x -> return x
+    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache _bs ime = runExceptT $ do
+        mapExceptT (runWxppDB db_runner) $ do
+            let open_id = wxppInFromUserName ime
+            m_state_rec <- lift $ loadWxppTalkStateCurrent open_id
+            case m_state_rec of
+                Nothing -> return []
+                Just e_state_rec@(Entity state_id _) -> do
+                    let mk :: WxppTalkerStateEntry r m
+                            -> MaybeT (ExceptT String (ReaderT WxppDbBackend m)) WxppInMsgHandlerResult
+                        mk (WxppTalkerStateEntry state_proxy rx) = MaybeT $ ExceptT $ processInMsgByWxTalk
+                                            state_proxy
+                                            (env, rx)
+                                            e_state_rec
+                                            ime
+                    m_result <- runMaybeT $ asum $ map mk entries
+                    case m_result of
+                        Nothing -> do
+                            $logWarn $ "no handler could handle talk state: state_id="
+                                        <> toPathPiece state_id
+                            return []
+                        Just x -> return x
 
-                        {-
-                    m_state_info <- ExceptT $ loadWxppTalkStateCurrent open_id
-                    case m_state_info of
-                        Nothing -> return []
-                        Just (db_id, _ :: SomeWxppTalkState CommonTalkEnv (ReaderT SqlBackend m) ) -> do
-                            ExceptT $ processInMsgByWxTalk
-                                        (mk_env $ wxppInFromUserName ime)
-                                        db_id
-                                        ime
-                                        --}
+                {-
+            m_state_info <- ExceptT $ loadWxppTalkStateCurrent open_id
+            case m_state_info of
+                Nothing -> return []
+                Just (db_id, _ :: SomeWxppTalkState CommonTalkEnv (ReaderT SqlBackend m) ) -> do
+                    ExceptT $ processInMsgByWxTalk
+                                (mk_env $ wxppInFromUserName ime)
+                                db_id
+                                ime
+                                --}
 
 
 -- | 消息处理器：调用后会新建一个会话
@@ -296,24 +293,21 @@ instance
     ) =>
     IsWxppInMsgProcessor m (WxppTalkInitiator r s)
     where
-    processInMsg (WxppTalkInitiator db_runner env extra_env) _cache _bs m_ime = runExceptT $ do
-        case m_ime of
-            Nothing -> return []
-            Just ime -> do
-                    let from_open_id = wxppInFromUserName ime
-                        app_id = getWxppAppID env
-                    mapExceptT (runWxppDB db_runner) $ do
-                        msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiate ime
-                        case msgs_or_state of
-                            Left msgs -> do
-                                        -- cannot create conversation
-                                        return $ map ((False,) . Just) $ msgs
+    processInMsg (WxppTalkInitiator db_runner env extra_env) _cache _bs ime = runExceptT $ do
+        let from_open_id = wxppInFromUserName ime
+            app_id = getWxppAppID env
+        mapExceptT (runWxppDB db_runner) $ do
+            msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiate ime
+            case msgs_or_state of
+                Left msgs -> do
+                            -- cannot create conversation
+                            return $ map ((False,) . Just) $ msgs
 
-                            Right (state :: s) -> do
-                                -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
-                                e_state <- lift $ newWxppTalkState' app_id from_open_id state
-                                ExceptT $ processJustInitedWxTalk
-                                            (Proxy :: Proxy s) (env, extra_env) e_state
+                Right (state :: s) -> do
+                    -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
+                    e_state <- lift $ newWxppTalkState' app_id from_open_id state
+                    ExceptT $ processJustInitedWxTalk
+                                (Proxy :: Proxy s) (env, extra_env) e_state
 
 
 -- | 与 WxppTalkerStateEntry 的区别只是多了 WxTalkerFreshState 的要求
@@ -359,20 +353,17 @@ instance
     ) =>
     IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
     where
-    processInMsg (WxppTalkEvtKeyInitiator db_runner env entries) _cache _bs m_ime = runExceptT $ do
-        case m_ime of
-            Nothing -> return []
-            Just ime -> do
-                case wxppInMessage ime of
-                    WxppInMsgEvent (WxppEvtClickItem evtkey) -> do
-                        case T.stripPrefix "initiate-talk:" evtkey of
-                            Nothing     -> return []
-                            Just st_type -> do_work ime st_type
+    processInMsg (WxppTalkEvtKeyInitiator db_runner env entries) _cache _bs ime = runExceptT $ do
+        case wxppInMessage ime of
+            WxppInMsgEvent (WxppEvtClickItem evtkey) -> do
+                case T.stripPrefix "initiate-talk:" evtkey of
+                    Nothing     -> return []
+                    Just st_type -> do_work st_type
 
-                    _ -> return []
+            _ -> return []
 
         where
-            do_work ime st_type = do
+            do_work st_type = do
                 let match_st_type (WxppTalkerFreshStateEntry px _) = getStateType px == st_type
                 case find match_st_type entries of
                     Nothing -> do
@@ -425,20 +416,17 @@ type instance WxppInMsgProcessResult WxppTalkTerminator = WxppInMsgHandlerResult
 
 instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppTalkTerminator where
-    processInMsg (WxppTalkTerminator app_id msg_dirs db_runner primary get_outmsg) cache _bs m_ime = runExceptT $ do
-        case m_ime of
-            Nothing -> return []
-            Just ime -> do
-                    let from_open_id = wxppInFromUserName ime
-                    mapExceptT (runWxppDB db_runner) $ do
-                        lift $ abortCurrentWxppTalkState app_id from_open_id
+    processInMsg (WxppTalkTerminator app_id msg_dirs db_runner primary get_outmsg) cache _bs ime = runExceptT $ do
+        let from_open_id = wxppInFromUserName ime
+        mapExceptT (runWxppDB db_runner) $ do
+            lift $ abortCurrentWxppTalkState app_id from_open_id
 
-                    let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
-                                        wxppCacheGetAccessToken cache app_id)
-                                    >>= maybe (throwError $ "no access token available") (return . fst)
-                    outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
-                    liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                                    tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg
+        let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                            wxppCacheGetAccessToken cache app_id)
+                        >>= maybe (throwError $ "no access token available") (return . fst)
+        outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
+        liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
+                        tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg
 
 
 
