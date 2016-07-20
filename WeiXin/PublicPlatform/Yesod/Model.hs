@@ -339,7 +339,7 @@ toWxppCachedUserInfoExt app_id created_time
 wxppSourceInMsgEntityFromHistory :: (MonadReader env m, MonadResource m, HasPersistBackend env SqlBackend)
                                  => [Filter WxppInMsgRecord]
                                  -> [SelectOpt WxppInMsgRecord]
-                                 -> Source m (Either String (UTCTime, (WxppAppID, WxppInMsgEntity)))
+                                 -> Source m (Either String (UTCTime, (Maybe WxppAppID, WxppInMsgEntity)))
 
 wxppSourceInMsgEntityFromHistory filters opts = do
   selectSource filters opts

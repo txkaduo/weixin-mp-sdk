@@ -11,6 +11,7 @@ import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
+import qualified Data.ByteString.Lazy       as LB
 import Control.DeepSeq                      (($!!))
 import Control.Monad.Except                 (runExceptT, ExceptT(..), withExceptT)
 import Control.Monad.Trans.Resource
@@ -193,18 +194,23 @@ mkMaybeWxppSubC ::
     -> s  -- ^ cache parsed Yaml content
     -> (WeixinUserName -> IO (Maybe hvar))
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
+    -> (Maybe WxppAppID -> LB.ByteString -> IO ())
+    -- ^ called when message cannot be parsed
     -> (WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
     -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
     -> (Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -- ^ send message to weixin user in background
     -> (WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppAppID
+    -- ^ 这个是我们自身的app id，不一定是消息的接收者的app id
+    -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
     -> Token
     -> [AesKey]
     -> WxppAppSecret
     -> WxppSubsiteOpts
     -> WxppApiEnv
     -> MaybeWxppSub
-mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_protos send_msg get_middleware my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env =
+mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env =
     MaybeWxppSub $ runMaybeT $ do
         let processor = WxppProcessor
                           send_msg
@@ -212,6 +218,7 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_pr
                           pre_proc_msg
                           post_proc_msg
                           onerr_proc_msg
+                          onerr_parse_msg
         return $ WxppSub
                     my_app_id
                     my_app_token

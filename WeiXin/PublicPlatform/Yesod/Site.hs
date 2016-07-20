@@ -120,14 +120,15 @@ getMessageR = withWxppSubHandler $ \foundation -> do
 
 postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
-  realHandlerMsg foundation
+  realHandlerMsg foundation (Just $ getWxppAppID foundation)
 
 realHandlerMsg :: forall site master a.
                (Yesod master, RenderMessage site FormMessage, HasWxppToken a,
                HasWxppAppID a, HasAesKeys a, HasWxppProcessor a)
                => a
+               -> Maybe WxppAppID
                -> HandlerT site (HandlerT master IO) Text
-realHandlerMsg foundation = do
+realHandlerMsg foundation m_def_app_id = do
     checkSignature foundation "signature" ""
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
@@ -165,6 +166,7 @@ realHandlerMsg foundation = do
         ime0 <- case m_ime0 of
                   Nothing -> do
                     -- cannot parse incoming XML message
+                    liftIO $ wxppOnParseInMsgError processor m_def_app_id lbs
                     throwError $ "Cannot parse incoming XML"
 
                   Just x -> return x

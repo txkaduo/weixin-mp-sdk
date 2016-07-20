@@ -81,7 +81,7 @@ instance (MonadIO m, MonadLogger m
                 m_ctime     = Just $ wxppInCreatedTime ime
                 m_msg_id    = wxppInMessageID ime
             old_or_msg_record_id <- lift $ insertBy $ WxppInMsgRecord
-                            app_id
+                            (Just app_id)
                             m_to m_from m_ctime m_msg_id
                             (LB.toStrict bs)
                             now
@@ -107,6 +107,23 @@ instance (MonadIO m, MonadLogger m
         lift $ forM_ mids $ \mid -> do
             media_downloader (not is_video) msg_record_id mid
         return (bs, ime)
+
+
+-- | 现在StoreInMsgToDB的preProcInMsg仅当消息xml已被成功解释后才能被调用
+-- 要提供另一个函数特别为xml解释失败时回调
+defaultOnInMsgParseFailed :: forall m. (MonadIO m, MonadBaseControl IO m)
+                          => Maybe WxppAppID
+                          -- ^ 目标app id. 有时候这个id来自消息本身，所以不能保证总是能得到
+                          -> LB.ByteString
+                          -- ^ 原始的消息
+                          -> ReaderT WxppDbBackend m WxppInMsgRecordId
+defaultOnInMsgParseFailed m_app_id lbs = do
+  now <- liftIO getCurrentTime
+  insert $ WxppInMsgRecord
+              m_app_id
+              Nothing Nothing Nothing Nothing
+              (LB.toStrict lbs)
+              now
 
 
 -- | Handler: 更新 WxppOpenIdUnionId 的记录

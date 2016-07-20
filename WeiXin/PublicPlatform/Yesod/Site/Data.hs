@@ -81,7 +81,11 @@ data WxppProcessor = WxppProcessor
 
                             -> String
                             -> IO (Either String ())
+
+  , wxppOnParseInMsgError :: Maybe WxppAppID -> LB.ByteString -> IO ()
+  -- ^ called when incoming message cannot be parsed
   }
+
 
 class HasWxppProcessor a where
   getWxppProcessor :: a -> WxppProcessor
