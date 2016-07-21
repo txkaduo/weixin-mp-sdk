@@ -295,8 +295,11 @@ instance HasWxppOpenID WxppOpenID where
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst
 
+instance HasWxppAppID WxppAppConf where
+  getWxppAppID = wxppConfAppID
+
 instance HasWxppAppID WxppAppConfig where
-  getWxppAppID = wxppConfigAppID
+  getWxppAppID = getWxppAppID . wxppConfigCore
 
 
 class HasWxppSecret a where
@@ -304,7 +307,9 @@ class HasWxppSecret a where
 
 instance HasWxppSecret WxppAppSecret where getWxppSecret = id
 
-instance HasWxppSecret WxppAppConfig where getWxppSecret = wxppConfigAppSecret
+instance HasWxppSecret WxppAppConf where getWxppSecret = wxppConfAppSecret
+
+instance HasWxppSecret WxppAppConfig where getWxppSecret = getWxppSecret . wxppConfigCore
 
 
 class HasSomeWxppCacheBackend a where
@@ -335,9 +340,11 @@ class HasWxppToken a where
 
 instance HasWxppToken Token where getWxppToken = id
 
-instance HasWxppToken WxppAppConfig where
-  getWxppToken = wxppConfigAppToken
+instance HasWxppToken WxppAppConf where
+  getWxppToken = wxppConfAppToken
 
+instance HasWxppToken WxppAppConfig where
+  getWxppToken = getWxppToken . wxppConfigCore
 
 class HasAesKeys a where
   getAesKeys :: a -> [AesKey]
@@ -346,9 +353,12 @@ instance HasAesKeys AesKey where getAesKeys = return
 
 instance HasAesKeys [AesKey] where getAesKeys = id
 
+instance HasAesKeys WxppAppConf where
+  getAesKeys app_config = catMaybes $ wxppConfAppAesKey app_config :
+                                        map Just (wxppConfAppBackupAesKeys app_config)
+
 instance HasAesKeys WxppAppConfig where
-  getAesKeys app_config = catMaybes $ wxppConfigAppAesKey app_config :
-                                        map Just (wxppConfigAppBackupAesKeys app_config)
+  getAesKeys = getAesKeys . wxppConfigCore
 
 
 -- | As a placeholder for testing

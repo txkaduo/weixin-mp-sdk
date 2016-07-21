@@ -76,15 +76,16 @@ instance PathPiece CodeNameOrAppID where
     toPathPiece (CodeNameOrAppID x) = toPathPiece x
     fromPathPiece = fmap CodeNameOrAppID . fromPathPiece
 
-lookupMultiWxppAppConfig2 :: CodeNameOrAppID
-                            -> Map Text WxppAppConfig
-                            -> Maybe WxppAppConfig
+lookupMultiWxppAppConfig2 :: HasWxppAppID cf
+                          => CodeNameOrAppID
+                          -> Map Text cf
+                          -> Maybe cf
 lookupMultiWxppAppConfig2 (CodeNameOrAppID t) the_map =
     Map.lookup t the_map <|> lookup_by_app_id the_map
     where
         lookup_by_app_id = fmap fst . Map.minView .
                                 Map.filterWithKey
-                                    (\_ wac -> wxppConfigAppID wac == WxppAppID t)
+                                    (\_ wac -> getWxppAppID wac == WxppAppID t)
 
 type InMsgHandlerList m = [SomeWxppInMsgHandler m]
 

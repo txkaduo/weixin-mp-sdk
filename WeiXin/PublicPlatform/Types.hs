@@ -515,33 +515,24 @@ instance FromJSON WxppAppSecret where parseJSON = fmap WxppAppSecret . parseJSON
 -- 考虑了第三方平台的需求后，现在对设置性数据作了一点区分：
 -- 有部分只是为了跟微信平台通讯的隐私数据：app id, aes key, secret
 -- 另一部分是我们特定的代码实现方式而产生的数据：data dir
-data WxppAppConfig = WxppAppConfig {
-                    wxppConfigAppID         :: WxppAppID
-                    , wxppConfigAppSecret   :: WxppAppSecret
-                    , wxppConfigAppToken    :: Token
-                    , wxppConfigAppAesKey   :: Maybe AesKey
-                    , wxppConfigAppBackupAesKeys  :: [AesKey]
-                        -- ^ 多个 aes key 是为了过渡时使用
-                        -- 加密时仅使用第一个
-                        -- 解密时则则所有都试一次
-                    , wxppAppConfigDataDir  :: NonEmpty FilePath
-                    }
-                    deriving (Show, Eq)
+data WxppAppConf = WxppAppConf
+  { wxppConfAppID              :: WxppAppID
+  , wxppConfAppSecret        :: WxppAppSecret
+  , wxppConfAppToken         :: Token
+  , wxppConfAppAesKey        :: Maybe AesKey
+  , wxppConfAppBackupAesKeys :: [AesKey]
+  -- ^ 多个 aes key 是为了过渡时使用
+  -- 加密时仅使用第一个
+  -- 解密时则则所有都试一次
+  }
+  deriving (Show, Eq)
 
--- | for backward-compatibility
-wxppAppConfigAppID :: WxppAppConfig -> WxppAppID
-wxppAppConfigAppID = wxppConfigAppID
 
-instance FromJSON WxppAppConfig where
-    parseJSON = withObject "WxppAppConfig" $ \obj -> do
+instance FromJSON WxppAppConf where
+    parseJSON = withObject "WxppAppConf" $ \obj -> do
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     app_token <- fmap Token $ obj .: "token"
-                    data_dirs <- map T.unpack <$> obj .: "data-dirs"
-                    data_dirs' <- case nonEmpty data_dirs of
-                                    Nothing -> fail "data-dirs must not be empty"
-                                    Just x -> return x
-
                     aes_key_lst <- obj .: "aes-key"
                                     >>= return . filter (not . T.null) . map T.strip
                                     >>= mapM parseAesKeyFromText
@@ -550,10 +541,32 @@ instance FromJSON WxppAppConfig where
                                     []      -> (Nothing, [])
                                     (x:xs)  -> (Just x, xs)
 
-                    return $ WxppAppConfig app_id secret app_token
+                    return $ WxppAppConf app_id secret app_token
                                 ak1
                                 backup_aks
-                                data_dirs'
+
+
+data WxppAppConfig = WxppAppConfig
+  { wxppConfigCore :: WxppAppConf
+  , wxppAppConfigDataDir  :: NonEmpty FilePath
+  }
+  deriving (Show, Eq)
+
+
+instance FromJSON WxppAppConfig where
+    parseJSON = withObject "WxppAppConfig" $ \obj -> do
+                    conf <- parseJSON $ toJSON obj
+                    data_dirs <- map T.unpack <$> obj .: "data-dirs"
+                    data_dirs' <- case nonEmpty data_dirs of
+                                    Nothing -> fail "data-dirs must not be empty"
+                                    Just x -> return x
+
+
+                    return $ WxppAppConfig conf data_dirs'
+
+-- | for backward-compatibility
+wxppAppConfigAppID :: WxppAppConfig -> WxppAppID
+wxppAppConfigAppID = wxppConfAppID . wxppConfigCore
 
 
 -- | 见高级群发接口文档
