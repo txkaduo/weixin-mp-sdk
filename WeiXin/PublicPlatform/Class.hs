@@ -299,6 +299,14 @@ instance HasWxppAppID WxppAppConfig where
   getWxppAppID = wxppConfigAppID
 
 
+class HasWxppSecret a where
+  getWxppSecret :: a -> WxppAppSecret
+
+instance HasWxppSecret WxppAppSecret where getWxppSecret = id
+
+instance HasWxppSecret WxppAppConfig where getWxppSecret = wxppConfigAppSecret
+
+
 class HasSomeWxppCacheBackend a where
     getSomeWxppCacheBackend :: a -> SomeWxppCacheClient
 
