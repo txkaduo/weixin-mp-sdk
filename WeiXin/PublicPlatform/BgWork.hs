@@ -16,16 +16,17 @@ import Yesod.Helpers.Utils                  (foreverLogExc)
 
 -- | 检查最新的 access token 是否已接近过期
 -- 如是，则向服务器请求更新
-refreshAccessTokenIfNeeded :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
-                           => WxppAppConfig
+refreshAccessTokenIfNeeded :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c
+                              , HasWxppAppID cf, HasWxppSecret cf)
+                           => cf
                            -> c
                            -> NominalDiffTime
                            -> m ()
 refreshAccessTokenIfNeeded wac cache dt = do
     refreshAccessTokenIfNeeded' cache app_id secret dt
     where
-        app_id = wxppConfigAppID wac
-        secret = wxppConfigAppSecret wac
+        app_id = getWxppAppID wac
+        secret = getWxppSecret wac
 
 
 refreshAccessTokenIfNeeded' :: ( WxppApiMonad env m, MonadCatch m
@@ -46,11 +47,12 @@ refreshAccessTokenIfNeeded' cache app_id secret dt = do
 
 -- | infinite loop to refresh access token
 -- Create a backgroup thread to call this, so that access token can be keep fresh.
-loopRefreshAccessToken :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+loopRefreshAccessToken :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c
+                         , HasWxppAppID cf, HasWxppSecret cf)
                        => IO Bool  -- ^ This function should be a blocking op,
                                    -- return True if the infinite should be aborted.
                        -> Int      -- ^ interval between successive checking (in seconds)
-                       -> WxppAppConfig
+                       -> cf
                        -> c
                        -> NominalDiffTime
                        -> m ()
@@ -58,11 +60,12 @@ loopRefreshAccessToken chk_abort intv wac cache dt = do
     loopRunBgJob chk_abort intv $ refreshAccessTokenIfNeeded wac cache dt
 
 -- | like loopRefreshAccessToken, but for a list of Weixin App
-loopRefreshAccessTokens :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c)
+loopRefreshAccessTokens :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenUpdater c, WxppCacheTokenReader c
+                           , HasWxppAppID cf, HasWxppSecret cf)
                         => IO Bool  -- ^ This function should be a blocking op,
                                     -- return True if the infinite should be aborted.
                         -> Int      -- ^ interval between successive checking (in seconds)
-                        -> m [WxppAppConfig]
+                        -> m [cf]
                         -> c
                         -> NominalDiffTime
                         -> m ()

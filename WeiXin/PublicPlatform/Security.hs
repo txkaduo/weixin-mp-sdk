@@ -51,13 +51,13 @@ instance FromJSON AccessTokenResp where
 
 
 -- | Refresh/update access token from WeiXin server.
-refreshAccessToken :: (WxppApiMonad env m)
-                   => WxppAppConfig
+refreshAccessToken :: (WxppApiMonad env m, HasWxppAppID cf, HasWxppSecret cf)
+                   => cf
                    -> m AccessTokenResp
 refreshAccessToken wac = refreshAccessToken' app_id app_secret
     where
-        app_id      = wxppAppConfigAppID wac
-        app_secret  = wxppConfigAppSecret wac
+        app_id      = getWxppAppID wac
+        app_secret  = getWxppSecret wac
 
 refreshAccessToken' :: ( WxppApiMonad env m )
                     => WxppAppID
