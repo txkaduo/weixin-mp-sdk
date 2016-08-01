@@ -48,19 +48,23 @@ aesKeyField = checkMMap conv conv_back textField
         conv_back = fromString . C8.unpack . B64.encode . toBytes . unAesKey
 
 
--- | 从字典中找出形如 "wxpp~xxxx" 的字段，每个那样的字段解释出一个 WxppAppConfig
-parseMultWxppAppConfig :: Object -> Parser (Map WxppAppID WxppAppConfig)
-parseMultWxppAppConfig obj = do
+-- | 从字典中找出形如 "wxpp~xxxx" 的字段，每个那样的字段解释出一个 WxppAppConfig/WxppAppConf
+parseMultiWxppAppConfig :: (HasWxppAppID cf, FromJSON cf)
+                        => Object
+                        -> Parser (Map WxppAppID cf)
+parseMultiWxppAppConfig obj = do
     liftM (Map.fromList . catMaybes) $
         forM (HM.toList obj) $ \(k, v) -> do
             if T.isPrefixOf "wxpp~" k
-                then Just . (wxppAppConfigAppID &&& id) <$> parseJSON v
+                then Just . (getWxppAppID &&& id) <$> parseJSON v
                 else return Nothing
 
--- | parseMultWxppAppConfig 相似
+-- | parseMultiWxppAppConfig 相似
 -- 但使用这个解释得到的字典是 wxpp~xxx 中的 xxx 作为键值（而不是app id）
 -- 'xxx' 部分可以作为外部标识app的字串（例如用在 url上）
-parseMultiWxppAppConfig2 :: Object -> Parser (Map Text WxppAppConfig)
+parseMultiWxppAppConfig2 :: (FromJSON cf)
+                         => Object
+                         -> Parser (Map Text cf)
 parseMultiWxppAppConfig2 obj = do
     liftM (Map.fromList . catMaybes) $
         forM (HM.toList obj) $ \(k, v) -> do
