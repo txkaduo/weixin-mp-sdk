@@ -134,7 +134,7 @@ liftBaseOpDiscard f g = liftBaseWith $ \runInBase -> f $ void . runInBase . g
 
 -- | 不断地监护菜单配置文件变化，自动修改微信的菜单
 -- 不返回，直至 block_until_exit 参数的计算完成
-wxppWatchMenuYaml :: (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
+wxppWatchMenuYaml :: (WxppApiMonad env m, MonadMask m, MonadBaseControl IO m)
                   => m (Maybe AccessToken)
                   -> IO ()        -- ^ bloack until exit
                   -> NonEmpty FilePath
@@ -230,7 +230,7 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
 
 
 -- | like wxppWatchMenuYaml, but watch for many weixin app all at once
-wxppWatchMenuYamlOnSignal :: forall env m. (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
+wxppWatchMenuYamlOnSignal :: forall env m. (WxppApiMonad env m, MonadMask m, MonadBaseControl IO m)
                           => IO ()        -- ^ bloack until exit
                           -> FilePath
                           -> (WxppAppID -> IO (Maybe AccessToken))

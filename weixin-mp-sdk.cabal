@@ -93,7 +93,7 @@ library
                      , classy-prelude >= 0.12.7
                      , classy-prelude-yesod
                      , yesod
-                     , persistent >= 2.0 && < 2.3
+                     , persistent >= 2.0 && < 2.6
                      , yesod-core
                      , yesod-form
                      , shakespeare

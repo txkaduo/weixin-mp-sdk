@@ -336,7 +336,13 @@ toWxppCachedUserInfoExt app_id created_time
 
 
 -- | Read history from WxppInMsgRecord table, generate WxppInMsgEntity
-wxppSourceInMsgEntityFromHistory :: (MonadReader env m, MonadResource m, HasPersistBackend env SqlBackend)
+wxppSourceInMsgEntityFromHistory :: ( MonadResource m
+#if MIN_VERSION_persistent(2, 5, 0)
+                                    , MonadReader backend m, HasPersistBackend backend, BaseBackend backend ~ SqlBackend
+#else
+                                    , MonadReader env m, HasPersistBackend env SqlBackend
+#endif
+                                    )
                                  => [Filter WxppInMsgRecord]
                                  -> [SelectOpt WxppInMsgRecord]
                                  -> Source m (Either String (UTCTime, (WxppAppID, WxppInMsgEntity)))

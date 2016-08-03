@@ -1,10 +1,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Media
     ( module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Class
     ) where
 
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+import ClassyPrelude
+#else
 import ClassyPrelude hiding (catch)
+#endif
+
 import qualified Data.Text                  as T
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
@@ -13,7 +19,9 @@ import Control.Monad.Logger
 import Control.Monad.Reader                 (asks)
 import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Catch                  (catch, catches, Handler(..))
+#endif
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:))

@@ -2,6 +2,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Yesod.Site
     ( module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
@@ -18,7 +19,9 @@ import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
 import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Concurrent.Async             (async)
+#endif
 import Control.Concurrent                   (forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )

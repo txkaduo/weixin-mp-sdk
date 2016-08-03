@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.WS where
 
 import ClassyPrelude hiding (catch)
@@ -7,7 +8,11 @@ import Control.Monad.Except
 import Control.Monad.Logger
 import Control.Lens hiding ((.=))
 import qualified Data.ByteString.Lazy       as LB
+
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Catch                  ( Handler(..), catches )
+#endif
+
 --import Control.Monad.Trans.Control          (MonadBaseControl)
 
 import Network.HTTP.Client                  (HttpException(..))

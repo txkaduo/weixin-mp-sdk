@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module  WeiXin.PublicPlatform.Utils where
 
 import ClassyPrelude
@@ -29,7 +30,9 @@ import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, prettyPrintParseException)
 import qualified Data.Yaml                  as Yaml
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Catch                  ( Handler(..) )
+#endif
 import Data.List.NonEmpty                   as LNE hiding (length, (!!))
 
 import Crypto.Hash.TX.Utils                 (MD5Hash(..), md5HashBS)
@@ -245,8 +248,15 @@ parseMsgErrorToString :: Either YamlFileParseException a -> Either String a
 parseMsgErrorToString (Left err)    = Left $ "failed to parse from file: " ++ show err
 parseMsgErrorToString (Right x)     = Right x
 
-unifyExcHandler :: (Show e, Monad m) => Handler m (Either e a) -> Handler m (Either String a)
-unifyExcHandler = fmap $ either (Left . show) Right
+unifyExcHandler :: (Show e, Monad m)
+                => Handler m (Either e a)
+                -> Handler m (Either String a)
+unifyExcHandler =
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+  \(Handler f) -> Handler $ fmap (either (Left . show) Right) . f
+#else
+  fmap $ either (Left . show) Right
+#endif
 
 
 -- | 生成 JuicyPixels Image 对象
