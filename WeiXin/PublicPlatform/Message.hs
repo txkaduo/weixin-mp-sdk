@@ -434,8 +434,8 @@ simpleParseDec = fmap fst . listToMaybe . filter (null . snd) . readDec
 simpleParseDecT :: (Eq a, Num a) => Text -> Maybe a
 simpleParseDecT = simpleParseDec . T.unpack
 
-simpleParseFloat :: (Eq a, RealFrac a) => String -> Maybe a
+simpleParseFloat :: (RealFrac a) => String -> Maybe a
 simpleParseFloat = fmap fst . listToMaybe . filter ((== "") . snd) . readFloat
 
-simpleParseFloatT :: (Eq a, RealFrac a) => Text -> Maybe a
+simpleParseFloatT :: (RealFrac a) => Text -> Maybe a
 simpleParseFloatT = simpleParseFloat . T.unpack

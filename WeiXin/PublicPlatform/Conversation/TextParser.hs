@@ -58,7 +58,7 @@ generalParseSave = do
                 else mzero
 
 
-parsePossibleFullWithDecimalNumber :: (Integral a, Read a) => CharParser a
+parsePossibleFullWithDecimalNumber :: (Read a) => CharParser a
 parsePossibleFullWithDecimalNumber = do
     t <- many1 $ satisfy $ ((== DecimalNumber) . generalCategory)
     let t' = map toHalfWidthDigit t

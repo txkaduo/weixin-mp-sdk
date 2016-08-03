@@ -857,7 +857,7 @@ instance JsonConfigable WxppMatchedKeywordArticles where
 
 type instance WxppInMsgProcessResult WxppMatchedKeywordArticles = WxppInMsgHandlerResult
 
-instance (Monad m, Functor m, MonadLogger m, MonadIO m) => IsWxppInMsgProcessor m WxppMatchedKeywordArticles
+instance (Monad m, Functor m, MonadIO m) => IsWxppInMsgProcessor m WxppMatchedKeywordArticles
     where
     processInMsg (WxppMatchedKeywordArticles msg_dirs is_primary map_file) _cache _bs m_ime = runExceptT $ do
         let m_keyword = do
@@ -1143,7 +1143,7 @@ instance JsonConfigable (WxppInMsgParseScanCodePush m a) where
 
 type instance WxppInMsgProcessResult (WxppInMsgParseScanCodePush m a) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m) =>
     IsWxppInMsgProcessor m (WxppInMsgParseScanCodePush m a)
     where
 
@@ -1189,7 +1189,7 @@ instance JsonConfigable (WxppInMsgParseScanCodeWaitMsg m a) where
 
 type instance WxppInMsgProcessResult (WxppInMsgParseScanCodeWaitMsg m a) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m) =>
     IsWxppInMsgProcessor m (WxppInMsgParseScanCodeWaitMsg m a)
     where
 
@@ -1222,7 +1222,7 @@ instance IsWxppInMsgProcessor m (WxppInMsgProcessorFunc m h) where
 -- 结果中不包含 WxppInMsgParseScanCodePush, WxppInMsgParseScanCodeWaitMsg
 -- 因为不想传入太多不相关的参数
 allBasicWxppInMsgHandlerPrototypes ::
-    ( WxppApiMonad env m, Functor m, MonadCatch m ) =>
+    ( WxppApiMonad env m, MonadCatch m ) =>
     WxppAppID
     -> NonEmpty FilePath
     -> MVar ForwardUrlMap
@@ -1243,7 +1243,7 @@ allBasicWxppInMsgHandlerPrototypes app_id msg_dirs mvar =
 
 -- | 用于解释 SomeWxppInMsgPredictor 的类型信息
 allBasicWxppInMsgPredictorPrototypes ::
-    ( WxppApiMonad env m, MonadCatch m ) =>
+    ( WxppApiMonad env m ) =>
     [WxppInMsgPredictorPrototype m]
 allBasicWxppInMsgPredictorPrototypes =
     [ WxppInMsgProcessorPrototype (Proxy :: Proxy WxppInMsgMatchOneOf) ()

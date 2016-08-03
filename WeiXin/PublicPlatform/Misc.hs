@@ -264,7 +264,7 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wx
 
 
 defaultInMsgProcMiddlewares :: forall env m.
-    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
+    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m) =>
     WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())

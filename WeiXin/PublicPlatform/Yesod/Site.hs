@@ -69,19 +69,16 @@ import WeiXin.PublicPlatform.OAuth
 import WeiXin.PublicPlatform.Utils
 
 
-withWxppSubHandler :: ( MonadHandler m, HandlerSite m ~ MaybeWxppSub
-                    , MonadBaseControl IO m
-                    )
-                    => (WxppSub -> m a)
-                    -> m a
+withWxppSubHandler :: ( MonadHandler m, HandlerSite m ~ MaybeWxppSub)
+                   => (WxppSub -> m a)
+                   -> m a
 withWxppSubHandler f = do
     getYesod
         >>= liftIO . unMaybeWxppSub
         >>= maybe notFound return
         >>= f
 
-checkSignature' :: Yesod master =>
-    WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) ()
+checkSignature' :: WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) ()
 checkSignature' foundation = do
 
     let token = wxppConfigAppToken $ wxppSubAppConfig $ foundation
@@ -110,14 +107,14 @@ withWxppSubLogging foundation h = do
     wxppSubRunLoggingT foundation $ LoggingT $ \log_func -> do
         withLogFuncInHandlerT log_func h
 
-getMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
+getMessageR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
 getMessageR = withWxppSubHandler $ \foundation -> do
     withWxppSubLogging foundation $ do
         checkSignature' foundation
         (httpErrorWhenParamError =<<) $ do
             reqGetParamE' "echostr"
 
-postMessageR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
+postMessageR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
     checkSignature' foundation
     m_enc_type <- lookupGetParam "encrypt_type"
@@ -256,9 +253,9 @@ postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation
 -- | 生成随机字串作为 oauth 的state参数之用
 -- 这是按官方文档的思路，用于防 csrf
 -- 所生成的随机字串会放在 sessionKeyWxppOAuthState 会话变量里
-wxppOAuthMakeRandomState :: (MonadHandler m, MonadIO m)
-                        => WxppAppID
-                        -> m Text
+wxppOAuthMakeRandomState :: (MonadHandler m)
+                         => WxppAppID
+                         -> m Text
 wxppOAuthMakeRandomState app_id = do
     m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
     case m_oauth_random_st of
@@ -271,7 +268,7 @@ wxppOAuthMakeRandomState app_id = do
             return random_state
 
 
-wxppOAuthLoginRedirectUrl :: (MonadHandler m, MonadIO m)
+wxppOAuthLoginRedirectUrl :: (MonadHandler m)
                         => (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                         -> WxppAppID
                         -> OAuthScope
@@ -400,7 +397,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
 -- | 比较通用的处理从 oauth 重定向回来时的Handler的逻辑
 -- 如果用户通过授权，则返回 open id 及 oauth token 相关信息
-wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, RenderMessage (HandlerSite m) FormMessage, MonadLogger m, MonadCatch m)
+wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, RenderMessage (HandlerSite m) FormMessage, MonadLogger m)
                               => SomeWxppApiBroker
                               -> WxppAppID
                               -> m (Maybe (WxppOpenID, OAuthTokenInfo))
@@ -440,8 +437,7 @@ wxppHandlerOAuthReturnGetInfo broker app_id = do
 
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数
 -- 否则重定向至微信授权页面，待用户授权成功后再重定向回到当前页面
-wxppOAuthHandler :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
-                , WxppCacheTokenReader c, WxppCacheTemp c)
+wxppOAuthHandler :: (MonadHandler m, WxppCacheTemp c)
                 => c
                 -> (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                 -> WxppAppID
@@ -461,8 +457,7 @@ wxppOAuthHandler cache render_url app_id scope f = do
         Just atk_p -> f atk_p
 
 
-wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, MonadIO m, MonadBaseControl IO m
-                                    , WxppCacheTokenReader c, WxppCacheTemp c)
+wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, WxppCacheTemp c)
                                     => c
                                     -> WxppAppID
                                     -> OAuthScope
@@ -479,7 +474,7 @@ wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
                 Just atk_info   -> return $ Just (packOAuthTokenInfo app_id open_id atk_info)
 
 -- | 演示/测试微信 oauth 授权的页面
-getOAuthTestR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Text
+getOAuthTestR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
 getOAuthTestR = withWxppSubHandler $ \sub -> do
     let wac    = wxppSubAppConfig sub
         app_id = wxppConfigAppID wac
@@ -489,7 +484,7 @@ getOAuthTestR = withWxppSubHandler $ \sub -> do
         Just open_id -> return $ "Your open id is: " <> unWxppOpenID open_id
 
 
-checkWaiReqThen :: Yesod master =>
+checkWaiReqThen ::
     (WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) a)
     -> HandlerT MaybeWxppSub (HandlerT master IO) a
 checkWaiReqThen f = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
@@ -499,19 +494,19 @@ checkWaiReqThen f = withWxppSubHandler $ \foundation -> withWxppSubLogging found
         else permissionDenied "denied by security check"
 
 
-mimicInvalidAppID :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) a
+mimicInvalidAppID :: HandlerT MaybeWxppSub (HandlerT master IO) a
 mimicInvalidAppID = sendResponse $ toJSON $
                         WxppAppError
                             (WxppErrorX $ Right WxppInvalidAppID)
                             "invalid app id"
 
-mimicServerBusy :: Yesod master => Text -> HandlerT MaybeWxppSub (HandlerT master IO) a
+mimicServerBusy :: Text -> HandlerT MaybeWxppSub (HandlerT master IO) a
 mimicServerBusy s = sendResponse $ toJSON $
                         WxppAppError
                             (WxppErrorX $ Right WxppServerBusy)
                             s
 
-forwardWsResult :: (Yesod master, ToJSON a) =>
+forwardWsResult :: (ToJSON a) =>
     String -> Either WxppWsCallError a -> HandlerT MaybeWxppSub (HandlerT master IO) Value
 forwardWsResult op_name res = do
     case res of
@@ -529,7 +524,7 @@ forwardWsResult op_name res = do
 -- | 提供 access-token
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 AccessToken
-getGetAccessTokenR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
+getGetAccessTokenR :: HandlerT MaybeWxppSub (HandlerT master IO) Value
 getGetAccessTokenR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     liftM toJSON $ getAccessTokenSubHandler' foundation
@@ -538,7 +533,7 @@ getGetAccessTokenR = checkWaiReqThen $ \foundation -> do
 -- | 找 OpenID 对应的 UnionID
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 Maybe WxppUnionID
-getGetUnionIDR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+getGetUnionIDR :: WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
 getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     let sm_mode = wxppSubMakeupUnionID $ wxppSubOptions foundation
@@ -554,7 +549,7 @@ getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
 
 
 -- | 初始化 WxppUserCachedInfo 表的数据
-getInitCachedUsersR :: Yesod master =>
+getInitCachedUsersR ::
     HandlerT MaybeWxppSub (HandlerT master IO) Value
 getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
@@ -570,7 +565,7 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
 
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
 -- 逻辑返回值是 EndUserQueryResult
-getQueryUserInfoR :: Yesod master => WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+getQueryUserInfoR :: WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
 getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     atk <- getAccessTokenSubHandler' foundation
@@ -588,7 +583,7 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
 -- | 模仿创建永久场景的二维码
 -- 行为接近微信平台的接口，区别是
 -- 输入仅仅是一个 WxppScene
-postCreateQrCodePersistR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Value
+postCreateQrCodePersistR :: HandlerT MaybeWxppSub (HandlerT master IO) Value
 postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
     let api_env = wxppSubApiEnv foundation
     alreadyExpired
@@ -610,7 +605,7 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
 
 -- | 返回一个二维码图像
 -- 其内容是 WxppScene 用 JSON 格式表示之后的字节流
-getShowSimulatedQRCodeR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) TypedContent
+getShowSimulatedQRCodeR :: HandlerT MaybeWxppSub (HandlerT master IO) TypedContent
 getShowSimulatedQRCodeR = do
     ticket_s <- lookupGetParam "ticket"
                 >>= maybe (httpErrorRetryWithValidParams ("missing ticket" :: Text)) return
@@ -633,7 +628,7 @@ getShowSimulatedQRCodeR = do
 
 
 -- | 返回与输入的 union id 匹配的所有 open id 及 相应的 app_id
-getLookupOpenIDByUnionIDR :: Yesod master =>
+getLookupOpenIDByUnionIDR ::
     WxppUnionID
     -> HandlerT WxppSubNoApp (HandlerT master IO) Value
 getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ \foundation -> do
@@ -646,13 +641,13 @@ instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
         yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
 
 
-instance Yesod master => YesodSubDispatch WxppSubNoApp (HandlerT master IO)
+instance YesodSubDispatch WxppSubNoApp (HandlerT master IO)
     where
         yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppSubNoApp)
 
 --------------------------------------------------------------------------------
 
-checkWaiReqThenNA :: Yesod master =>
+checkWaiReqThenNA ::
     (WxppSubNoApp -> HandlerT WxppSubNoApp (HandlerT master IO) a)
     -> HandlerT WxppSubNoApp (HandlerT master IO) a
 checkWaiReqThenNA f = do
@@ -664,7 +659,7 @@ checkWaiReqThenNA f = do
                 then f foundation
                 else permissionDenied "denied by security check"
 
-decodePostBodyAsYaml :: (Yesod master, FromJSON a) =>
+decodePostBodyAsYaml :: (FromJSON a) =>
     HandlerT MaybeWxppSub (HandlerT master IO) a
 decodePostBodyAsYaml = do
     body <- rawRequestBody $$ sinkLbs
@@ -678,7 +673,7 @@ decodePostBodyAsYaml = do
         Right x -> return x
 
 
-getAccessTokenSubHandler' :: Yesod master =>
+getAccessTokenSubHandler' ::
     WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
 getAccessTokenSubHandler' foundation = do
     let cache = wxppSubCacheBackend foundation

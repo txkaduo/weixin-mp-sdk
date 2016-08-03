@@ -60,7 +60,6 @@ instance JsonConfigable (StoreInMsgToDB m) where
 
 instance (MonadIO m, MonadLogger m
     , MonadBaseControl IO m
-    , MonadThrow m
     ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
 
     processInMsg (StoreInMsgToDB {}) _cache _bs _m_ime = do
@@ -71,7 +70,6 @@ instance (MonadIO m, MonadLogger m
 
 instance (MonadIO m, MonadLogger m
     , MonadBaseControl IO m
-    , MonadThrow m
     ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
     preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) _cache bs m_ime = runMaybeT $ do
         now <- liftIO getCurrentTime
@@ -129,9 +127,7 @@ instance JsonConfigable CacheAppOpenIdToUnionId where
 
 
 instance (MonadIO m
-    , MonadCatch m
     , MonadLogger m
-    , Functor m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcessor m CacheAppOpenIdToUnionId where
 
@@ -206,9 +202,7 @@ instance JsonConfigable TrackHandledInMsg where
 
 
 instance (MonadIO m
-    , MonadCatch m
     , MonadLogger m
-    , Functor m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m TrackHandledInMsg where
 

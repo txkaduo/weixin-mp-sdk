@@ -310,7 +310,7 @@ instance ToJSON WxppDurableCount where
                 , "news_count"  .= wxppDurableCountNews x
                 ]
 
-wxppCountDurableMedia :: (WxppApiMonad env m, MonadCatch m)
+wxppCountDurableMedia :: (WxppApiMonad env m)
                       => AccessToken
                       -> m WxppDurableCount
 wxppCountDurableMedia (AccessToken { accessTokenData = atk }) = do
@@ -363,7 +363,7 @@ instance ToJSON WxppBatchGetDurableMediaItem where
                     ]
 
 -- | 调用批量取多媒体类型的永久素材的接口
-wxppBatchGetDurableMedia :: (WxppApiMonad env m, MonadCatch m)
+wxppBatchGetDurableMedia :: (WxppApiMonad env m)
                          => AccessToken
                          -> WxppMediaType
                          -> Int      -- ^ limit
@@ -410,7 +410,7 @@ instance ToJSON WxppBatchGetDurableNewsItem where
                     ]
 
 -- | 调用批量取图文消息类型的永久素材的接口
-wxppBatchGetDurableNews :: (WxppApiMonad env m, MonadCatch m)
+wxppBatchGetDurableNews :: (WxppApiMonad env m)
                         => AccessToken
                         -> Int      -- ^ limit
                         -> Int      -- ^ offset
@@ -431,7 +431,7 @@ wxppBatchGetDurableNews (AccessToken { accessTokenData = atk }) limit' offset' =
         offset = max 0 $ offset'
 
 -- | 把 limit/offset 风格的接口变成 conduit 风格：取全部数据
-wxppBatchGetDurableToSrc' :: (WxppApiMonad env m, MonadCatch m)
+wxppBatchGetDurableToSrc' :: (WxppApiMonad env m)
                           => (Int
                                  -> m (WxppBatchGetDurableResult a)
                              )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
@@ -457,7 +457,7 @@ wxppBatchGetDurableToSrc get_by_offset =
     wxppBatchGetDurableToSrc' get_by_offset =$ CL.concatMap wxppBatchGetDurableResultItems
 
 -- | 修改一个图文类型的永久素材: 只能修改其中一个文章
-wxppReplaceArticleOfDurableNews :: (WxppApiMonad env m, MonadCatch m )
+wxppReplaceArticleOfDurableNews :: (WxppApiMonad env m)
                                 => AccessToken
                                 -> WxppDurableMediaID
                                 -> Int      -- ^ index

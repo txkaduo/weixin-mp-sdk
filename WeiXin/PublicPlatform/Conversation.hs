@@ -121,10 +121,10 @@ mkWxTalkerMonad f = do
     env <- ask
     lift $ ExceptT $ f env
 
-runWxTalkerMonad :: Monad m => WxTalkerMonad r m a -> r -> m (Either String a)
+runWxTalkerMonad :: WxTalkerMonad r m a -> r -> m (Either String a)
 runWxTalkerMonad f env = runExceptT $ runReaderT f env
 
-runWxTalkerMonadE :: Monad m => WxTalkerMonad r m a -> r -> ExceptT String m a
+runWxTalkerMonadE :: WxTalkerMonad r m a -> r -> ExceptT String m a
 runWxTalkerMonadE = runReaderT
 
 -- | 支持更多操作的接口: 例如可以使用 IO 之类
@@ -337,7 +337,7 @@ ioCachedGetSet get_f set_f = do
 newtype WrapTalkerState a = WrapTalkerState a
                             deriving (Eq)
 
-instance (Eq a, TalkerState a, Monad m) => WxTalkerState r m (WrapTalkerState a) where
+instance (TalkerState a, Monad m) => WxTalkerState r m (WrapTalkerState a) where
     wxTalkPromptToInput (WrapTalkerState s) = mkWxTalkerMonad $ \_ -> runExceptT $ do
         let (m_reply, new_s) = talkPromptNext s
         return $ (maybe [] (return . WxppOutMsgText) m_reply, WrapTalkerState new_s)

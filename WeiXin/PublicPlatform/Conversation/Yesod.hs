@@ -43,7 +43,7 @@ saveWxppTalkState get_state_type state_id x = mkWxTalkerMonad $ \env -> runExcep
 
 
 abortCurrentWxppTalkState :: forall m.
-    (MonadIO m, MonadLogger m) =>
+    (MonadIO m) =>
     WxppAppID
     -> WxppOpenID
     -> ReaderT SqlBackend m ()

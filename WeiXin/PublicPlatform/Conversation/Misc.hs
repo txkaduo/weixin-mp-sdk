@@ -95,7 +95,6 @@ instance HasStateType a => HasStateType (ConfirmState a) where
 
 instance
     ( LoadMsgMonad m, LoadMsgEnv r
-    , Eq a
     , HasConfirmContent r m a
     , ToCancelledMessage r m a
     ) =>
@@ -240,7 +239,7 @@ parseInputThenOrLoadErrorMsgT prep err_msg_file p ime f = do
 -- | 类似于 parseInputOrLoadErrorMsg，但加载消息的函数由调用者提供（而不仅仅是一个路径）
 -- 输入的消息类型变成 Text，不用处理非文字信息的情况
 parseInputOrLoadErrorMsg2 :: forall a m.
-    (MonadLogger m, Monad m) =>
+    (MonadLogger m) =>
     (Text -> Text)      -- ^ function to apply before parsing
     -> m (Either String WxppOutMsg)     -- ^ function to load error message
     -> ParsecT String () Identity a     -- ^ the text parser
@@ -267,7 +266,7 @@ parseInputOrLoadErrorMsg2 prep load_err_msg_file p t = do
 -- | 类似于 parseInputThenOrLoadErrorMsg，但加载消息的函数由调用者提供（而不仅仅是一个路径）
 -- 输入的消息类型变成 Text，不用处理非文字信息的情况
 parseInputThenOrLoadErrorMsg2 :: forall a m s.
-    (Monad m, MonadLogger m) =>
+    (MonadLogger m) =>
     (Text -> Text)      -- ^ function to apply before parsing
     -> m (Either String WxppOutMsg)     -- ^ function to load error message
     -> ParsecT String () Identity a     -- ^ the text parser
@@ -285,7 +284,7 @@ parseInputThenOrLoadErrorMsg2 prep load_err_msg_file p t old_st f = do
 -- | 类似于 parseInputThenOrLoadErrorMsgT，但加载消息的函数由调用者提供（而不仅仅是一个路径）
 -- 输入的消息类型变成 Text，不用处理非文字信息的情况
 parseInputThenOrLoadErrorMsgT2 :: forall a m r s.
-    (Monad m, MonadLogger m) =>
+    (MonadLogger m) =>
     (Text -> Text)      -- ^ function to apply before parsing
     -> m (Either String WxppOutMsg)     -- ^ function to load error message
     -> ParsecT String () Identity a     -- ^ the text parser
