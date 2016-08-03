@@ -303,13 +303,17 @@ logWxppWsExcAndRetryLoop op_name f = go
         go = logWxppWsExcThen op_name (const $ liftIO (threadDelay 5000000) >> go) (const $ return ()) f
 
 
-logWxppWsExcThen :: (MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
-    String
-    -> (SomeException -> m a)
-                        -- ^ retry when error
-    -> (b -> m a)       -- ^ next to do when ok
-    -> m b              -- ^ original op
-    -> m a
+logWxppWsExcThen :: (MonadLogger m, MonadCatch m
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+                    , MonadBaseControl IO m
+#endif
+                    )
+                 => String
+                 -> (SomeException -> m a)
+                                    -- ^ retry when error
+                 -> (b -> m a)       -- ^ next to do when ok
+                 -> m b              -- ^ original op
+                 -> m a
 logWxppWsExcThen op_name on_err on_ok f = do
     err_or <- tryAny $ tryWxppWsResult f
     case err_or of
