@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Misc where
 
 import ClassyPrelude hiding (try)
@@ -12,7 +13,9 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
 import Control.DeepSeq                      (($!!))
-import Control.Monad.Trans.Resource
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+import Control.Monad.Trans.Control          (MonadBaseControl)
+#endif
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Data.Char
