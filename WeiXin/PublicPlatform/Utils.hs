@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module  WeiXin.PublicPlatform.Utils where
 
 import ClassyPrelude
@@ -29,7 +30,9 @@ import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, prettyPrintParseException)
 import qualified Data.Yaml                  as Yaml
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Catch                  ( Handler(..) )
+#endif
 import Data.List.NonEmpty                   as LNE hiding (length, (!!), filter)
 import Numeric                              (readDec, readFloat)
 
@@ -138,13 +141,13 @@ mkDelayedYamlLoader fp = do
                 go (LNE.tail base_dir_list) first_err
 
 -- | May throw IOError
-runDelayedYamlLoaderL_IOE :: (MonadIO m, FromJSON a) =>
+runDelayedYamlLoaderL_IOE :: (MonadIO m) =>
     NonEmpty FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m (Either YamlFileParseException a)
 runDelayedYamlLoaderL_IOE base_dirs f = liftIO $ runReaderT f base_dirs
 
-runDelayedYamlLoaderL :: (MonadIO m, FromJSON a) =>
+runDelayedYamlLoaderL :: (MonadIO m) =>
     NonEmpty FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m (Either String a)
@@ -154,14 +157,14 @@ runDelayedYamlLoaderL base_dir_list get_ext = liftIO $ do
         Left err    -> return $ Left $ "failed to load from file: " ++ show err
         Right x     -> return $ parseMsgErrorToString x
 
-runDelayedYamlLoader :: (MonadIO m, FromJSON a) =>
+runDelayedYamlLoader :: (MonadIO m) =>
     FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m (Either String a)
 runDelayedYamlLoader base_dir = runDelayedYamlLoaderL (base_dir :| [])
 
 -- | 这是会抛异常的版本
-runDelayedYamlLoaderExcL :: (MonadIO m, FromJSON a, MonadThrow m) =>
+runDelayedYamlLoaderExcL :: (MonadIO m) =>
     NonEmpty FilePath        -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m a
@@ -169,7 +172,7 @@ runDelayedYamlLoaderExcL base_dir_list get_ext = liftIO $
     runReaderT get_ext base_dir_list
         >>= either throwM return
 
-runDelayedYamlLoaderExc :: (MonadIO m, FromJSON a, MonadThrow m) =>
+runDelayedYamlLoaderExc :: (MonadIO m) =>
     FilePath    -- ^ 消息文件存放目录
     -> DelayedYamlLoader a
     -> m a
@@ -222,7 +225,7 @@ mkDelayedCachedYamlLoader fp base_dir_list = do
 
 
 -- | May throw IOError
-runDelayedCachedYamlLoaderL_IOE :: ( MonadIO m, FromJSON a, CachedYamlInfoState s)
+runDelayedCachedYamlLoaderL_IOE :: ( MonadIO m)
                                 => s
                                 -> NonEmpty FilePath    -- ^ 消息文件存放目录
                                 -> DelayedCachedYamlLoader s a
@@ -230,7 +233,7 @@ runDelayedCachedYamlLoaderL_IOE :: ( MonadIO m, FromJSON a, CachedYamlInfoState 
 runDelayedCachedYamlLoaderL_IOE st base_dirs f = liftIO $ try $ runReaderT (f base_dirs) st
 
 -- | Don't throw IOError
-runDelayedCachedYamlLoaderL :: ( MonadIO m, FromJSON a, CachedYamlInfoState s)
+runDelayedCachedYamlLoaderL :: ( MonadIO m )
                             => s
                             -> NonEmpty FilePath    -- ^ 消息文件存放目录
                             -> DelayedCachedYamlLoader s a
@@ -246,8 +249,15 @@ parseMsgErrorToString :: Either YamlFileParseException a -> Either String a
 parseMsgErrorToString (Left err)    = Left $ "failed to parse from file: " ++ show err
 parseMsgErrorToString (Right x)     = Right x
 
-unifyExcHandler :: (Show e, Monad m) => Handler m (Either e a) -> Handler m (Either String a)
-unifyExcHandler = fmap $ either (Left . show) Right
+unifyExcHandler :: (Show e, Monad m)
+                => Handler m (Either e a)
+                -> Handler m (Either String a)
+unifyExcHandler =
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+  \(Handler f) -> Handler $ fmap (either (Left . show) Right) . f
+#else
+  fmap $ either (Left . show) Right
+#endif
 
 
 -- | 生成 JuicyPixels Image 对象
@@ -320,8 +330,8 @@ simpleParseDec = fmap fst . listToMaybe . filter (null . snd) . readDec
 simpleParseDecT :: (Eq a, Num a) => Text -> Maybe a
 simpleParseDecT = simpleParseDec . T.unpack
 
-simpleParseFloat :: (Eq a, RealFrac a) => String -> Maybe a
+simpleParseFloat :: (RealFrac a) => String -> Maybe a
 simpleParseFloat = fmap fst . listToMaybe . filter ((== "") . snd) . readFloat
 
-simpleParseFloatT :: (Eq a, RealFrac a) => Text -> Maybe a
+simpleParseFloatT :: (RealFrac a) => Text -> Maybe a
 simpleParseFloatT = simpleParseFloat . T.unpack

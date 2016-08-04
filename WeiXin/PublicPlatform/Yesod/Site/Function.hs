@@ -60,7 +60,6 @@ instance JsonConfigable (StoreInMsgToDB m) where
 
 instance (MonadIO m, MonadLogger m
     , MonadBaseControl IO m
-    , MonadThrow m
     ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
 
     processInMsg (StoreInMsgToDB {}) _cache _bs _ime = do
@@ -71,7 +70,6 @@ instance (MonadIO m, MonadLogger m
 
 instance (MonadIO m, MonadLogger m
     , MonadBaseControl IO m
-    , MonadThrow m
     ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
     preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) _cache bs ime = runMaybeT $ do
         now <- liftIO getCurrentTime
@@ -111,7 +109,7 @@ instance (MonadIO m, MonadLogger m
 
 -- | 现在StoreInMsgToDB的preProcInMsg仅当消息xml已被成功解释后才能被调用
 -- 要提供另一个函数特别为xml解释失败时回调
-defaultOnInMsgParseFailed :: forall m. (MonadIO m, MonadBaseControl IO m)
+defaultOnInMsgParseFailed :: forall m. (MonadIO m)
                           => Maybe WxppAppID
                           -- ^ 目标app id. 有时候这个id来自消息本身，所以不能保证总是能得到
                           -> LB.ByteString
@@ -146,9 +144,7 @@ instance JsonConfigable CacheAppOpenIdToUnionId where
 
 
 instance (MonadIO m
-    , MonadCatch m
     , MonadLogger m
-    , Functor m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcessor m CacheAppOpenIdToUnionId where
 
@@ -222,9 +218,7 @@ instance JsonConfigable TrackHandledInMsg where
 
 
 instance (MonadIO m
-    , MonadCatch m
     , MonadLogger m
-    , Functor m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m TrackHandledInMsg where
 

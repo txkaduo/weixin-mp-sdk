@@ -111,7 +111,7 @@ wxppJsApiConfig app_id ticket debug url api_list = do
         });|]
 
 
-wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad env m, MonadCatch m
+wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad env m
                                 , WxppCacheTokenUpdater c, WxppCacheTokenReader c
                                 )
                                 => c

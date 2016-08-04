@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Misc where
 
 import ClassyPrelude hiding (try)
@@ -14,7 +15,9 @@ import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
 import Control.DeepSeq                      (($!!))
 import Control.Monad.Except                 (runExceptT, ExceptT(..), withExceptT)
-import Control.Monad.Trans.Resource
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+import Control.Monad.Trans.Control          (MonadBaseControl)
+#endif
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Data.Char
@@ -294,7 +297,7 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref onerr_
 
 
 defaultInMsgProcMiddlewares :: forall env m.
-    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
+    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m) =>
     WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
@@ -327,7 +330,11 @@ defaultInMsgProcMiddlewares db_runner app_id down_media = do
 -- | 如果要计算的操作有异常，记日志并重试
 -- 注意：重试如果失败，还会不断重试
 -- 所以只适合用于 f 本身就是一个大循环的情况
-logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m, MonadBaseControl IO m) =>
+logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+                            , MonadBaseControl IO m
+#endif
+                            ) =>
     String      -- ^ 仅用作日志标识
     -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
     -> m ()
@@ -336,13 +343,17 @@ logWxppWsExcAndRetryLoop op_name f = go
         go = logWxppWsExcThen op_name (const $ liftIO (threadDelay 5000000) >> go) (const $ return ()) f
 
 
-logWxppWsExcThen :: (MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
-    String
-    -> (SomeException -> m a)
-                        -- ^ retry when error
-    -> (b -> m a)       -- ^ next to do when ok
-    -> m b              -- ^ original op
-    -> m a
+logWxppWsExcThen :: (MonadLogger m, MonadCatch m
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+                    , MonadBaseControl IO m
+#endif
+                    )
+                 => String
+                 -> (SomeException -> m a)
+                                    -- ^ retry when error
+                 -> (b -> m a)       -- ^ next to do when ok
+                 -> m b              -- ^ original op
+                 -> m a
 logWxppWsExcThen op_name on_err on_ok f = do
     err_or <- tryAny $ tryWxppWsResult f
     case err_or of

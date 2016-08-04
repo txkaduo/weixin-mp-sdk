@@ -127,7 +127,7 @@ loopRefreshJsTickets chk_abort intv cache get_app_list dt = do
         forM_ app_list $ \app_id -> refreshJsTicketIfNeeded cache app_id dt
 
 
-loopRunBgJob :: (MonadIO m, MonadCatch m) =>
+loopRunBgJob :: (MonadIO m) =>
     IO Bool     -- ^ This function should be a blocking op,
                 -- return True if the infinite should be aborted immediately.
     -> Int      -- ^ interval in seconds
@@ -145,7 +145,7 @@ loopRunBgJob chk_abort intv job = loop
 
 -- | 重复执行计算，并记录出现的异常
 runRepeatlyLogExc ::
-    (MonadIO m, MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
+    (MonadIO m, MonadLogger m, MonadBaseControl IO m) =>
     MVar a
     -> Int      -- ^ ms
     -> m () -> m ()
