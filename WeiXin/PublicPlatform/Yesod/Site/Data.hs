@@ -164,11 +164,14 @@ data WxppTpSub = WxppTpSub
   { wxppTpSubComponentAppId     :: WxppAppID
   , wxppTpSubToken              :: Token
   , wxppTpSubAesKey             :: AesKey
+  , wxppTpSubBackupAesKeys      :: [AesKey]
   , wxppTpSubRunLoggingT        :: forall a m. LoggingT m a -> m a
   , wxppTpSubHandlerEventNotice :: forall master. Yesod master
                                 => WxppTpEventNotice
                                 -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
-  -- ^ 真正处理事件通知的逻辑
+  -- ^ 处理第三方平台事件通知的逻辑
+  , wxppTpSubProcessor          :: WxppProcessor
+  -- ^ 处理公众号消息事件的逻辑
   }
 
 instance Show WxppTpSub where
@@ -183,10 +186,20 @@ instance LoggingTRunner WxppTpSub where
 instance RenderMessage WxppTpSub FormMessage where
   renderMessage _ _ = defaultFormMessage
 
+instance HasAesKeys WxppTpSub where
+  getAesKeys x = wxppTpSubAesKey x : wxppTpSubBackupAesKeys x
+
+instance HasWxppAppID WxppTpSub where
+  getWxppAppID = wxppTpSubComponentAppId
+
+instance HasWxppProcessor WxppTpSub where
+  getWxppProcessor = wxppTpSubProcessor
+
 
 mkYesodSubData "WxppTpSub" [parseRoutes|
 -- 第三方平台事件接收
-/p/notice                  TpEventNoticeR      GET POST
+/notice                   TpEventNoticeR      GET POST
+/msg                      TpMessageR          GET POST
 |]
 
 

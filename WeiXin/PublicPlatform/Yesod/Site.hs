@@ -714,6 +714,21 @@ postTpEventNoticeR = do
                               Right xdoc  -> return xdoc
 
 
+-- | 第三方平台接收公众号消息与事件的端点入口
+-- GET 方法用于通讯检测
+-- POST 方法用于业务逻辑
+getTpMessageR :: HandlerT WxppTpSub (HandlerT master IO) Text
+getTpMessageR = do
+  foundation <- getYesod
+  checkSignature foundation "signature" ""
+  runInputGet $ ireq textField "echostr"
+
+postTpMessageR :: HandlerT WxppTpSub (HandlerT master IO) Text
+postTpMessageR = do
+  foundation <- getYesod
+  realHandlerMsg foundation Nothing
+
+
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
     where
         yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
