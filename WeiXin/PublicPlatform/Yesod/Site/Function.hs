@@ -15,7 +15,6 @@ import Network.Wreq
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.DeepSeq                      (($!!))
-import qualified Data.Text.Lazy             as LT
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as Map
