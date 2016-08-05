@@ -127,7 +127,7 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
         let app_id      = wxppConfigAppID wac
         let data_dirs   = wxppAppConfigDataDir wac
         middlewares <- liftIO $ get_middleware app_id
-        let processor = WxppProcessor
+        let processor = WxppMsgProcessor
                           send_msg
                           (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
                           (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
@@ -205,9 +205,9 @@ mkWxppMsgProcessor ::
     -> (Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -- ^ send message to weixin user in background
     -> (WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
-    -> WxppProcessor
+    -> WxppMsgProcessor
 mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware =
-    WxppProcessor
+    WxppMsgProcessor
       send_msg
       (\target_username x1 x2 -> liftM join $ m_to_io $ handle_msg target_username x1 x2)
       pre_proc_msg
@@ -289,7 +289,7 @@ mkMaybeWxppSubC ::
     -> WxppAppSecret
     -> WxppSubsiteOpts
     -> WxppApiEnv
-    -> WxppProcessor
+    -> WxppMsgProcessor
     -> MaybeWxppSub
 mkMaybeWxppSubC foundation cache my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env processor =
     MaybeWxppSub $ runMaybeT $ do
@@ -315,7 +315,7 @@ mkWxppTpSub :: ( LoggingTRunner app
             -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
             -> Token
             -> NonEmpty AesKey
-            -> WxppProcessor
+            -> WxppMsgProcessor
             -> ( forall master. Yesod master
                     => WxppTpEventNotice
                     -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)

@@ -49,7 +49,7 @@ instance FromJSON WxppSubsiteOpts where
 
 
 
-data WxppProcessor = WxppProcessor
+data WxppMsgProcessor = WxppMsgProcessor
   { wxppSendOutMsgs     :: Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ()
                          -- ^ a computation to send outgoing messages
 
@@ -89,7 +89,7 @@ data WxppProcessor = WxppProcessor
 
 
 class HasWxppProcessor a where
-  getWxppProcessor :: a -> WxppProcessor
+  getWxppProcessor :: a -> WxppMsgProcessor
 
 -- | 为每个运行的 App 对应一个 subsite
 data WxppSub =
@@ -99,7 +99,7 @@ data WxppSub =
                 , wxppSubAppSecret      :: WxppAppSecret
                 , wxppSubCacheBackend   :: SomeWxppCacheClient
                 , wxppSubRunDBAction    :: WxppDbRunner -- ^ execute any DB actions
-                , wxppSubProcessor      :: WxppProcessor
+                , wxppSubProcessor      :: WxppMsgProcessor
                 , wxppSubRunLoggingT    :: forall a m. LoggingT m a -> m a
                 , wxppSubOptions        :: WxppSubsiteOpts
                 , wxppSubApiEnv         :: WxppApiEnv
@@ -167,7 +167,7 @@ data WxppTpSub = WxppTpSub
   , wxppTpSubAesKeys            :: NonEmpty AesKey
   -- , wxppTpSubCacheBackend       :: SomeWxppCacheClient
   , wxppTpSubRunLoggingT        :: forall a m. LoggingT m a -> m a
-  , wxppTpSubProcessor          :: WxppProcessor
+  , wxppTpSubProcessor          :: WxppMsgProcessor
   -- ^ 处理公众号消息事件的逻辑
   , wxppTpSubHandlerEventNotice :: forall master. Yesod master
                                 => WxppTpEventNotice
