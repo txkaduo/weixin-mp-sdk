@@ -25,7 +25,7 @@ import Data.List.NonEmpty                   (NonEmpty)
 import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
-import Yesod.Core                           (HandlerSite, PathPiece(..))
+import Yesod.Core                           (HandlerSite, PathPiece(..), Yesod, HandlerT)
 import Text.Shakespeare.I18N                (RenderMessage)
 
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
@@ -39,6 +39,7 @@ import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Site.Function
 import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.Utils          (CachedYamlInfoState)
+import WeiXin.PublicPlatform.ThirdParty
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
@@ -303,6 +304,31 @@ mkMaybeWxppSubC foundation cache my_app_id my_app_token my_app_aes_keys my_app_s
                     (runLoggingTWith foundation)
                     opts
                     api_env
+
+
+-- | make a WxppTpSub
+mkWxppTpSub :: ( LoggingTRunner app
+               )
+            => app
+            -> WxppAppID
+            -- ^ 这个是我们自身的app id，不一定是消息的接收者的app id
+            -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
+            -> Token
+            -> NonEmpty AesKey
+            -> WxppProcessor
+            -> ( forall master. Yesod master
+                    => WxppTpEventNotice
+                    -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
+               )
+            -> WxppTpSub
+mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt =
+  WxppTpSub
+    my_app_id
+    my_app_token
+    my_app_aes_keys
+    (runLoggingTWith foundation)
+    processor
+    handle_tp_evt
 
 
 defaultInMsgProcMiddlewares :: forall env m.
