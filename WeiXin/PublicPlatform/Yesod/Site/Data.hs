@@ -10,6 +10,7 @@ import Yesod
 import Control.Monad.Logger
 import Data.Aeson
 import Data.Default
+import Data.List.NonEmpty (NonEmpty)
 
 import Yesod.Helpers.Logger (LoggingTRunner(..))
 
@@ -163,15 +164,15 @@ mkYesodSubData "WxppSubNoApp" [parseRoutes|
 data WxppTpSub = WxppTpSub
   { wxppTpSubComponentAppId     :: WxppAppID
   , wxppTpSubToken              :: Token
-  , wxppTpSubAesKey             :: AesKey
-  , wxppTpSubBackupAesKeys      :: [AesKey]
+  , wxppTpSubAesKeys            :: NonEmpty AesKey
+  -- , wxppTpSubCacheBackend       :: SomeWxppCacheClient
   , wxppTpSubRunLoggingT        :: forall a m. LoggingT m a -> m a
+  , wxppTpSubProcessor          :: WxppProcessor
+  -- ^ 处理公众号消息事件的逻辑
   , wxppTpSubHandlerEventNotice :: forall master. Yesod master
                                 => WxppTpEventNotice
                                 -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
   -- ^ 处理第三方平台事件通知的逻辑
-  , wxppTpSubProcessor          :: WxppProcessor
-  -- ^ 处理公众号消息事件的逻辑
   }
 
 instance Show WxppTpSub where
@@ -187,7 +188,7 @@ instance RenderMessage WxppTpSub FormMessage where
   renderMessage _ _ = defaultFormMessage
 
 instance HasAesKeys WxppTpSub where
-  getAesKeys x = wxppTpSubAesKey x : wxppTpSubBackupAesKeys x
+  getAesKeys = toList . wxppTpSubAesKeys
 
 instance HasWxppAppID WxppTpSub where
   getWxppAppID = wxppTpSubComponentAppId

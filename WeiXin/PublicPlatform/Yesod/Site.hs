@@ -44,6 +44,7 @@ import Data.Default                         (def)
 import qualified Data.Text.Lazy             as LT
 import Yesod.Core.Types                     (HandlerContents(HCError))
 import Data.Yaml                            (decodeEither')
+import qualified Data.List.NonEmpty         as LNE
 import Network.HTTP.Types.Status            (mkStatus)
 import Data.Conduit
 import Data.Conduit.Binary                  (sinkLbs)
@@ -672,7 +673,7 @@ postTpEventNoticeR = do
   let post_body_txt = toStrict $ decodeUtf8 lbs
   checkSignature foundation "msg_signature" post_body_txt
 
-  let enc_key   = wxppTpSubAesKey foundation
+  let enc_key   = LNE.head $ wxppTpSubAesKeys foundation
       my_app_id = wxppTpSubComponentAppId foundation
 
   err_or_resp <- runExceptT $ do
