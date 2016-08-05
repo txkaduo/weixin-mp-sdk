@@ -186,18 +186,13 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                             bs ime
 --}
 
--- mkMaybeWxppSub with cache
-mkMaybeWxppSubC ::
-    ( LoggingTRunner app
-    , DBActionRunner app
-    , DBAction app ~ ReaderT WxppDbBackend
-    , WxppCacheTokenReader c, WxppCacheTemp c
+mkWxppMsgProcessor ::
+    ( WxppCacheTokenReader c, WxppCacheTemp c
     , SV.HasSetter hvar (Maybe (InMsgHandlerList m)), SV.HasGetter hvar (Maybe (InMsgHandlerList m))
     , CachedYamlInfoState s
     , MonadIO m, MonadLogger m
-    ) =>
-    (forall a. m a -> IO (Either String a))
-    -> app
+    )
+    => (forall a. m a -> IO (Either String a))
     -> c
     -> s  -- ^ cache parsed Yaml content
     -> (WeixinUserName -> IO (Maybe hvar))
@@ -209,35 +204,15 @@ mkMaybeWxppSubC ::
     -> (Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -- ^ send message to weixin user in background
     -> (WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
-    -> WxppAppID
-    -- ^ 这个是我们自身的app id，不一定是消息的接收者的app id
-    -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
-    -> Token
-    -> [AesKey]
-    -> WxppAppSecret
-    -> WxppSubsiteOpts
-    -> WxppApiEnv
-    -> MaybeWxppSub
-mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env =
-    MaybeWxppSub $ runMaybeT $ do
-        let processor = WxppProcessor
-                          send_msg
-                          (\target_username x1 x2 -> liftM join $ m_to_io $ handle_msg target_username x1 x2)
-                          pre_proc_msg
-                          post_proc_msg
-                          onerr_proc_msg
-                          onerr_parse_msg
-        return $ WxppSub
-                    my_app_id
-                    my_app_token
-                    my_app_aes_keys
-                    my_app_secret
-                    (SomeWxppCacheClient cache)
-                    (WxppDbRunner $ runDBWith foundation)
-                    processor
-                    (runLoggingTWith foundation)
-                    opts
-                    api_env
+    -> WxppProcessor
+mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware =
+    WxppProcessor
+      send_msg
+      (\target_username x1 x2 -> liftM join $ m_to_io $ handle_msg target_username x1 x2)
+      pre_proc_msg
+      post_proc_msg
+      onerr_proc_msg
+      onerr_parse_msg
     where
         pre_proc_msg target_username x1 x2 = m_to_io $ do
             middlewares <- liftIO $ get_middleware target_username
@@ -294,6 +269,40 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref onerr_
                             cache
                             in_msg_handlers
                             bs ime
+
+
+-- mkMaybeWxppSub with cache
+mkMaybeWxppSubC ::
+    ( WxppCacheTokenReader c, WxppCacheTemp c
+    , LoggingTRunner app
+    , DBActionRunner app
+    , DBAction app ~ ReaderT WxppDbBackend
+    )
+    => app
+    -> c
+    -> WxppAppID
+    -- ^ 这个是我们自身的app id，不一定是消息的接收者的app id
+    -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
+    -> Token
+    -> [AesKey]
+    -> WxppAppSecret
+    -> WxppSubsiteOpts
+    -> WxppApiEnv
+    -> WxppProcessor
+    -> MaybeWxppSub
+mkMaybeWxppSubC foundation cache my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env processor =
+    MaybeWxppSub $ runMaybeT $ do
+        return $ WxppSub
+                    my_app_id
+                    my_app_token
+                    my_app_aes_keys
+                    my_app_secret
+                    (SomeWxppCacheClient cache)
+                    (WxppDbRunner $ runDBWith foundation)
+                    processor
+                    (runLoggingTWith foundation)
+                    opts
+                    api_env
 
 
 defaultInMsgProcMiddlewares :: forall env m.
