@@ -13,7 +13,7 @@ import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
 import           Data.Proxy            (Proxy (..))
-import           Data.Time             (NominalDiffTime)
+import           Data.Time             (NominalDiffTime, addUTCTime)
 import           Database.Persist.Sql  (PersistField (..), PersistFieldSql (..))
 import           Network.Wreq          hiding (Proxy)
 import qualified Network.Wreq.Session  as WS
@@ -726,6 +726,50 @@ class WxppTpTokenWriter a where
 
 
 data SomeWxppTpTokenWriter = forall a. WxppTpTokenWriter a => SomeWxppTpTokenWriter a
+
+
+-- | 从微信平台取新的 component_access_token 并保存之
+wxppTpAcquireAndSaveComponentAccessToken :: (WxppApiMonad env m, WxppTpTokenWriter c)
+                                         => c
+                                         -> WxppAppID
+                                         -> WxppAppSecret
+                                         -> ComponentVerifyTicket
+                                         -> m ()
+wxppTpAcquireAndSaveComponentAccessToken cache app_id secret ticket = do
+  (atk, ttl) <- wxppTpGetWxppTpAccessToken app_id secret ticket
+  now <- liftIO getCurrentTime
+
+  let expiry = addUTCTime ttl now
+
+  liftIO $ wxppTpTokenAddComponentAccessToken cache atk expiry
+
+
+wxppTpRefreshComponentAccessTokenIfNeeded :: ( WxppApiMonad env m
+                                             , WxppTpTokenWriter c
+                                             , WxppTpTokenReader c
+                                             )
+                                          => c
+                                          -> NominalDiffTime
+                                          -> WxppAppID
+                                          -> WxppAppSecret
+                                          -> m ()
+wxppTpRefreshComponentAccessTokenIfNeeded cache dt app_id secret = do
+  now <- liftIO getCurrentTime
+  let t = addUTCTime (abs dt) now
+
+  expired <- liftIO $ liftM (fromMaybe True . fmap ((<= t) . snd)) $
+                      wxppTpTokenGetComponentAccessToken cache app_id
+
+  when expired $ do
+    m_ticket <- liftIO $ wxppTpTokenGetVeriyTicket cache app_id
+    case m_ticket of
+      Nothing -> do
+        throwM $ userError $ "no component ticket available for app: "
+                              <> unpack (unWxppAppID app_id)
+
+      Just ticket -> do
+        wxppTpAcquireAndSaveComponentAccessToken cache app_id secret ticket
+
 
 --------------------------------------------------------------------------------
 
