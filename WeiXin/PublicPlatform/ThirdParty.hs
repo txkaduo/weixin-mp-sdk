@@ -9,6 +9,7 @@ module WeiXin.PublicPlatform.ThirdParty
 import           ClassyPrelude
 import           Control.DeepSeq       (NFData)
 import           Control.Lens          hiding ((.=))
+import           Control.Monad.Logger
 import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
@@ -770,6 +771,56 @@ wxppTpRefreshComponentAccessTokenIfNeeded cache dt app_id secret = do
 
       Just ticket -> do
         wxppTpAcquireAndSaveComponentAccessToken cache app_id secret ticket
+
+
+-- | 从微信平台取新的 authorizer_accesss_token 并保存之
+wxppTpAcquireAndSaveAuthorizerTokens :: (WxppApiMonad env m, WxppTpTokenWriter c)
+                                     => c
+                                     -> WxppTpAccessToken
+                                     -- ^ component access token
+                                     -> WxppTpRefreshToken
+                                     -> m ()
+wxppTpAcquireAndSaveAuthorizerTokens cache comp_atk rtk = do
+  WxppTpRefreshTokensResp auth_atk rtk2 ttl <-
+        wxppTpRefreshAuthorizerTokens comp_atk rtk
+
+  now <- liftIO getCurrentTime
+  let expiry = addUTCTime ttl now
+
+  liftIO $ wxppTpTokenAddAuthorizerTokens cache comp_app_id auth_atk rtk2 expiry
+
+  where
+    WxppTpAccessToken _ comp_app_id = comp_atk
+
+
+wxppTpRefreshAuthorizerTokensIfNedded :: ( WxppApiMonad env m
+                                         , WxppTpTokenWriter c
+                                         , WxppTpTokenReader c
+                                         )
+                                      => c
+                                      -> NominalDiffTime
+                                      -> WxppAppID  -- ^ component app id
+                                      -> WxppAppID  -- ^ authorizer app id
+                                      -> m ()
+wxppTpRefreshAuthorizerTokensIfNedded cache dt comp_app_id auther_app_id = do
+  m_res <- liftIO $ wxppTpTokenGetAuthorizerTokens cache comp_app_id auther_app_id
+  case m_res of
+    Nothing -> do
+      $logWarnS wxppLogSource $
+        "No refresh token found for authorizer app: " <> unWxppAppID auther_app_id
+
+    Just ((_auth_atk, expiry), rtk) -> do
+      now <- liftIO getCurrentTime
+      when (addUTCTime dt now >= expiry) $ do
+        m_comp_atk <- liftIO $ wxppTpTokenGetComponentAccessToken cache comp_app_id
+
+        case m_comp_atk of
+          Nothing -> do
+            $logWarnS wxppLogSource $
+              "No component access token found for app: " <> unWxppAppID comp_app_id
+
+          Just (comp_atk, _) -> do
+            wxppTpAcquireAndSaveAuthorizerTokens cache comp_atk rtk
 
 
 --------------------------------------------------------------------------------
