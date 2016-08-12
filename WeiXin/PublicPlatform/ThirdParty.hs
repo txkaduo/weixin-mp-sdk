@@ -708,12 +708,13 @@ class WxppTpTokenWriter a where
                                        -> UTCTime
                                        -> IO ()
 
-  wxppTpTokenAddAutherTokens :: a
-                             -> WxppAppID -- ^ component app id
-                             -> WxppTpAccessToken
-                             -> WxppTpRefreshToken
-                             -> UTCTime
-                             -> IO ()
+  wxppTpTokenAddAuthorizerTokens :: a
+                                 -> WxppAppID -- ^ component app id
+                                 -> AccessToken
+                                 -- ^ access token of authorizer app
+                                 -> WxppTpRefreshToken
+                                 -> UTCTime
+                                 -> IO ()
 
   -- | 删除过期时间在指定时间之前的所有token
   wxppTpTokenPurgeAutherTokens :: a
