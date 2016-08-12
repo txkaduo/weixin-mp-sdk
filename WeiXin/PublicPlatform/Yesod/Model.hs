@@ -15,6 +15,8 @@ import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Message        (wxppInMsgEntityFromLbs)
+import WeiXin.PublicPlatform.ThirdParty
+import Yesod.Helpers.Persist                (insertOrReplace)
 
 
 wxppSubModelsDefBasic ::
@@ -355,3 +357,86 @@ wxppSourceInMsgEntityFromHistory filters opts = do
       ime <- wxppInMsgEntityFromLbs $ LB.fromStrict $ wxppInMsgRecordBlob rec
       let app_id = wxppInMsgRecordApp rec
       return (wxppInMsgRecordNotifyTime rec, (app_id, ime))
+
+
+
+instance WxppTpTokenReader WxppDbRunner where
+  wxppTpTokenGetVeriyTicket (WxppDbRunner run_db) app_id = do
+    run_db $ do
+      fmap (fmap wxppCachedTpCompVerifyTicketTicket) $ get $ WxppCachedTpCompVerifyTicketKey app_id
+
+
+  wxppTpTokenGetComponentAccessToken (WxppDbRunner run_db) app_id = do
+    runMaybeT $ do
+      fmap (get_res . entityVal) $
+            MaybeT $ run_db $ do
+              selectFirst
+                [ WxppCachedTpCompAccessTokenApp ==. app_id
+                ]
+                [ Desc WxppCachedTpCompAccessTokenExpiryTime ]
+    where
+      get_res = (flip WxppTpAccessToken app_id . wxppCachedTpCompAccessTokenData)
+                  &&& wxppCachedTpCompAccessTokenExpiryTime
+
+
+  wxppTpTokenGetAutherTokens (WxppDbRunner run_db) comp_app_id auther_app_id = do
+    runMaybeT $ do
+      fmap (get_res . entityVal) $
+            MaybeT $ run_db $ do
+              selectFirst
+                [ WxppCachedTpAutherTokenComponentApp ==. comp_app_id
+                , WxppCachedTpAutherTokenAutherApp ==. auther_app_id
+                ]
+                [ Desc WxppCachedTpAutherTokenExpiryTime ]
+
+    where
+      get_res = ((flip AccessToken auther_app_id . wxppCachedTpAutherTokenAccess)
+                  &&& wxppCachedTpAutherTokenExpiryTime
+                )
+                &&& (flip WxppTpRefreshToken auther_app_id . wxppCachedTpAutherTokenRefresh)
+
+
+instance WxppTpTokenWriter WxppDbRunner where
+  wxppTpTokenSetVerifyTicket (WxppDbRunner run_db) app_id ticket = do
+    now <- getCurrentTime
+    run_db $ do
+      void $ insertOrReplace $ WxppCachedTpCompVerifyTicket app_id ticket now
+
+
+  wxppTpTokenDeleteVerifyTicket (WxppDbRunner run_db) app_id = do
+    run_db $ do
+      delete $ WxppCachedTpCompVerifyTicketKey app_id
+
+  wxppTpTokenAddComponentAccessToken (WxppDbRunner run_db) (WxppTpAccessToken raw_atk app_id) expiry = do
+    now <- getCurrentTime
+    run_db $ do
+      insert_ $ WxppCachedTpCompAccessToken app_id raw_atk expiry now
+
+  wxppTpTokenPurgeComponentAccessToken (WxppDbRunner run_db) app_id expiry = do
+    run_db $ do
+      deleteWhere [ WxppCachedTpCompAccessTokenApp ==. app_id
+                  , WxppCachedTpCompAccessTokenExpiryTime <. expiry
+                  ]
+
+  wxppTpTokenAddAutherTokens (WxppDbRunner run_db) comp_app_id access_token refresh_token expiry = do
+    when (app_id /= app_id2) $ do
+      error $ "access token and refresh token have different app ids"
+
+    now <- getCurrentTime
+    run_db $ do
+      insert_ $ do
+        WxppCachedTpAutherToken
+          comp_app_id app_id raw_atk raw_rtk expiry now
+
+    where
+      WxppTpAccessToken raw_atk app_id = access_token
+      WxppTpRefreshToken raw_rtk app_id2 = refresh_token
+
+  wxppTpTokenPurgeAutherTokens (WxppDbRunner run_db) comp_app_id m_auth_app_id expiry = do
+    run_db $ do
+      deleteWhere $
+        catMaybes
+          [ Just (WxppCachedTpAutherTokenComponentApp ==. comp_app_id)
+          , Just (WxppCachedTpAutherTokenExpiryTime <. expiry)
+          , fmap (WxppCachedTpAutherTokenAutherApp ==.) m_auth_app_id
+          ]

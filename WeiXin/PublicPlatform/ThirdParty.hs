@@ -667,6 +667,66 @@ wxppTpAuthorizePageUrl app_id pre_auth_code return_url = do
                   base_url
 
 
+
+class WxppTpTokenReader a where
+  -- | 取平台推送来的verify ticket
+  wxppTpTokenGetVeriyTicket :: a
+                            -> WxppAppID
+                            -> IO (Maybe ComponentVerifyTicket)
+
+  wxppTpTokenGetComponentAccessToken :: a
+                                     -> WxppAppID
+                                     -> IO (Maybe (WxppTpAccessToken, UTCTime))
+
+  wxppTpTokenGetAutherTokens :: a
+                             -> WxppAppID  -- ^ component app
+                             -> WxppAppID  -- ^ authorizer app
+                             -> IO (Maybe ((AccessToken, UTCTime), WxppTpRefreshToken))
+
+
+data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a
+
+
+class WxppTpTokenWriter a where
+  wxppTpTokenSetVerifyTicket :: a
+                             -> WxppAppID
+                             -> ComponentVerifyTicket
+                             -> IO ()
+
+  wxppTpTokenDeleteVerifyTicket :: a
+                                -> WxppAppID
+                                -> IO ()
+
+  wxppTpTokenAddComponentAccessToken :: a
+                                     -> WxppTpAccessToken
+                                     -> UTCTime
+                                     -> IO ()
+
+  -- | 删除过期时间在指定时间之前的所有 component_access_token
+  wxppTpTokenPurgeComponentAccessToken :: a
+                                       -> WxppAppID
+                                       -> UTCTime
+                                       -> IO ()
+
+  wxppTpTokenAddAutherTokens :: a
+                             -> WxppAppID -- ^ component app id
+                             -> WxppTpAccessToken
+                             -> WxppTpRefreshToken
+                             -> UTCTime
+                             -> IO ()
+
+  -- | 删除过期时间在指定时间之前的所有token
+  wxppTpTokenPurgeAutherTokens :: a
+                               -> WxppAppID -- ^ component app id
+                               -> Maybe WxppAppID
+                               -- ^ authorizer_appid
+                               -- 没指定则不考虑 authorizer_appid
+                               -> UTCTime
+                               -> IO ()
+
+
+data SomeWxppTpTokenWriter = forall a. WxppTpTokenWriter a => SomeWxppTpTokenWriter a
+
 --------------------------------------------------------------------------------
 
 

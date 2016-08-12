@@ -28,3 +28,38 @@ WxppCachedJsTicket
     createdTime         UTCTime
 
     UniqueWxppCachedJsTicket app
+
+
+-- | 第三方平台定期收到的 component_verify_ticket
+WxppCachedTpCompVerifyTicket
+    app                 WxppAppID maxlen=200
+    ticket              ComponentVerifyTicket maxlen=255
+    createdTime         UTCTime
+
+    Primary app
+
+
+-- | 第三方平台定期主动更新的 access token
+WxppCachedTpCompAccessToken
+    app                 WxppAppID maxlen=200
+    data                Text
+    expiryTime          UTCTime
+    createdTime         UTCTime
+
+    -- 因为对于一app, access token 有可能短时间内存在多个
+    -- 不能 Primary
+
+
+
+-- | 第三方平台得到的授权者信息
+WxppCachedTpAutherToken
+    componentApp        WxppAppID maxlen=200
+    autherApp           WxppAppID maxlen=200
+    access              Text maxlen=255
+    refresh             Text maxlen=255
+    expiryTime          UTCTime
+
+    createdTime         UTCTime
+
+    -- 因为对于一app, access token 有可能短时间内存在多个
+    -- 不能 Primary
