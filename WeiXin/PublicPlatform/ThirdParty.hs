@@ -347,11 +347,11 @@ data WxppTpRefreshTokensResp = WxppTpRefreshTokensResp
                                     NominalDiffTime
 
 -- | 调用远程接口: 获取（刷新）授权公众号的接口调用凭据（令牌）
-wxppTpRefreshTokens :: (WxppApiMonad env m)
-                    => WxppTpAccessToken
-                    -> WxppTpRefreshToken
-                    -> m WxppTpRefreshTokensResp
-wxppTpRefreshTokens atk refresh_token = do
+wxppTpRefreshAuthorizerTokens :: (WxppApiMonad env m)
+                              => WxppTpAccessToken
+                              -> WxppTpRefreshToken
+                              -> m WxppTpRefreshTokensResp
+wxppTpRefreshAuthorizerTokens atk refresh_token = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_authorizer_token"
       post_data = object [ "component_appid" .= app_id
