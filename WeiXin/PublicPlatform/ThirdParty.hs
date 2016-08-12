@@ -166,12 +166,12 @@ instance FromJSON WxppTpAccessTokenResp where
 
 
 -- | 调用远程接口，取得WxppTpAccessToken
-wxppTpGetWxppTpAccessToken :: (WxppApiMonad env m)
+wxppTpGetComponentAccessToken :: (WxppApiMonad env m)
                               => WxppAppID
                               -> WxppAppSecret
                               -> ComponentVerifyTicket
                               -> m (WxppTpAccessToken, NominalDiffTime)
-wxppTpGetWxppTpAccessToken app_id secret verify_ticket = do
+wxppTpGetComponentAccessToken app_id secret verify_ticket = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_component_token"
       post_data = object [ "component_appid" .= app_id
@@ -737,7 +737,7 @@ wxppTpAcquireAndSaveComponentAccessToken :: (WxppApiMonad env m, WxppTpTokenWrit
                                          -> ComponentVerifyTicket
                                          -> m ()
 wxppTpAcquireAndSaveComponentAccessToken cache app_id secret ticket = do
-  (atk, ttl) <- wxppTpGetWxppTpAccessToken app_id secret ticket
+  (atk, ttl) <- wxppTpGetComponentAccessToken app_id secret ticket
   now <- liftIO getCurrentTime
 
   let expiry = addUTCTime ttl now
