@@ -678,10 +678,10 @@ class WxppTpTokenReader a where
                                      -> WxppAppID
                                      -> IO (Maybe (WxppTpAccessToken, UTCTime))
 
-  wxppTpTokenGetAutherTokens :: a
-                             -> WxppAppID  -- ^ component app
-                             -> WxppAppID  -- ^ authorizer app
-                             -> IO (Maybe ((AccessToken, UTCTime), WxppTpRefreshToken))
+  wxppTpTokenGetAuthorizerTokens :: a
+                                 -> WxppAppID  -- ^ component app
+                                 -> WxppAppID  -- ^ authorizer app
+                                 -> IO (Maybe ((AccessToken, UTCTime), WxppTpRefreshToken))
 
 
 data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a
@@ -717,13 +717,13 @@ class WxppTpTokenWriter a where
                                  -> IO ()
 
   -- | 删除过期时间在指定时间之前的所有token
-  wxppTpTokenPurgeAutherTokens :: a
-                               -> WxppAppID -- ^ component app id
-                               -> Maybe WxppAppID
-                               -- ^ authorizer_appid
-                               -- 没指定则不考虑 authorizer_appid
-                               -> UTCTime
-                               -> IO ()
+  wxppTpTokenPurgeAuthorizerTokens :: a
+                                   -> WxppAppID -- ^ component app id
+                                   -> Maybe WxppAppID
+                                   -- ^ authorizer_appid
+                                   -- 没指定则不考虑 authorizer_appid
+                                   -> UTCTime
+                                   -> IO ()
 
 
 data SomeWxppTpTokenWriter = forall a. WxppTpTokenWriter a => SomeWxppTpTokenWriter a
