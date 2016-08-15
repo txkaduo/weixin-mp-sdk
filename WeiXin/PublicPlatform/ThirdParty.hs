@@ -13,6 +13,7 @@ import           Control.Monad.Logger
 import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
+import           Data.Conduit          (Source)
 import           Data.Proxy            (Proxy (..))
 import           Data.Time             (NominalDiffTime, addUTCTime)
 import           Database.Persist.Sql  (PersistField (..), PersistFieldSql (..))
@@ -22,6 +23,7 @@ import           Text.Blaze.Html       (ToMarkup (..))
 import           Text.Shakespeare.I18N (ToMessage (..))
 import           Text.XML.Cursor
 
+import           Yesod.Core            (MonadBaseControl, MonadResource)
 import           Yesod.Helpers.Utils   (queryTextSetParam, urlUpdateQueryText)
 
 import           WeiXin.PublicPlatform.Types
@@ -683,6 +685,11 @@ class WxppTpTokenReader a where
                                  -> WxppAppID  -- ^ component app
                                  -> WxppAppID  -- ^ authorizer app
                                  -> IO (Maybe ((AccessToken, UTCTime), WxppTpRefreshToken))
+
+  -- | 取第三方平台相关的所有已保存的授权方令牌
+  wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, MonadBaseControl IO m)
+                                    => a
+                                    -> Source m (WxppAppID, ((AccessToken, UTCTime), WxppTpRefreshToken))
 
 
 data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a

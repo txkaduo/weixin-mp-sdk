@@ -396,6 +396,20 @@ instance WxppTpTokenReader WxppDbRunner where
                 &&& (flip WxppTpRefreshToken auther_app_id . wxppCachedTpAutherTokenRefresh)
 
 
+  wxppTpTokenSourceAuthorizerTokens (WxppDbRunner run_db) = do
+    transPipe run_db $
+      mapOutput ((wxppCachedTpAutherTokenComponentApp &&& get_res) . entityVal) $ selectSource [] []
+    where
+      get_res rec = (((flip AccessToken auther_app_id . wxppCachedTpAutherTokenAccess)
+                        &&& wxppCachedTpAutherTokenExpiryTime
+                      )
+                      &&& (flip WxppTpRefreshToken auther_app_id . wxppCachedTpAutherTokenRefresh)
+                    ) rec
+                    where
+                      auther_app_id = wxppCachedTpAutherTokenAutherApp rec
+
+
+
 instance WxppTpTokenWriter WxppDbRunner where
   wxppTpTokenSetVerifyTicket (WxppDbRunner run_db) app_id ticket = do
     now <- getCurrentTime
