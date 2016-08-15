@@ -696,7 +696,7 @@ data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenRea
 
 
 class WxppTpTokenWriter a where
-  wxppTpTokenSetVerifyTicket :: a
+  wxppTpTokenSaveVerifyTicket :: a
                              -> WxppAppID
                              -> ComponentVerifyTicket
                              -> IO ()

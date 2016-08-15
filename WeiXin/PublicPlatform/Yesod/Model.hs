@@ -411,7 +411,7 @@ instance WxppTpTokenReader WxppDbRunner where
 
 
 instance WxppTpTokenWriter WxppDbRunner where
-  wxppTpTokenSetVerifyTicket (WxppDbRunner run_db) app_id ticket = do
+  wxppTpTokenSaveVerifyTicket (WxppDbRunner run_db) app_id ticket = do
     now <- getCurrentTime
     run_db $ do
       void $ insertOrReplace $ WxppCachedTpCompVerifyTicket app_id ticket now
