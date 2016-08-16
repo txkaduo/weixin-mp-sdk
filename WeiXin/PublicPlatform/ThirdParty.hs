@@ -736,6 +736,9 @@ class WxppTpTokenWriter a where
 
 data SomeWxppTpTokenWriter = forall a. WxppTpTokenWriter a => SomeWxppTpTokenWriter a
 
+data SomeWxppTpTokenStore = forall a. (WxppTpTokenWriter a, WxppTpTokenReader a)
+                            => SomeWxppTpTokenStore a
+
 
 -- | 从微信平台取新的 component_access_token 并保存之
 wxppTpAcquireAndSaveComponentAccessToken :: (WxppApiMonad env m, WxppTpTokenWriter c)
