@@ -48,20 +48,22 @@ newtype WxppTpAuthCode = WxppTpAuthCode { unWxppTpAuthCode :: Text }
 
 -- | refresh token
 -- 因为通常跟相应的 AppId 一起使用，所以打包在一起
-data WxppTpRefreshToken = WxppTpRefreshToken {
-                        tpRefreshTokenData     :: Text
-                        , tpRefreshTokenApp    :: WxppAppID
-                    }
-                    deriving (Show, Eq, Typeable, Generic)
+data WxppTpRefreshToken = WxppTpRefreshToken
+  { tpRefreshTokenData     :: Text
+  , tpRefreshTokenApp    :: WxppAppID
+  -- ^ 授权方的 app id
+  }
+  deriving (Show, Eq, Typeable, Generic)
 
 
 -- | component_access_token
 -- 因为通常跟相应的 AppId 一起使用，所以打包在一起
-data WxppTpAccessToken = WxppTpAccessToken {
-                        tpAccessTokenData     :: Text
-                        , tpAccessTokenApp    :: WxppAppID
-                    }
-                    deriving (Show, Eq, Typeable, Generic)
+data WxppTpAccessToken = WxppTpAccessToken
+  { tpAccessTokenData     :: Text
+  , tpAccessTokenApp    :: WxppAppID
+  -- ^ 我方的 app id
+  }
+  deriving (Show, Eq, Typeable, Generic)
 
 
 -- | pre_auth_code
@@ -689,7 +691,11 @@ class WxppTpTokenReader a where
   -- | 取第三方平台相关的所有已保存的授权方令牌
   wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, MonadBaseControl IO m)
                                     => a
-                                    -> Source m (WxppAppID, ((AccessToken, UTCTime), WxppTpRefreshToken))
+                                    -> Source m ( WxppAppID   -- ^ our app id: component app id
+                                                , ( (AccessToken, UTCTime)
+                                                  , WxppTpRefreshToken
+                                                  )
+                                                )
 
 
 data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a
