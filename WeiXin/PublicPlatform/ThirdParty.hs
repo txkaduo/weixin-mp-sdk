@@ -349,7 +349,7 @@ instance FromJSON WxppTpRefreshTokensRawResp where
 data WxppTpAuthorizerTokens = WxppTpAuthorizerTokens
                                     AccessToken
                                     WxppTpRefreshToken
-                                    NominalDiffTime
+                                    UTCTime
 
 -- | 调用远程接口: 获取（刷新）授权公众号的接口调用凭据（令牌）
 wxppTpRefreshAuthorizerTokens :: (WxppApiMonad env m)
@@ -369,10 +369,12 @@ wxppTpRefreshAuthorizerTokens atk refresh_token = do
     liftIO (WS.postWith opt sess url post_data)
           >>= asWxppWsResponseNormal'
 
+  now <- liftIO getCurrentTime
+  let expiry = addUTCTime (abs $ fromIntegral ttl) now
   return $ WxppTpAuthorizerTokens
               (AccessToken new_atk_raw target_app_id)
               (WxppTpRefreshToken refresh_token_raw target_app_id)
-              (fromIntegral ttl)
+              expiry
   where
     WxppTpAccessToken atk_raw app_id = atk
     WxppTpRefreshToken old_refresh_token_raw target_app_id = refresh_token
@@ -797,11 +799,8 @@ wxppTpAcquireAndSaveAuthorizerTokens :: (WxppApiMonad env m, WxppTpTokenWriter c
                                      -> WxppTpRefreshToken
                                      -> m ()
 wxppTpAcquireAndSaveAuthorizerTokens cache comp_atk rtk = do
-  WxppTpAuthorizerTokens auth_atk rtk2 ttl <-
+  WxppTpAuthorizerTokens auth_atk rtk2 expiry <-
         wxppTpRefreshAuthorizerTokens comp_atk rtk
-
-  now <- liftIO getCurrentTime
-  let expiry = addUTCTime ttl now
 
   liftIO $ wxppTpTokenAddAuthorizerTokens cache comp_app_id auth_atk rtk2 expiry
 
