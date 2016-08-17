@@ -346,7 +346,7 @@ instance FromJSON WxppTpRefreshTokensRawResp where
       <*> o .: "expires_in"
 
 
-data WxppTpRefreshTokensResp = WxppTpRefreshTokensResp
+data WxppTpAuthorizerTokens = WxppTpAuthorizerTokens
                                     AccessToken
                                     WxppTpRefreshToken
                                     NominalDiffTime
@@ -355,7 +355,7 @@ data WxppTpRefreshTokensResp = WxppTpRefreshTokensResp
 wxppTpRefreshAuthorizerTokens :: (WxppApiMonad env m)
                               => WxppTpAccessToken
                               -> WxppTpRefreshToken
-                              -> m WxppTpRefreshTokensResp
+                              -> m WxppTpAuthorizerTokens
 wxppTpRefreshAuthorizerTokens atk refresh_token = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_authorizer_token"
@@ -369,7 +369,7 @@ wxppTpRefreshAuthorizerTokens atk refresh_token = do
     liftIO (WS.postWith opt sess url post_data)
           >>= asWxppWsResponseNormal'
 
-  return $ WxppTpRefreshTokensResp
+  return $ WxppTpAuthorizerTokens
               (AccessToken new_atk_raw target_app_id)
               (WxppTpRefreshToken refresh_token_raw target_app_id)
               (fromIntegral ttl)
@@ -797,7 +797,7 @@ wxppTpAcquireAndSaveAuthorizerTokens :: (WxppApiMonad env m, WxppTpTokenWriter c
                                      -> WxppTpRefreshToken
                                      -> m ()
 wxppTpAcquireAndSaveAuthorizerTokens cache comp_atk rtk = do
-  WxppTpRefreshTokensResp auth_atk rtk2 ttl <-
+  WxppTpAuthorizerTokens auth_atk rtk2 ttl <-
         wxppTpRefreshAuthorizerTokens comp_atk rtk
 
   now <- liftIO getCurrentTime
