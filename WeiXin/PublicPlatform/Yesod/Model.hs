@@ -381,7 +381,7 @@ instance WxppTpTokenReader WxppDbRunner where
 
   wxppTpTokenGetAuthorizerTokens (WxppDbRunner run_db) comp_app_id auther_app_id = do
     runMaybeT $ do
-      fmap (get_res . entityVal) $
+      fmap (to_tokens . entityVal) $
             MaybeT $ run_db $ do
               selectFirst
                 [ WxppCachedTpAutherTokenComponentApp ==. comp_app_id
@@ -390,23 +390,23 @@ instance WxppTpTokenReader WxppDbRunner where
                 [ Desc WxppCachedTpAutherTokenExpiryTime ]
 
     where
-      get_res = ((flip AccessToken auther_app_id . wxppCachedTpAutherTokenAccess)
-                  &&& wxppCachedTpAutherTokenExpiryTime
-                )
-                &&& (flip WxppTpRefreshToken auther_app_id . wxppCachedTpAutherTokenRefresh)
+      to_tokens x = WxppTpAuthorizerTokens
+                      (flip AccessToken auther_app_id $ wxppCachedTpAutherTokenAccess x)
+                      (flip WxppTpRefreshToken auther_app_id $ wxppCachedTpAutherTokenRefresh x)
+                      (wxppCachedTpAutherTokenExpiryTime x)
 
 
   wxppTpTokenSourceAuthorizerTokens (WxppDbRunner run_db) = do
     transPipe run_db $
       mapOutput ((wxppCachedTpAutherTokenComponentApp &&& get_res) . entityVal) $ selectSource [] []
     where
-      get_res rec = (((flip AccessToken auther_app_id . wxppCachedTpAutherTokenAccess)
-                        &&& wxppCachedTpAutherTokenExpiryTime
-                      )
-                      &&& (flip WxppTpRefreshToken auther_app_id . wxppCachedTpAutherTokenRefresh)
-                    ) rec
-                    where
-                      auther_app_id = wxppCachedTpAutherTokenAutherApp rec
+      to_tokens auther_app_id x = WxppTpAuthorizerTokens
+                                    (flip AccessToken auther_app_id $ wxppCachedTpAutherTokenAccess x)
+                                    (flip WxppTpRefreshToken auther_app_id $ wxppCachedTpAutherTokenRefresh x)
+                                    (wxppCachedTpAutherTokenExpiryTime x)
+
+      get_res rec = let auther_app_id = wxppCachedTpAutherTokenAutherApp rec
+                     in to_tokens auther_app_id rec
 
 
 

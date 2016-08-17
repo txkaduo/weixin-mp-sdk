@@ -688,15 +688,13 @@ class WxppTpTokenReader a where
   wxppTpTokenGetAuthorizerTokens :: a
                                  -> WxppAppID  -- ^ component app
                                  -> WxppAppID  -- ^ authorizer app
-                                 -> IO (Maybe ((AccessToken, UTCTime), WxppTpRefreshToken))
+                                 -> IO (Maybe WxppTpAuthorizerTokens)
 
   -- | 取第三方平台相关的所有已保存的授权方令牌
   wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, MonadBaseControl IO m)
                                     => a
                                     -> Source m ( WxppAppID   -- ^ our app id: component app id
-                                                , ( (AccessToken, UTCTime)
-                                                  , WxppTpRefreshToken
-                                                  )
+                                                , WxppTpAuthorizerTokens
                                                 )
 
 
@@ -824,7 +822,7 @@ wxppTpRefreshAuthorizerTokensIfNedded cache dt comp_app_id auther_app_id = do
       $logWarnS wxppLogSource $
         "No refresh token found for authorizer app: " <> unWxppAppID auther_app_id
 
-    Just ((_auth_atk, expiry), rtk) -> do
+    Just (WxppTpAuthorizerTokens _auth_atk rtk expiry) -> do
       now <- liftIO getCurrentTime
       when (addUTCTime dt now >= expiry) $ do
         m_comp_atk <- liftIO $ wxppTpTokenGetComponentAccessToken cache comp_app_id
