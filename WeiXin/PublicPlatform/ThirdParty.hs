@@ -49,7 +49,7 @@ newtype WxppTpAuthCode = WxppTpAuthCode { unWxppTpAuthCode :: Text }
 -- | refresh token
 -- 因为通常跟相应的 AppId 一起使用，所以打包在一起
 data WxppTpRefreshToken = WxppTpRefreshToken
-  { tpRefreshTokenData     :: Text
+  { tpRefreshTokenData   :: Text
   , tpRefreshTokenApp    :: WxppAppID
   -- ^ 授权方的 app id
   }
@@ -59,7 +59,7 @@ data WxppTpRefreshToken = WxppTpRefreshToken
 -- | component_access_token
 -- 因为通常跟相应的 AppId 一起使用，所以打包在一起
 data WxppTpAccessToken = WxppTpAccessToken
-  { tpAccessTokenData     :: Text
+  { tpAccessTokenData   :: Text
   , tpAccessTokenApp    :: WxppAppID
   -- ^ 我方的 app id
   }
