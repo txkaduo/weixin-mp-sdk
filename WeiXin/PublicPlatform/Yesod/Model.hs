@@ -433,7 +433,7 @@ instance WxppTpTokenWriter WxppDbRunner where
                   ]
 
 
-  wxppTpTokenAddAuthorizerTokens (WxppDbRunner run_db) comp_app_id access_token refresh_token expiry = do
+  wxppTpTokenAddAuthorizerTokens (WxppDbRunner run_db) comp_app_id (WxppTpAuthorizerTokens access_token refresh_token expiry) = do
     when (app_id /= app_id2) $ do
       error $ "access token and refresh token have different app ids"
 

@@ -724,10 +724,7 @@ class WxppTpTokenWriter a where
 
   wxppTpTokenAddAuthorizerTokens :: a
                                  -> WxppAppID -- ^ component app id
-                                 -> AccessToken
-                                 -- ^ access token of authorizer app
-                                 -> WxppTpRefreshToken
-                                 -> UTCTime
+                                 -> WxppTpAuthorizerTokens
                                  -> IO ()
 
   -- | 删除过期时间在指定时间之前的所有token
@@ -797,10 +794,9 @@ wxppTpAcquireAndSaveAuthorizerTokens :: (WxppApiMonad env m, WxppTpTokenWriter c
                                      -> WxppTpRefreshToken
                                      -> m ()
 wxppTpAcquireAndSaveAuthorizerTokens cache comp_atk rtk = do
-  WxppTpAuthorizerTokens auth_atk rtk2 expiry <-
-        wxppTpRefreshAuthorizerTokens comp_atk rtk
+  new_tokens <- wxppTpRefreshAuthorizerTokens comp_atk rtk
 
-  liftIO $ wxppTpTokenAddAuthorizerTokens cache comp_app_id auth_atk rtk2 expiry
+  liftIO $ wxppTpTokenAddAuthorizerTokens cache comp_app_id new_tokens
 
   where
     WxppTpAccessToken _ comp_app_id = comp_atk
