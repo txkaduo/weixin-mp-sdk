@@ -136,7 +136,8 @@ instance ToJSON WxppBriefMediaID where
     toJSON = toJSON . unWxppBriefMediaID
 
 instance FromJSON WxppBriefMediaID where
-    parseJSON = fmap WxppBriefMediaID . parseJSON
+  parseJSON = fmap WxppBriefMediaID
+                . (parseJSON >=> nonEmptyJsonText "Weixin brief media id cannot be empty text")
 
 
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
@@ -160,7 +161,8 @@ instance ToJSON WxppDurableMediaID where
     toJSON = toJSON . unWxppDurableMediaID
 
 instance FromJSON WxppDurableMediaID where
-    parseJSON = fmap WxppDurableMediaID . parseJSON
+  parseJSON = fmap WxppDurableMediaID
+                . (parseJSON >=> nonEmptyJsonText "Weixin durable media id cannot be empty text")
 
 instance PathPiece WxppDurableMediaID where
     fromPathPiece = fmap WxppDurableMediaID . fromPathPiece
@@ -183,7 +185,8 @@ instance ToJSON WxppMediaID where
     toJSON = toJSON . unWxppMediaID
 
 instance FromJSON WxppMediaID where
-    parseJSON = fmap WxppMediaID . parseJSON
+  parseJSON = fmap WxppMediaID
+                . (parseJSON >=> nonEmptyJsonText "Weixin media id cannot be empty text")
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
@@ -208,7 +211,8 @@ instance ToJSON WxppOpenID where
     toJSON = toJSON . unWxppOpenID
 
 instance FromJSON WxppOpenID where
-    parseJSON = fmap WxppOpenID . parseJSON
+  parseJSON = fmap WxppOpenID
+                . (parseJSON >=> nonEmptyJsonText "Weixin open id cannot be empty text")
 
 instance PathPiece WxppOpenID where
     toPathPiece (WxppOpenID x)  = toPathPiece x
@@ -225,7 +229,8 @@ newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                              , ToMessage, ToMarkup)
 
 instance FromJSON WxppUnionID where
-    parseJSON = fmap WxppUnionID . parseJSON
+  parseJSON = fmap WxppUnionID
+                . (parseJSON >=> nonEmptyJsonText "Weixin union id cannot be empty text")
 
 instance ToJSON WxppUnionID where
     toJSON = toJSON . unWxppUnionID
@@ -366,6 +371,10 @@ newtype Token = Token { unToken :: Text }
                              , ToMessage, ToMarkup
                              )
 
+instance FromJSON Token where
+  parseJSON = fmap Token . (parseJSON >=> nonEmptyJsonText "Weixin Token cannot be empty text")
+
+
 newtype AesKey = AesKey { unAesKey :: Key AES }
   deriving (Eq)
 instance Show AesKey where
@@ -436,7 +445,10 @@ instance PathPiece WxppAppID where
 
 instance ToJSON WxppAppID where toJSON = toJSON . unWxppAppID
 
-instance FromJSON WxppAppID where parseJSON = fmap WxppAppID . parseJSON
+instance FromJSON WxppAppID where
+  parseJSON = fmap WxppAppID
+                . (parseJSON >=> nonEmptyJsonText "Weixin app id cannot be empty text")
+
 
 -- | XXX: Read instance 目前只是 Yesod 生成的 Route 类型时用到
 -- 但不清楚具体使用场景，不知道以下的定义是否合适
