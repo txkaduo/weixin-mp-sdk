@@ -335,3 +335,12 @@ simpleParseFloat = fmap fst . listToMaybe . filter ((== "") . snd) . readFloat
 
 simpleParseFloatT :: (RealFrac a) => Text -> Maybe a
 simpleParseFloatT = simpleParseFloat . T.unpack
+
+
+nonEmptyJsonText :: String        -- ^ error message
+                 -> Text          -- ^ parsed text, returned unchanged if non-empty
+                 -> Parser Text
+nonEmptyJsonText msg t = do
+  if null t
+     then fail msg
+     else return t
