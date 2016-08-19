@@ -274,11 +274,14 @@ instance FromJSON WxppInMsgID where
 -- 从文档“生成带参数的二维码”一文中看
 -- 场景ID可以是个32位整数，也可以是个字串。有若干约束。
 newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
-  deriving (Show, Eq, Ord, Typeable, Generic, Binary, NFData, ToMarkup)
+  deriving (Show, Eq, Ord, Typeable, Generic, Binary, NFData, ToMarkup
+           , PersistField, PersistFieldSql
+           )
 
 newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
                              , NFData
+                             , PersistField, PersistFieldSql
                              , ToMessage, ToMarkup)
 
 data WxppScene =    WxppSceneInt WxppIntSceneID
