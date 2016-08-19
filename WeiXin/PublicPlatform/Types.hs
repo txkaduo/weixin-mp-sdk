@@ -409,6 +409,14 @@ decodeBase64AesKey t = fmap AesKey $ do
 parseAesKeyFromText :: Text -> Parser AesKey
 parseAesKeyFromText t = either fail return $ decodeBase64AesKey t
 
+-- | Like parseAesKeyFromText, but return Nothing if text is empty
+parseAesKeyFromTextMaybe :: Text -> Parser (Maybe AesKey)
+parseAesKeyFromTextMaybe t =
+  let t' = T.strip t
+   in if null t'
+         then return Nothing
+         else fmap Just $ parseAesKeyFromText t'
+
 instance FromJSON AesKey where
     parseJSON = withText "AesKey" parseAesKeyFromText
 
