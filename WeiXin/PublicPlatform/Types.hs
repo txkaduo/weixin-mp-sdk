@@ -640,6 +640,12 @@ data WxppEvent = WxppEvtSubscribe
 instance NFData WxppEvent
 instance Binary WxppEvent
 
+wxppEventIsSubscribe :: WxppEvent -> Bool
+wxppEventIsSubscribe WxppEvtSubscribe             = True
+wxppEventIsSubscribe (WxppEvtSubscribeAtScene {}) = True
+wxppEventIsSubscribe _                            = False
+
+
 wxppEventTypeString :: IsString a => WxppEvent -> a
 wxppEventTypeString WxppEvtSubscribe              = "subscribe"
 wxppEventTypeString WxppEvtUnsubscribe            = "unsubscribe"
