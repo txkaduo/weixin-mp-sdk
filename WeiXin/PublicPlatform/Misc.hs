@@ -320,8 +320,10 @@ mkWxppTpSub :: ( LoggingTRunner app
                     => WxppTpEventNotice
                     -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
                )
+            -> WxppAppID
+            -- ^ 被授权公众号的 app id
             -> WxppTpSub
-mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt =
+mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt auther_app_id =
   WxppTpSub
     my_app_id
     my_app_token
@@ -329,6 +331,7 @@ mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_t
     (runLoggingTWith foundation)
     processor
     handle_tp_evt
+    auther_app_id
 
 
 defaultInMsgProcMiddlewares :: forall env m.

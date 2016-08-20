@@ -173,6 +173,10 @@ data WxppTpSub = WxppTpSub
                                 => WxppTpEventNotice
                                 -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
   -- ^ 处理第三方平台事件通知的逻辑
+  , wxppTpSubAuthorizerAppId    :: WxppAppID
+  -- ^ 文档一方面说可以从 ToUserName 中得到消息的来源公众号
+  -- 但又红字标明接收已授权公众号消息的url中要带有已授权公众号的app id
+  -- 所以还是留有这了字段
   }
 
 instance Show WxppTpSub where
