@@ -733,7 +733,9 @@ class WxppTpTokenWriter a where
                                    -> Maybe WxppAppID
                                    -- ^ authorizer_appid
                                    -- 没指定则不考虑 authorizer_appid
-                                   -> UTCTime
+                                   -> Maybe UTCTime
+                                   -- ^ 根据过期时间过滤
+                                   -- 没指定则不考虑此条件
                                    -> IO ()
 
 

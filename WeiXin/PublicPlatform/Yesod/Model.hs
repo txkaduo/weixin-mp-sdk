@@ -448,11 +448,11 @@ instance WxppTpTokenWriter WxppDbRunner where
       WxppTpRefreshToken raw_rtk app_id2 = refresh_token
 
 
-  wxppTpTokenPurgeAuthorizerTokens (WxppDbRunner run_db) comp_app_id m_auth_app_id expiry = do
+  wxppTpTokenPurgeAuthorizerTokens (WxppDbRunner run_db) comp_app_id m_auth_app_id m_expiry = do
     run_db $ do
       deleteWhere $
         catMaybes
           [ Just (WxppCachedTpAutherTokenComponentApp ==. comp_app_id)
-          , Just (WxppCachedTpAutherTokenExpiryTime <. expiry)
+          , fmap (WxppCachedTpAutherTokenExpiryTime <.) m_expiry
           , fmap (WxppCachedTpAutherTokenAutherApp ==.) m_auth_app_id
           ]
