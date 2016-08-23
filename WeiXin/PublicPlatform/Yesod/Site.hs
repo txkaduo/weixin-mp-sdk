@@ -291,22 +291,26 @@ wxppOAuthMakeRandomState app_id = do
 
 
 wxppOAuthLoginRedirectUrl :: (MonadHandler m)
-                        => (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
-                        -> WxppAppID
-                        -> OAuthScope
-                        -> Text             -- ^ oauth's state param
-                        -> UrlText          -- ^ return URL
-                        -> m UrlText
-wxppOAuthLoginRedirectUrl url_render app_id scope user_st return_url = do
+                          => (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
+                          -> Maybe WxppAppID
+                          -- ^ 如果我方是第三方平台中服务方，需指定此参数
+                          -> WxppAppID
+                          -> OAuthScope
+                          -> Text             -- ^ oauth's state param
+                          -> UrlText          -- ^ return URL
+                          -> m UrlText
+wxppOAuthLoginRedirectUrl url_render m_comp_app_id app_id scope user_st return_url = do
     random_state <- wxppOAuthMakeRandomState app_id
     let state = random_state <> ":" <> user_st
 
     oauth_retrurn_url <- liftM UrlText $
                             url_render OAuthCallbackR [ ("return", unUrlText return_url) ]
-    let auth_url = wxppOAuthRequestAuthInsideWx app_id scope
+
+    let auth_url = wxppOAuthRequestAuthInsideWx m_comp_app_id app_id scope
                         oauth_retrurn_url
                         state
     return auth_url
+
 
 sessionKeyWxppUser :: WxppAppID -> Text
 sessionKeyWxppUser app_id = "wx|" <> unWxppAppID app_id
@@ -461,11 +465,13 @@ wxppHandlerOAuthReturnGetInfo broker app_id = do
 wxppOAuthHandler :: (MonadHandler m, WxppCacheTemp c)
                 => c
                 -> (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
+                -> Maybe WxppAppID
+                -- ^ 如果我方是第三方平台中服务方，需指定此参数
                 -> WxppAppID
                 -> OAuthScope
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
-wxppOAuthHandler cache render_url app_id scope f = do
+wxppOAuthHandler cache render_url m_comp_app_id app_id scope f = do
     m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
     case m_atk_p of
         Nothing -> do
@@ -473,7 +479,7 @@ wxppOAuthHandler cache render_url app_id scope f = do
             unless is_wx $ do
                 permissionDenied "请用在微信里打开此网页"
             url <- getCurrentUrl
-            wxppOAuthLoginRedirectUrl render_url app_id scope "" (UrlText url)
+            wxppOAuthLoginRedirectUrl render_url m_comp_app_id app_id scope "" (UrlText url)
                 >>= redirect . unUrlText
         Just atk_p -> f atk_p
 

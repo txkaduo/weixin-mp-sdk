@@ -19,7 +19,6 @@ module WeiXin.PublicPlatform.OAuth
     ) where
 
 import ClassyPrelude
-import qualified Data.Text                  as T
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens
@@ -61,40 +60,54 @@ instance FromJSON WxppAuthConfig where
 
 
 -- | 获取用户授权: 仅用于微信内打开
-wxppOAuthRequestAuthInsideWx :: WxppAppID
-                            -> OAuthScope
-                            -> UrlText      -- ^ return to this url
-                            -> Text -- ^ state to return
-                            -> UrlText
+wxppOAuthRequestAuthInsideWx :: Maybe WxppAppID
+                             -- ^ 如果我方是第三方平台中服务方，需指定此参数
+                             -> WxppAppID
+                             -> OAuthScope
+                             -> UrlText      -- ^ return to this url
+                             -> Text -- ^ state to return
+                             -> UrlText
 wxppOAuthRequestAuthInsideWx =
-    wxppOAuthRequestAuthImpl "https://open.weixin.qq.com/connect/oauth2/authorize"
+    wxppOAuthRequestAuthImpl
+      "https://open.weixin.qq.com/connect/oauth2/authorize"
 
 
 -- | 获取用户授权: 用于微信外游览器
 wxppOAuthRequestAuthOutsideWx :: WxppAppID
-                                -> UrlText      -- ^ return to this url
-                                -> Text -- ^ state to return
-                                -> UrlText
+                              -> UrlText      -- ^ return to this url
+                              -> Text -- ^ state to return
+                              -> UrlText
 wxppOAuthRequestAuthOutsideWx app_id =
-    wxppOAuthRequestAuthImpl "https://open.weixin.qq.com/connect/qrconnect" app_id AS_SnsApiLogin
+    wxppOAuthRequestAuthImpl
+      "https://open.weixin.qq.com/connect/qrconnect"
+      Nothing
+      app_id
+      AS_SnsApiLogin
 
+
+-- | 微信开发开台有几个地方使用 oauth2 授权，它们非常相近，又略有不同
+-- 这个函数尽量兼容所有需求
 wxppOAuthRequestAuthImpl :: String
-                        -> WxppAppID
-                        -> OAuthScope
-                        -> UrlText      -- ^ return to this url
-                        -> Text -- ^ state to return
-                        -> UrlText
-wxppOAuthRequestAuthImpl api_url app_id scope return_url state =
+                         -> Maybe WxppAppID
+                         -- ^ 如果我方是第三方平台中服务方，需指定此参数
+                         -> WxppAppID
+                         -> OAuthScope
+                         -> UrlText      -- ^ return to this url
+                         -> Text -- ^ state to return
+                         -> UrlText
+wxppOAuthRequestAuthImpl api_url m_comp_app_id app_id scope return_url state =
     UrlText $ fromString $ uriToString id uri ""
     where
         base_uri = fromMaybe (error "cannot parse uri") $
                     parseAbsoluteURI api_url
 
-        vars =  [ ("appid",         T.unpack (unWxppAppID app_id))
-                , ("redirect_uri",  T.unpack (unUrlText return_url))
-                , ("response_type", "code")
-                , ("scope",         simpleEncode scope)
-                , ("state",         T.unpack state)
+        vars = catMaybes
+                [ Just ("appid",         unpack (unWxppAppID app_id))
+                , Just ("redirect_uri",  unpack (unUrlText return_url))
+                , Just ("response_type", "code")
+                , Just ("scope",         simpleEncode scope)
+                , Just ("state",         unpack state)
+                , fmap (("component_appid",) . unpack . unWxppAppID) m_comp_app_id
                 ]
 
         uri = base_uri
