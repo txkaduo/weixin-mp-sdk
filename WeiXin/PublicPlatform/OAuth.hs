@@ -140,6 +140,7 @@ wxppOAuthGetAccessToken app_id secret code = do
 
 
 -- | Refresh AccessToken
+-- CAUTION: 不可用于第三方平台, see wxppTpOAuthRefreshAccessToken
 wxppOAuthRefreshAccessToken :: (WxppApiMonad env m)
                             => WxppAppID
                             -> OAuthRefreshToken

@@ -852,6 +852,26 @@ wxppTpOAuthGetAccessToken (WxppTpAccessToken raw_comp_atk comp_app_id) app_id co
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
 
+
+-- | Like wxppOAuthRefreshAccessToken, but for third-party platform only.
+wxppTpOAuthRefreshAccessToken :: (WxppApiMonad env m)
+                              => WxppTpAccessToken
+                              -> WxppAppID
+                              -> OAuthRefreshToken
+                              -> m OAuthRefreshAccessTokenResult
+wxppTpOAuthRefreshAccessToken (WxppTpAccessToken raw_comp_atk comp_app_id) app_id rtk = do
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSnsApiBase url_conf <> "/oauth2/component/refresh_token"
+        opts = defaults & param "appid" .~ [ unWxppAppID app_id ]
+                        & param "refresh_token" .~ [ unOAuthRefreshToken rtk ]
+                        & param "grant_type" .~ [ "refresh_token" ]
+                        & param "component_appid" .~ [ unWxppAppID comp_app_id ]
+                        & param "component_access_token" .~ [ raw_comp_atk ]
+
+    liftIO (WS.getWith opts sess url)
+        >>= asWxppWsResponseNormal'
+
+
 --------------------------------------------------------------------------------
 
 
