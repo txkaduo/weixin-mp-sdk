@@ -121,6 +121,7 @@ wxppOAuthRequestAuthImpl api_url m_comp_app_id app_id scope return_url state =
 
 
 -- | 根据 code 取 access token
+-- CAUTION: 不可用于第三方平台, see wxppTpOAuthGetAccessToken
 wxppOAuthGetAccessToken :: (WxppApiMonad env m)
                         => WxppAppID
                         -> WxppAppSecret

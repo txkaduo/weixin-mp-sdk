@@ -834,6 +834,24 @@ wxppTpRefreshAuthorizerTokensIfNedded cache dt comp_app_id auther_app_id = do
             wxppTpAcquireAndSaveAuthorizerTokens cache comp_atk rtk
 
 
+-- | 作用类似于　wxppOAuthGetAccessToken, 但仅用于第三方平台
+wxppTpOAuthGetAccessToken :: (WxppApiMonad env m)
+                          => WxppTpAccessToken
+                          -> WxppAppID
+                          -> OAuthCode
+                          -> m OAuthAccessTokenResult
+wxppTpOAuthGetAccessToken (WxppTpAccessToken raw_comp_atk comp_app_id) app_id code = do
+    (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+    let url = wxppUrlConfSnsApiBase url_conf <> "/oauth2/component/access_token"
+        opts = defaults & param "appid" .~ [ unWxppAppID app_id ]
+                        & param "code" .~ [ unOAuthCode code ]
+                        & param "grant_type" .~ [ "authorization_code" ]
+                        & param "component_appid" .~ [ unWxppAppID comp_app_id ]
+                        & param "component_access_token" .~ [ raw_comp_atk ]
+
+    liftIO (WS.getWith opts sess url)
+        >>= asWxppWsResponseNormal'
+
 --------------------------------------------------------------------------------
 
 
