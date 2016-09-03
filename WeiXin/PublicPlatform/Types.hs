@@ -1546,6 +1546,14 @@ instance NFData OAuthAccessTokenPkg
 
 $(deriveSafeCopy 0 'base ''OAuthAccessTokenPkg)
 
+
+class HasOAuthAccessTokenPkg a where
+  getOAuthAccessTokenPkg :: a -> OAuthAccessTokenPkg
+
+instance HasOAuthAccessTokenPkg OAuthAccessTokenPkg where
+  getOAuthAccessTokenPkg = id
+
+
 data OAuthTokenInfo = OAuthTokenInfo
                         !OAuthAccessToken
                         !OAuthRefreshToken
@@ -1562,6 +1570,10 @@ packOAuthTokenInfo :: WxppAppID
                     -> OAuthAccessTokenPkg
 packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes _expiry) =
     OAuthAccessTokenPkg atk rtk scopes open_id app_id
+
+
+instance HasOAuthAccessTokenPkg ((WxppAppID, WxppOpenID), OAuthTokenInfo) where
+  getOAuthAccessTokenPkg ((x, y), z) = packOAuthTokenInfo x y z
 
 
 fromOAuthAccessTokenResult :: UTCTime
@@ -1583,6 +1595,16 @@ data OAuthAccessTokenResult = OAuthAccessTokenResult {
                                 , oauthAtkUnionID       :: Maybe WxppUnionID
                                 }
                                 deriving (Eq, Show)
+
+instance HasOAuthAccessTokenPkg (WxppAppID, OAuthAccessTokenResult) where
+  getOAuthAccessTokenPkg (app_id, x) =
+      OAuthAccessTokenPkg
+        (oauthAtkToken x)
+        (oauthAtkRefreshToken x)
+        (oauthAtkScopes x)
+        (oauthAtkOpenID x)
+        app_id
+
 
 instance FromJSON OAuthAccessTokenResult where
     parseJSON = withObject "OAuthAccessTokenResult" $ \o -> do
