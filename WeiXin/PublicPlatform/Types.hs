@@ -1312,7 +1312,7 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                             CityName
                             ProvinceName
                             CountryName
-                            UrlText     -- head image url
+                            (Maybe UrlText)     -- head image url
                             UTCTime
                             (Maybe WxppUnionID)
                         deriving (Show, Eq, Ord, Typeable, Generic)
@@ -1355,7 +1355,7 @@ instance FromJSON EndUserQueryResult where
                         lang <- SimpleLocaleName <$> obj .: "language"
                         province <- obj .: "province"
                         country <- obj .: "country"
-                        headimgurl <- UrlText <$> obj .: "headimgurl"
+                        headimgurl <- (fmap UrlText . join . fmap emptyTextToNothing) <$> obj .:? "headimgurl"
                         subs_time <- epochIntToUtcTime <$> obj .: "subscribe_time"
                         m_union_id <- obj .:? "unionid"
                         return $ EndUserQueryResult
@@ -1385,7 +1385,7 @@ instance ToJSON EndUserQueryResult where
         , "city"        .= city
         , "province"    .= province
         , "country"     .= country
-        , "headimgurl"  .= unUrlText headimgurl
+        , "headimgurl"  .= headimgurl
         , "subscribe_time".= utcTimeToEpochInt subs_time
         , "unionid"     .= m_union_id
         ]

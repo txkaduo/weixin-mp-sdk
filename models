@@ -90,7 +90,7 @@ WxppCachedUserInfoExt
     city                CityName
     province            ProvinceName
     country             CountryName
-    headImg             UrlText maxlen=200
+    headImg             UrlText Maybe maxlen=200
     subsTime            UTCTime
 
     createdTime         UTCTime
