@@ -14,6 +14,7 @@ module WeiXin.PublicPlatform.OAuth
     , wxppOAuthGetAccessToken
     , wxppOAuthRefreshAccessToken
     , wxppOAuthGetUserInfo
+    , wxppOAuthGetUserInfo'
     , wxppOAuthCheckAccessToken
     , wxppOAuthGetUserInfoCached
     ) where
@@ -168,6 +169,12 @@ wxppOAuthGetUserInfo lang atk_p = do
                         & param "lang" .~ [ lang ]
     liftIO (WS.getWith opts sess url)
         >>= asWxppWsResponseNormal'
+
+
+wxppOAuthGetUserInfo' :: (WxppApiMonad env m)
+                      => OAuthAccessTokenPkg
+                      -> m OAuthGetUserInfoResult
+wxppOAuthGetUserInfo' = wxppOAuthGetUserInfo "zh_CN"
 
 
 -- | call wxppOAuthGetUserInfo and save it in cache
