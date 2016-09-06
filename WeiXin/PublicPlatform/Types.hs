@@ -40,7 +40,7 @@ import Language.Haskell.TH.Lift             (deriveLift)
 import Web.HttpApiData                      (ToHttpApiData, FromHttpApiData)
 
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
-import Yesod.Helpers.Utils                  (emptyTextToNothing)
+import Yesod.Helpers.Utils                  (nullToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Text.Parsec.TX.Utils                 ( SimpleStringRep(..), natural
                                             , derivePersistFieldS, makeSimpleParserByTable
@@ -841,7 +841,7 @@ instance FromJSON WxppInMsg where
         "voice" -> liftM3 WxppInMsgVoice
                     (obj .: "media_id")
                     (obj .: "format")
-                    (join . fmap emptyTextToNothing <$> obj .:? "recognition")
+                    (join . fmap nullToNothing <$> obj .:? "recognition")
 
         "video" -> liftM2 WxppInMsgVideo
                     (obj .: "media_id")
@@ -930,10 +930,10 @@ type WxppArticleLoader = DelayedYamlLoader WxppArticle
 
 instance FromJSON WxppArticle where
     parseJSON = withObject "WxppArticle" $ \obj -> do
-                title <- join . fmap emptyTextToNothing <$> obj .:? "title"
-                desc <- join . fmap emptyTextToNothing <$> obj .:? "desc"
-                pic_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "pic-url"
-                url <- fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "url"
+                title <- join . fmap nullToNothing <$> obj .:? "title"
+                desc <- join . fmap nullToNothing <$> obj .:? "desc"
+                pic_url <- fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "pic-url"
+                url <- fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "url"
                 return $ WxppArticle title desc pic_url url
 
 -- | 外发的信息
@@ -1002,15 +1002,15 @@ instance FromJSON WxppOutMsg where
           "video" -> liftM4 WxppOutMsgVideo
                         (obj .: "media_id")
                         (obj .: "thumb_media_id")
-                        (join . fmap emptyTextToNothing <$> obj .:? "title")
-                        (join . fmap emptyTextToNothing <$> obj .:? "desc")
+                        (join . fmap nullToNothing <$> obj .:? "title")
+                        (join . fmap nullToNothing <$> obj .:? "desc")
 
           "music" -> liftM5 WxppOutMsgMusic
                         (obj .: "thumb_media_id")
-                        (join . fmap emptyTextToNothing <$> obj .:? "title")
-                        (join . fmap emptyTextToNothing <$> obj .:? "desc")
-                        (fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "url")
-                        (fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "hq_url")
+                        (join . fmap nullToNothing <$> obj .:? "title")
+                        (join . fmap nullToNothing <$> obj .:? "desc")
+                        (fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "url")
+                        (fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "hq_url")
 
           "news" -> WxppOutMsgNews <$> obj .: "articles"
 
@@ -1066,9 +1066,9 @@ instance FromJSON WxppOutMsgL where
                                     thumb_media_id_or_path <- parseMediaIDOrPath "thumb_" obj
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
-                                    url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
+                                    url <- fmap UrlText <$> join . fmap nullToNothing <$>
                                                 obj .:? "url"
-                                    hq_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
+                                    hq_url <- fmap UrlText <$> join . fmap nullToNothing <$>
                                                 obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL thumb_media_id_or_path title desc url hq_url
 
@@ -1106,12 +1106,12 @@ instance FromJSON WxppDurableArticle where
                     WxppDurableArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
-                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
-                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
+                        <*> ( join . fmap nullToNothing <$> obj .:? "author" )
+                        <*> ( join . fmap nullToNothing <$> obj .:? "digest" )
                         <*> ( fmap int_to_bool $ obj .: "show_cover_pic"
                                                     >>= parseIntWithTextparsec natural )
                         <*> ( obj .: "content" )
-                        <*> ( fmap UrlText . join . fmap emptyTextToNothing <$> obj .: "content_source_url" )
+                        <*> ( fmap UrlText . join . fmap nullToNothing <$> obj .: "content_source_url" )
             where
                 int_to_bool x = x /= 0
 
@@ -1362,7 +1362,7 @@ instance FromJSON EndUserQueryResult where
                         lang <- SimpleLocaleName <$> obj .: "language"
                         province <- obj .: "province"
                         country <- obj .: "country"
-                        headimgurl <- (fmap UrlText . join . fmap emptyTextToNothing) <$> obj .:? "headimgurl"
+                        headimgurl <- (fmap UrlText . join . fmap nullToNothing) <$> obj .:? "headimgurl"
                         subs_time <- epochIntToUtcTime <$> obj .: "subscribe_time"
                         m_union_id <- obj .:? "unionid"
                         return $ EndUserQueryResult
@@ -1621,7 +1621,7 @@ instance FromJSON OAuthAccessTokenResult where
                         <*> (fmap Set.fromList $ o .: "scope" >>= parseTextByParsec p_scopes)
                         <*> o .: "refresh_token"
                         <*> o .: "openid"
-                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+                        <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
                 where
                     p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
 
@@ -1669,9 +1669,9 @@ instance FromJSON OAuthGetUserInfoResult where
                         <*> o .: "country"
                         <*> o .: "province"
                         <*> o .: "city"
-                        <*> (fmap UrlText . join . fmap emptyTextToNothing <$> o .:? "headimgurl")
+                        <*> (fmap UrlText . join . fmap nullToNothing <$> o .:? "headimgurl")
                         <*> o .: "privilege"
-                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+                        <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
 
 newtype WxppJsTicket = WxppJsTicket { unWxppJsTicket :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, NFData)
