@@ -1,10 +1,16 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Media
     ( module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Class
     ) where
 
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+import ClassyPrelude
+#else
 import ClassyPrelude hiding (catch)
+#endif
+
 import qualified Data.Text                  as T
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
@@ -13,7 +19,9 @@ import Control.Monad.Logger
 import Control.Monad.Reader                 (asks)
 import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Catch                  (catch, catches, Handler(..))
+#endif
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:))
@@ -126,7 +134,7 @@ wxppUploadMediaLBS atk mtype mime filename bs = do
         partLBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
-wxppUploadMediaCached :: ( WxppApiMonad env m, WxppCacheTokenReader c, WxppCacheTemp c)
+wxppUploadMediaCached :: ( WxppApiMonad env m, WxppCacheTemp c)
                       => c
                       -> AccessToken
                       -> WxppMediaType
@@ -154,7 +162,7 @@ wxppUploadMediaCached cache atk mtype fp = do
 
 
 -- | 这里有个问题：如果之前上传过的文件的 mime 发生变化，可能会使用旧的文件 media id
-wxppUploadMediaCachedBS :: ( WxppApiMonad env m, WxppCacheTokenReader c, WxppCacheTemp c )
+wxppUploadMediaCachedBS :: ( WxppApiMonad env m, WxppCacheTemp c )
                         => c
                         -> AccessToken
                         -> WxppMediaType
@@ -226,7 +234,7 @@ wxppUploadImageGetUrlBS atk mime filename bs = do
 -- * 执行必要的延迟加载
 -- 这个函数会抛出异常 见 tryWxppWsResult
 -- 下面还有个尽量不抛出异常的版本
-fromWxppOutMsgL :: (WxppApiMonad env m, WxppCacheTokenReader c, WxppCacheTemp c)
+fromWxppOutMsgL :: (WxppApiMonad env m, WxppCacheTemp c)
                 => NonEmpty FilePath
                 -> c
                 -> m AccessToken
@@ -287,7 +295,7 @@ fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
 
 
-fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTokenReader c, WxppCacheTemp c)
+fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTemp c)
                  => NonEmpty FilePath
                  -> c
                  -> m AccessToken

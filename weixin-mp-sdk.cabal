@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                weixin-mp-sdk
-version:             0.23.3
+version:             0.24
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -60,6 +60,7 @@ library
                        WeiXin.PublicPlatform.Yesod.Site.Data
                        WeiXin.PublicPlatform.BgWork
                        WeiXin.PublicPlatform.Utils
+                       WeiXin.PublicPlatform.XmlUtils
                        WeiXin.PublicPlatform.Misc
                        WeiXin.PublicPlatform.Conversation
                        WeiXin.PublicPlatform.Conversation.Misc
@@ -70,6 +71,7 @@ library
                        WeiXin.PublicPlatform.OAuth
                        WeiXin.PublicPlatform.JS
                        WeiXin.PublicPlatform.Pay
+                       WeiXin.PublicPlatform.ThirdParty
                        WeiXin.PublicPlatform
 
   -- other-modules:       
@@ -94,11 +96,11 @@ library
                      , classy-prelude >= 0.12.7
                      , classy-prelude-yesod
                      , yesod
-                     , persistent >= 2.0 && < 2.3
+                     , persistent >= 2.0 && < 2.6
                      , yesod-core
                      , yesod-form
                      , shakespeare
-                     , yesod-helpers >= 0.13.4
+                     , yesod-helpers >= 0.14
                      , text
                      , aeson
                      , bytestring

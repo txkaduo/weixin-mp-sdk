@@ -258,7 +258,8 @@ instance WxppCacheTemp WxppCacheByAcid where
         tt_info <- MaybeT $ query acid $ WxppAcidGetCachedSnsUserInfo app_id open_id lang
         return (_unTimeTag tt_info, _ttTime tt_info)
 
-    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id lang info now = do
+    wxppCacheAddSnsUserInfo (WxppCacheByAcid acid) app_id lang info = do
+        now <- liftIO getCurrentTime
         update acid $ WxppAcidAddCachedSnsUserInfo app_id lang info now
 
     wxppCacheLookupUserInfo (WxppCacheByAcid acid) app_id open_id = do

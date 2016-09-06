@@ -201,7 +201,7 @@ optionsParse = Options
                 <*> manageCmdParser
 
 
-start :: (MonadLogger m, MonadThrow m, MonadCatch m, MonadIO m)
+start :: (MonadLogger m, MonadCatch m, MonadIO m)
       => Options
       -> WxppApiEnv
       -> m ()
@@ -367,7 +367,7 @@ start opts api_env = do
                         wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
             putStrLn $ fromString $ show msg_id
 
-editNewsDurable :: (WxppApiMonad env m, MonadCatch m) =>
+editNewsDurable :: (WxppApiMonad env m) =>
     AccessToken -> WxppDurableMediaID -> [WxppDurableArticleS] -> m ()
 editNewsDurable atk mid articles = do
     let go bs = do

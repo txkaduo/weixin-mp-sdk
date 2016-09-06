@@ -3,8 +3,9 @@
 
 -- | incoming message
 WxppInMsgRecord
-    app                 WxppAppID maxlen=200
-    to                  Text Maybe
+    app                 WxppAppID Maybe maxlen=200
+                            -- ^ App Id may not be known if we cannot parse the message properly
+    to                  WeixinUserName Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
     from                WxppOpenID Maybe
                             -- ^ Nothing only if we cannot parse the message propertly
@@ -89,7 +90,7 @@ WxppCachedUserInfoExt
     city                CityName
     province            ProvinceName
     country             CountryName
-    headImg             UrlText maxlen=200
+    headImg             UrlText Maybe maxlen=200
     subsTime            UTCTime
 
     createdTime         UTCTime

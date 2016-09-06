@@ -1,6 +1,7 @@
 module WeiXin.PublicPlatform.Message where
 
 import ClassyPrelude hiding (Element)
+import Control.Arrow (left)
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Base16     as B16
@@ -12,14 +13,13 @@ import Text.XML
 import Text.XML.Cursor
 import Text.Hamlet.XML
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
-import Numeric                              (readDec, readFloat)
 import Text.Parsec
 
 import Yesod.Helpers.Parsec                 (SimpleStringRep(..), strictParseSimpleEncoded)
-import Yesod.Helpers.Utils                  (mapLeft)
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Utils
+import WeiXin.PublicPlatform.XmlUtils
 
 
 wxppInMsgEntityFromLbs :: LB.ByteString -> Either String WxppInMsgEntity
@@ -145,7 +145,7 @@ wxppInMsgEntityFromDocumentA app_id ak doc = do
 
 wxppInMsgEntityFromDocument :: Document -> Either String WxppInMsgEntity
 wxppInMsgEntityFromDocument doc = do
-    to_user <- get_ele_s "ToUserName"
+    to_user <- fmap WeixinUserName $ get_ele_s "ToUserName"
     from_user <- fmap WxppOpenID $ get_ele_s "FromUserName"
     tt <- get_ele_s "CreateTime"
                 >>= maybe
@@ -288,7 +288,7 @@ wxppEventFromDocument doc = do
 
         "MASSSENDJOBFINISH" -> do
                     status <- get_ele_s "Status"
-                                >>= mapLeft (\x -> "failed to parse Status: " ++ show x)
+                                >>= left (\x -> "failed to parse Status: " ++ show x)
                                     . strictParseSimpleEncoded
                     total <- get_ele_s "TotalCount"
                                 >>= maybe (Left $ "failed to parse TotalCount") Right
@@ -348,7 +348,7 @@ wxppOutMsgEntityToElement me = Element "xml" mempty $ common_nodes <> msg_nodes
         msg_nodes = wxppOutMsgToNodes $ wxppOutMessage me
         common_nodes = [xml|
 <ToUserName>#{unWxppOpenID $ wxppOutToUserName me}
-<FromUserName>#{wxppOutFromUserName me}
+<FromUserName>#{unWeixinUserName $ wxppOutFromUserName me}
 <CreateTime>#{fromString $ show $ utcTimeToEpochInt $ wxppOutCreatedTime me}
 |]
 
@@ -416,26 +416,3 @@ wxppOutMsgToNodes (WxppOutMsgNews articles) = [xml|
 wxppOutMsgToNodes WxppOutMsgTransferToCustomerService = [xml|
 <MsgType>transfer_customer_service
 |]
-
---------------------------------------------------------------------------------
-
-getElementContent :: Cursor -> Name -> Either String Text
-getElementContent cursor t =
-    maybe (Left $ T.unpack $ "no such element: " <> nameLocalName t) Right $
-        getElementContentMaybe cursor t
-
-getElementContentMaybe :: Cursor -> Name -> Maybe Text
-getElementContentMaybe cursor t =
-    listToMaybe $ cursor $/ element t &// content
-
-simpleParseDec :: (Eq a, Num a) => String -> Maybe a
-simpleParseDec = fmap fst . listToMaybe . filter (null . snd) . readDec
-
-simpleParseDecT :: (Eq a, Num a) => Text -> Maybe a
-simpleParseDecT = simpleParseDec . T.unpack
-
-simpleParseFloat :: (Eq a, RealFrac a) => String -> Maybe a
-simpleParseFloat = fmap fst . listToMaybe . filter ((== "") . snd) . readFloat
-
-simpleParseFloatT :: (Eq a, RealFrac a) => Text -> Maybe a
-simpleParseFloatT = simpleParseFloat . T.unpack

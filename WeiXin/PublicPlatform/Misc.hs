@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Misc where
 
 import ClassyPrelude hiding (try)
@@ -11,15 +12,20 @@ import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
+import qualified Data.ByteString.Lazy       as LB
 import Control.DeepSeq                      (($!!))
-import Control.Monad.Trans.Resource
+import Control.Monad.Except                 (runExceptT, ExceptT(..), withExceptT)
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+import Control.Monad.Trans.Control          (MonadBaseControl)
+#endif
 import Control.Monad.Trans.Maybe
 import Control.Monad.Logger
 import Data.Char
+import Data.List.NonEmpty                   (NonEmpty)
 import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
-import Yesod.Core                           (HandlerSite, PathPiece(..))
+import Yesod.Core                           (HandlerSite, PathPiece(..), Yesod, HandlerT)
 import Text.Shakespeare.I18N                (RenderMessage)
 
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
@@ -33,6 +39,7 @@ import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Site.Function
 import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.Utils          (CachedYamlInfoState)
+import WeiXin.PublicPlatform.ThirdParty
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
@@ -45,19 +52,23 @@ aesKeyField = checkMMap conv conv_back textField
         conv_back = fromString . C8.unpack . B64.encode . toBytes . unAesKey
 
 
--- | 从字典中找出形如 "wxpp~xxxx" 的字段，每个那样的字段解释出一个 WxppAppConfig
-parseMultWxppAppConfig :: Object -> Parser (Map WxppAppID WxppAppConfig)
-parseMultWxppAppConfig obj = do
+-- | 从字典中找出形如 "wxpp~xxxx" 的字段，每个那样的字段解释出一个 WxppAppConfig/WxppAppConf
+parseMultiWxppAppConfig :: (HasWxppAppID cf, FromJSON cf)
+                        => Object
+                        -> Parser (Map WxppAppID cf)
+parseMultiWxppAppConfig obj = do
     liftM (Map.fromList . catMaybes) $
         forM (HM.toList obj) $ \(k, v) -> do
             if T.isPrefixOf "wxpp~" k
-                then Just . (wxppAppConfigAppID &&& id) <$> parseJSON v
+                then Just . (getWxppAppID &&& id) <$> parseJSON v
                 else return Nothing
 
--- | parseMultWxppAppConfig 相似
+-- | parseMultiWxppAppConfig 相似
 -- 但使用这个解释得到的字典是 wxpp~xxx 中的 xxx 作为键值（而不是app id）
 -- 'xxx' 部分可以作为外部标识app的字串（例如用在 url上）
-parseMultiWxppAppConfig2 :: Object -> Parser (Map Text WxppAppConfig)
+parseMultiWxppAppConfig2 :: (FromJSON cf)
+                         => Object
+                         -> Parser (Map Text cf)
 parseMultiWxppAppConfig2 obj = do
     liftM (Map.fromList . catMaybes) $
         forM (HM.toList obj) $ \(k, v) -> do
@@ -73,19 +84,21 @@ instance PathPiece CodeNameOrAppID where
     toPathPiece (CodeNameOrAppID x) = toPathPiece x
     fromPathPiece = fmap CodeNameOrAppID . fromPathPiece
 
-lookupMultiWxppAppConfig2 :: CodeNameOrAppID
-                            -> Map Text WxppAppConfig
-                            -> Maybe WxppAppConfig
+lookupMultiWxppAppConfig2 :: HasWxppAppID cf
+                          => CodeNameOrAppID
+                          -> Map Text cf
+                          -> Maybe cf
 lookupMultiWxppAppConfig2 (CodeNameOrAppID t) the_map =
     Map.lookup t the_map <|> lookup_by_app_id the_map
     where
         lookup_by_app_id = fmap fst . Map.minView .
                                 Map.filterWithKey
-                                    (\_ wac -> wxppConfigAppID wac == WxppAppID t)
+                                    (\_ wac -> getWxppAppID wac == WxppAppID t)
 
 type InMsgHandlerList m = [SomeWxppInMsgHandler m]
 
 
+{-
 -- | 用于构造 MaybeWxppSub Subsite 的工具
 mkMaybeWxppSub ::
     ( LoggingTRunner app
@@ -114,15 +127,17 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
         let app_id      = wxppConfigAppID wac
         let data_dirs   = wxppAppConfigDataDir wac
         middlewares <- liftIO $ get_middleware app_id
+        let processor = WxppMsgProcessor
+                          send_msg
+                          (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
+                          (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
+                          (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                          (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
         return $ WxppSub
                     wac
                     (SomeWxppCacheClient cache)
                     (WxppDbRunner $ runDBWith foundation)
-                    (send_msg app_id)
-                    (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
-                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
-                    (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
-                    (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
+                    processor
                     (runLoggingTWith foundation)
                     opts
                     api_env
@@ -170,65 +185,63 @@ mkMaybeWxppSub m_to_io foundation cache get_last_handlers_ref get_wxpp_config ge
                             cache
                             in_msg_handlers
                             bs ime
+--}
 
-
--- mkMaybeWxppSub with cache
-mkMaybeWxppSubC ::
-    ( LoggingTRunner app
-    , DBActionRunner app
-    , DBAction app ~ ReaderT WxppDbBackend
-    , WxppCacheTokenReader c, WxppCacheTemp c
+mkWxppMsgProcessor ::
+    ( WxppCacheTokenReader c, WxppCacheTemp c
     , SV.HasSetter hvar (Maybe (InMsgHandlerList m)), SV.HasGetter hvar (Maybe (InMsgHandlerList m))
     , CachedYamlInfoState s
     , MonadIO m, MonadLogger m
-    ) =>
-    (forall a. m a -> IO (Either String a))
-    -> app
+    )
+    => (forall a. m a -> IO (Either String a))
     -> c
     -> s  -- ^ cache parsed Yaml content
-    -> (WxppAppID -> IO (Maybe hvar))
+    -> (WxppAppID -> WeixinUserName -> IO (Maybe hvar))
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
-    -> IO (Maybe WxppAppConfig)
-            -- ^ 找到相应配置的函数
-    -> (WxppAppConfig -> IO [WxppInMsgHandlerPrototype m])
-    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
-    -> (WxppAppID -> IO [SomeWxppInMsgProcMiddleware m])
-    -> WxppSubsiteOpts
-    -> WxppApiEnv
-    -> MaybeWxppSub
-mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wxpp_config get_protos send_msg get_middleware opts api_env =
-    MaybeWxppSub $ runMaybeT $ do
-        wac <- MaybeT $ get_wxpp_config
-        let app_id      = wxppConfigAppID wac
-        let data_dirs   = wxppAppConfigDataDir wac
-        middlewares <- liftIO $ get_middleware app_id
-        return $ WxppSub
-                    wac
-                    (SomeWxppCacheClient cache)
-                    (WxppDbRunner $ runDBWith foundation)
-                    (send_msg app_id)
-                    (\x1 x2 -> liftM join $ m_to_io $ handle_msg wac data_dirs x1 x2)
-                    (\x1 x2 -> m_to_io $ preProcessInMsgByMiddlewares middlewares cache x1 x2)
-                    (\x1 x2 x3 -> m_to_io $ postProcessInMsgByMiddlewares middlewares x1 x2 x3)
-                    (\x1 x2 x3 -> m_to_io $ onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3)
-                    (runLoggingTWith foundation)
-                    opts
-                    api_env
+            -- 1st param: 我们的 app id. 若是第三平台，则是 component_app_id
+    -> (WxppAppID -> LB.ByteString -> IO ())
+    -- ^ called when message cannot be parsed
+    -> (WxppAppID -> WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
+    -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
+    -> (WxppAppID -> WeixinUserName -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -- ^ send message to weixin user in background
+    -> (WxppAppID -> WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
+    -> WxppMsgProcessor
+mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware =
+    WxppMsgProcessor
+      send_msg
+      (\my_app_id target_username x1 x2 -> liftM join $ m_to_io $ handle_msg my_app_id target_username x1 x2)
+      pre_proc_msg
+      post_proc_msg
+      onerr_proc_msg
+      onerr_parse_msg
     where
-        handle_msg wac data_dirs bs ime = do
-            let app_id      = wxppConfigAppID wac
-            err_or_in_msg_handlers <- liftIO $ do
-                    protos <- get_protos wac
-                    readWxppInMsgHandlersCached cache_yaml
+        pre_proc_msg my_app_id target_username x1 x2 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware my_app_id target_username
+            preProcessInMsgByMiddlewares middlewares cache x1 x2
+
+        post_proc_msg my_app_id target_username x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware my_app_id target_username
+            postProcessInMsgByMiddlewares middlewares x1 x2 x3
+
+        onerr_proc_msg my_app_id target_username x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware my_app_id target_username
+            onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3
+
+        handle_msg my_app_id target_username bs ime = do
+            err_or_in_msg_handlers <- liftIO $ runExceptT $ do
+                    (protos, data_dirs) <- ExceptT $ get_protos my_app_id target_username
+                    withExceptT show $ ExceptT $
+                      readWxppInMsgHandlersCached cache_yaml
                         protos
                         data_dirs
                         (T.unpack "msg-handlers.yml")
 
-            m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_id
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref my_app_id target_username
             m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $
-                        "cannot parse msg-handlers.yml: " ++ show err
+                        "cannot load or parse msg-handlers.yml: " ++ show err
                     m_cached_handlers <- liftIO $ fmap join $
                                             mapM SV.get m_last_handlers_ref
                     case m_cached_handlers of
@@ -260,8 +273,64 @@ mkMaybeWxppSubC m_to_io foundation cache cache_yaml get_last_handlers_ref get_wx
                             bs ime
 
 
+-- mkMaybeWxppSub with cache
+mkMaybeWxppSubC ::
+    ( WxppCacheTokenReader c, WxppCacheTemp c
+    , LoggingTRunner app
+    , DBActionRunner app
+    , DBAction app ~ ReaderT WxppDbBackend
+    )
+    => app
+    -> c
+    -> IO (Maybe WxppAppConf)
+    -> WxppSubsiteOpts
+    -> WxppApiEnv
+    -> WxppMsgProcessor
+    -> MaybeWxppSub
+mkMaybeWxppSubC foundation cache io_get_conf opts api_env processor =
+    MaybeWxppSub $ runMaybeT $ do
+        conf <- MaybeT io_get_conf
+
+        return $ WxppSub
+                    conf
+                    (SomeWxppCacheClient cache)
+                    (WxppDbRunner $ runDBWith foundation)
+                    processor
+                    (runLoggingTWith foundation)
+                    opts
+                    api_env
+
+
+-- | make a WxppTpSub
+mkWxppTpSub :: ( LoggingTRunner app
+               )
+            => app
+            -> WxppAppID
+            -- ^ 这个是我们自身的app id，不一定是消息的接收者的app id
+            -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
+            -> Token
+            -> NonEmpty AesKey
+            -> WxppMsgProcessor
+            -> ( forall master. Yesod master
+                    => WxppTpEventNotice
+                    -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
+               )
+            -> WxppAppID
+            -- ^ 被授权公众号的 app id
+            -> WxppTpSub
+mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt auther_app_id =
+  WxppTpSub
+    my_app_id
+    my_app_token
+    my_app_aes_keys
+    (runLoggingTWith foundation)
+    processor
+    handle_tp_evt
+    auther_app_id
+
+
 defaultInMsgProcMiddlewares :: forall env m.
-    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m, Functor m) =>
+    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m) =>
     WxppDbRunner
     -> WxppAppID
     -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
@@ -294,7 +363,11 @@ defaultInMsgProcMiddlewares db_runner app_id down_media = do
 -- | 如果要计算的操作有异常，记日志并重试
 -- 注意：重试如果失败，还会不断重试
 -- 所以只适合用于 f 本身就是一个大循环的情况
-logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m, MonadBaseControl IO m) =>
+logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+                            , MonadBaseControl IO m
+#endif
+                            ) =>
     String      -- ^ 仅用作日志标识
     -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
     -> m ()
@@ -303,13 +376,17 @@ logWxppWsExcAndRetryLoop op_name f = go
         go = logWxppWsExcThen op_name (const $ liftIO (threadDelay 5000000) >> go) (const $ return ()) f
 
 
-logWxppWsExcThen :: (MonadLogger m, MonadCatch m, MonadBaseControl IO m) =>
-    String
-    -> (SomeException -> m a)
-                        -- ^ retry when error
-    -> (b -> m a)       -- ^ next to do when ok
-    -> m b              -- ^ original op
-    -> m a
+logWxppWsExcThen :: (MonadLogger m, MonadCatch m
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
+                    , MonadBaseControl IO m
+#endif
+                    )
+                 => String
+                 -> (SomeException -> m a)
+                                    -- ^ retry when error
+                 -> (b -> m a)       -- ^ next to do when ok
+                 -> m b              -- ^ original op
+                 -> m a
 logWxppWsExcThen op_name on_err on_ok f = do
     err_or <- tryAny $ tryWxppWsResult f
     case err_or of

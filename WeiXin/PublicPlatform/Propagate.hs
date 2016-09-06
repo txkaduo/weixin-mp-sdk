@@ -27,7 +27,7 @@ import Data.Aeson.Types                     (Pair)
 import Database.Persist.Sql                 (PersistField(..), PersistFieldSql(..)
                                             , SqlType(..))
 
-import Yesod.Helpers.Utils                  (emptyTextToNothing)
+import Yesod.Helpers.Utils                  (nullToNothing)
 import Yesod.Helpers.Aeson                  (parseIntWithTextparsec)
 import Yesod.Helpers.Parsec                 (natural)
 
@@ -59,12 +59,12 @@ instance FromJSON WxppBriefArticle where
                     WxppBriefArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
-                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
-                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
+                        <*> ( join . fmap nullToNothing <$> obj .:? "author" )
+                        <*> ( join . fmap nullToNothing <$> obj .:? "digest" )
                         <*> ( fmap int_to_bool $ obj .: "show_cover_pic"
                                                     >>= parseIntWithTextparsec natural )
                         <*> ( obj .: "content" )
-                        <*> ( fmap UrlText . join . fmap emptyTextToNothing <$>
+                        <*> ( fmap UrlText . join . fmap nullToNothing <$>
                                 obj .:? "content_source_url" )
             where
                 int_to_bool x = x /= 0

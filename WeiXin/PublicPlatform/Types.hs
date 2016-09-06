@@ -20,7 +20,7 @@ import qualified Data.Set                   as Set
 import Data.Binary                          (Binary)
 import Data.Binary.Orphans                  ()
 import Data.Byteable                        (toBytes)
-import Data.Char                            (isSpace)
+import Data.Char                            (isSpace, isAscii, isAlphaNum)
 import Data.Default                         (Default(..))
 import Data.Monoid                          (Endo(..))
 import Crypto.Cipher                        (makeKey, Key)
@@ -40,7 +40,7 @@ import Language.Haskell.TH.Lift             (deriveLift)
 import Web.HttpApiData                      (ToHttpApiData, FromHttpApiData)
 
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
-import Yesod.Helpers.Utils                  (emptyTextToNothing)
+import Yesod.Helpers.Utils                  (nullToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
 import Text.Parsec.TX.Utils                 ( SimpleStringRep(..), natural
                                             , derivePersistFieldS, makeSimpleParserByTable
@@ -96,7 +96,7 @@ instance FromJSON WxppUrlConfig where
 -- | 微信用户名
 newtype WeixinUserName = WeixinUserName { unWeixinUserName :: Text }
                         deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql
-                                 , NFData
+                                 , NFData, Binary
                                  , ToMessage, ToMarkup
                                  )
 
@@ -140,7 +140,8 @@ instance ToJSON WxppBriefMediaID where
     toJSON = toJSON . unWxppBriefMediaID
 
 instance FromJSON WxppBriefMediaID where
-    parseJSON = fmap WxppBriefMediaID . parseJSON
+  parseJSON = fmap WxppBriefMediaID
+                . (parseJSON >=> nonEmptyJsonText "Weixin brief media id cannot be empty text")
 
 
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
@@ -164,7 +165,8 @@ instance ToJSON WxppDurableMediaID where
     toJSON = toJSON . unWxppDurableMediaID
 
 instance FromJSON WxppDurableMediaID where
-    parseJSON = fmap WxppDurableMediaID . parseJSON
+  parseJSON = fmap WxppDurableMediaID
+                . (parseJSON >=> nonEmptyJsonText "Weixin durable media id cannot be empty text")
 
 instance PathPiece WxppDurableMediaID where
     fromPathPiece = fmap WxppDurableMediaID . fromPathPiece
@@ -187,7 +189,8 @@ instance ToJSON WxppMediaID where
     toJSON = toJSON . unWxppMediaID
 
 instance FromJSON WxppMediaID where
-    parseJSON = fmap WxppMediaID . parseJSON
+  parseJSON = fmap WxppMediaID
+                . (parseJSON >=> nonEmptyJsonText "Weixin media id cannot be empty text")
 
 
 newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
@@ -212,7 +215,8 @@ instance ToJSON WxppOpenID where
     toJSON = toJSON . unWxppOpenID
 
 instance FromJSON WxppOpenID where
-    parseJSON = fmap WxppOpenID . parseJSON
+  parseJSON = fmap WxppOpenID
+                . (parseJSON >=> nonEmptyJsonText "Weixin open id cannot be empty text")
 
 instance PathPiece WxppOpenID where
     toPathPiece (WxppOpenID x)  = toPathPiece x
@@ -229,7 +233,8 @@ newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                              , ToMessage, ToMarkup)
 
 instance FromJSON WxppUnionID where
-    parseJSON = fmap WxppUnionID . parseJSON
+  parseJSON = fmap WxppUnionID
+                . (parseJSON >=> nonEmptyJsonText "Weixin union id cannot be empty text")
 
 instance ToJSON WxppUnionID where
     toJSON = toJSON . unWxppUnionID
@@ -273,11 +278,14 @@ instance FromJSON WxppInMsgID where
 -- 从文档“生成带参数的二维码”一文中看
 -- 场景ID可以是个32位整数，也可以是个字串。有若干约束。
 newtype WxppIntSceneID = WxppIntSceneID { unWxppIntSceneID :: Word32 }
-  deriving (Show, Eq, Ord, Typeable, Generic, Binary, NFData, ToMarkup)
+  deriving (Show, Eq, Ord, Typeable, Generic, Binary, NFData, ToMarkup
+           , PersistField, PersistFieldSql
+           )
 
 newtype WxppStrSceneID = WxppStrSceneID { unWxppStrSceneID :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
                              , NFData
+                             , PersistField, PersistFieldSql
                              , ToMessage, ToMarkup)
 
 data WxppScene =    WxppSceneInt WxppIntSceneID
@@ -370,6 +378,10 @@ newtype Token = Token { unToken :: Text }
                              , ToMessage, ToMarkup
                              )
 
+instance FromJSON Token where
+  parseJSON = fmap Token . (parseJSON >=> nonEmptyJsonText "Weixin Token cannot be empty text")
+
+
 newtype AesKey = AesKey { unAesKey :: Key AES }
   deriving (Eq)
 instance Show AesKey where
@@ -404,6 +416,14 @@ decodeBase64AesKey t = fmap AesKey $ do
 parseAesKeyFromText :: Text -> Parser AesKey
 parseAesKeyFromText t = either fail return $ decodeBase64AesKey t
 
+-- | Like parseAesKeyFromText, but return Nothing if text is empty
+parseAesKeyFromTextMaybe :: Text -> Parser (Maybe AesKey)
+parseAesKeyFromTextMaybe t =
+  let t' = T.strip t
+   in if null t'
+         then return Nothing
+         else fmap Just $ parseAesKeyFromText t'
+
 instance FromJSON AesKey where
     parseJSON = withText "AesKey" parseAesKeyFromText
 
@@ -418,6 +438,11 @@ newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                              , ToHttpApiData, FromHttpApiData
                              , NFData
                              , ToMessage, ToMarkup)
+
+-- | Test if a text can be a app id
+-- undocumented rules, just wild guess
+validateWxppAppIdText :: Text -> Bool
+validateWxppAppIdText t = not (null t) && all (\x -> isAscii x && isAlphaNum x) t
 
 instance SafeCopy WxppAppID where
     getCopy                 = contain $ WxppAppID <$> safeGet
@@ -434,13 +459,18 @@ instance PersistFieldSql WxppAppID where
 instance PathPiece WxppAppID where
     toPathPiece (WxppAppID x)   = toPathPiece x
     fromPathPiece t             =   let t' = T.strip t
-                                    in if T.null t'
-                                          then Nothing
-                                          else WxppAppID <$> fromPathPiece t'
+                                    in do
+                                      guard $ validateWxppAppIdText t'
+                                      if T.null t'
+                                        then Nothing
+                                        else WxppAppID <$> fromPathPiece t'
 
 instance ToJSON WxppAppID where toJSON = toJSON . unWxppAppID
 
-instance FromJSON WxppAppID where parseJSON = fmap WxppAppID . parseJSON
+instance FromJSON WxppAppID where
+  parseJSON = fmap WxppAppID
+                . (parseJSON >=> nonEmptyJsonText "Weixin app id cannot be empty text")
+
 
 -- | XXX: Read instance 目前只是 Yesod 生成的 Route 类型时用到
 -- 但不清楚具体使用场景，不知道以下的定义是否合适
@@ -515,33 +545,28 @@ instance ToJSON WxppAppSecret where toJSON = toJSON . unWxppAppSecret
 
 instance FromJSON WxppAppSecret where parseJSON = fmap WxppAppSecret . parseJSON
 
-data WxppAppConfig = WxppAppConfig {
-                    wxppConfigAppID         :: WxppAppID
-                    , wxppConfigAppSecret   :: WxppAppSecret
-                    , wxppConfigAppToken    :: Token
-                    , wxppConfigAppAesKey   :: Maybe AesKey
-                    , wxppConfigAppBackupAesKeys  :: [AesKey]
-                        -- ^ 多个 aes key 是为了过渡时使用
-                        -- 加密时仅使用第一个
-                        -- 解密时则则所有都试一次
-                    , wxppAppConfigDataDir  :: NonEmpty FilePath
-                    }
-                    deriving (Show, Eq)
+-- | 这个结构里包含了全部与公众号相关的设置性数据
+-- 考虑了第三方平台的需求后，现在对设置性数据作了一点区分：
+-- 有部分只是为了跟微信平台通讯的隐私数据：app id, aes key, secret
+-- 另一部分是我们特定的代码实现方式而产生的数据：data dir
+data WxppAppConf = WxppAppConf
+  { wxppConfAppID              :: WxppAppID
+  , wxppConfAppSecret        :: WxppAppSecret
+  , wxppConfAppToken         :: Token
+  , wxppConfAppAesKey        :: Maybe AesKey
+  , wxppConfAppBackupAesKeys :: [AesKey]
+  -- ^ 多个 aes key 是为了过渡时使用
+  -- 加密时仅使用第一个
+  -- 解密时则则所有都试一次
+  }
+  deriving (Show, Eq)
 
--- | for backward-compatibility
-wxppAppConfigAppID :: WxppAppConfig -> WxppAppID
-wxppAppConfigAppID = wxppConfigAppID
 
-instance FromJSON WxppAppConfig where
-    parseJSON = withObject "WxppAppConfig" $ \obj -> do
+instance FromJSON WxppAppConf where
+    parseJSON = withObject "WxppAppConf" $ \obj -> do
                     app_id <- fmap WxppAppID $ obj .: "app-id"
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     app_token <- fmap Token $ obj .: "token"
-                    data_dirs <- map T.unpack <$> obj .: "data-dirs"
-                    data_dirs' <- case nonEmpty data_dirs of
-                                    Nothing -> fail "data-dirs must not be empty"
-                                    Just x -> return x
-
                     aes_key_lst <- obj .: "aes-key"
                                     >>= return . filter (not . T.null) . map T.strip
                                     >>= mapM parseAesKeyFromText
@@ -550,10 +575,32 @@ instance FromJSON WxppAppConfig where
                                     []      -> (Nothing, [])
                                     (x:xs)  -> (Just x, xs)
 
-                    return $ WxppAppConfig app_id secret app_token
+                    return $ WxppAppConf app_id secret app_token
                                 ak1
                                 backup_aks
-                                data_dirs'
+
+
+data WxppAppConfig = WxppAppConfig
+  { wxppConfigCore :: WxppAppConf
+  , wxppAppConfigDataDir  :: NonEmpty FilePath
+  }
+  deriving (Show, Eq)
+
+
+instance FromJSON WxppAppConfig where
+    parseJSON = withObject "WxppAppConfig" $ \obj -> do
+                    conf <- parseJSON $ toJSON obj
+                    data_dirs <- map T.unpack <$> obj .: "data-dirs"
+                    data_dirs' <- case nonEmpty data_dirs of
+                                    Nothing -> fail "data-dirs must not be empty"
+                                    Just x -> return x
+
+
+                    return $ WxppAppConfig conf data_dirs'
+
+-- | for backward-compatibility
+wxppAppConfigAppID :: WxppAppConfig -> WxppAppID
+wxppAppConfigAppID = wxppConfAppID . wxppConfigCore
 
 
 -- | 见高级群发接口文档
@@ -606,6 +653,12 @@ data WxppEvent = WxppEvtSubscribe
 
 instance NFData WxppEvent
 instance Binary WxppEvent
+
+wxppEventIsSubscribe :: WxppEvent -> Bool
+wxppEventIsSubscribe WxppEvtSubscribe             = True
+wxppEventIsSubscribe (WxppEvtSubscribeAtScene {}) = True
+wxppEventIsSubscribe _                            = False
+
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
 wxppEventTypeString WxppEvtSubscribe              = "subscribe"
@@ -792,7 +845,7 @@ instance FromJSON WxppInMsg where
         "voice" -> liftM3 WxppInMsgVoice
                     (obj .: "media_id")
                     (obj .: "format")
-                    (join . fmap emptyTextToNothing <$> obj .:? "recognition")
+                    (join . fmap nullToNothing <$> obj .:? "recognition")
 
         "video" -> liftM2 WxppInMsgVideo
                     (obj .: "media_id")
@@ -818,7 +871,7 @@ instance FromJSON WxppInMsg where
 
 data WxppInMsgEntity = WxppInMsgEntity
                         {
-                            wxppInToUserName        :: Text
+                            wxppInToUserName        :: WeixinUserName
                             , wxppInFromUserName    :: WxppOpenID
                             , wxppInCreatedTime     :: UTCTime
                             , wxppInMessageID       :: Maybe WxppInMsgID
@@ -881,10 +934,10 @@ type WxppArticleLoader = DelayedYamlLoader WxppArticle
 
 instance FromJSON WxppArticle where
     parseJSON = withObject "WxppArticle" $ \obj -> do
-                title <- join . fmap emptyTextToNothing <$> obj .:? "title"
-                desc <- join . fmap emptyTextToNothing <$> obj .:? "desc"
-                pic_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "pic-url"
-                url <- fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "url"
+                title <- join . fmap nullToNothing <$> obj .:? "title"
+                desc <- join . fmap nullToNothing <$> obj .:? "desc"
+                pic_url <- fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "pic-url"
+                url <- fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "url"
                 return $ WxppArticle title desc pic_url url
 
 -- | 外发的信息
@@ -953,15 +1006,15 @@ instance FromJSON WxppOutMsg where
           "video" -> liftM4 WxppOutMsgVideo
                         (obj .: "media_id")
                         (obj .: "thumb_media_id")
-                        (join . fmap emptyTextToNothing <$> obj .:? "title")
-                        (join . fmap emptyTextToNothing <$> obj .:? "desc")
+                        (join . fmap nullToNothing <$> obj .:? "title")
+                        (join . fmap nullToNothing <$> obj .:? "desc")
 
           "music" -> liftM5 WxppOutMsgMusic
                         (obj .: "thumb_media_id")
-                        (join . fmap emptyTextToNothing <$> obj .:? "title")
-                        (join . fmap emptyTextToNothing <$> obj .:? "desc")
-                        (fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "url")
-                        (fmap UrlText <$> join . fmap emptyTextToNothing <$> obj .:? "hq_url")
+                        (join . fmap nullToNothing <$> obj .:? "title")
+                        (join . fmap nullToNothing <$> obj .:? "desc")
+                        (fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "url")
+                        (fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "hq_url")
 
           "news" -> WxppOutMsgNews <$> obj .: "articles"
 
@@ -1017,9 +1070,9 @@ instance FromJSON WxppOutMsgL where
                                     thumb_media_id_or_path <- parseMediaIDOrPath "thumb_" obj
                                     title <- obj .:? "title"
                                     desc <- obj .:? "desc"
-                                    url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
+                                    url <- fmap UrlText <$> join . fmap nullToNothing <$>
                                                 obj .:? "url"
-                                    hq_url <- fmap UrlText <$> join . fmap emptyTextToNothing <$>
+                                    hq_url <- fmap UrlText <$> join . fmap nullToNothing <$>
                                                 obj .:? "hq-url"
                                     return $ WxppOutMsgMusicL thumb_media_id_or_path title desc url hq_url
 
@@ -1057,12 +1110,12 @@ instance FromJSON WxppDurableArticle where
                     WxppDurableArticle
                         <$> ( obj .: "title" )
                         <*> ( obj .: "thumb_media_id" )
-                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "author" )
-                        <*> ( join . fmap emptyTextToNothing <$> obj .:? "digest" )
+                        <*> ( join . fmap nullToNothing <$> obj .:? "author" )
+                        <*> ( join . fmap nullToNothing <$> obj .:? "digest" )
                         <*> ( fmap int_to_bool $ obj .: "show_cover_pic"
                                                     >>= parseIntWithTextparsec natural )
                         <*> ( obj .: "content" )
-                        <*> ( fmap UrlText . join . fmap emptyTextToNothing <$> obj .: "content_source_url" )
+                        <*> ( fmap UrlText . join . fmap nullToNothing <$> obj .: "content_source_url" )
             where
                 int_to_bool x = x /= 0
 
@@ -1129,7 +1182,7 @@ instance SimpleStringRep WxppMediaType where
 data WxppOutMsgEntity = WxppOutMsgEntity
                         {
                             wxppOutToUserName       :: WxppOpenID
-                            , wxppOutFromUserName   :: Text
+                            , wxppOutFromUserName   :: WeixinUserName
                             , wxppOutCreatedTime    :: UTCTime
                             , wxppOutMessage        :: WxppOutMsg
                         }
@@ -1270,7 +1323,7 @@ data EndUserQueryResult = EndUserQueryResultNotSubscribed WxppOpenID
                             CityName
                             ProvinceName
                             CountryName
-                            UrlText     -- head image url
+                            (Maybe UrlText)     -- head image url
                             UTCTime
                             (Maybe WxppUnionID)
                         deriving (Show, Eq, Ord, Typeable, Generic)
@@ -1313,7 +1366,7 @@ instance FromJSON EndUserQueryResult where
                         lang <- SimpleLocaleName <$> obj .: "language"
                         province <- obj .: "province"
                         country <- obj .: "country"
-                        headimgurl <- UrlText <$> obj .: "headimgurl"
+                        headimgurl <- (fmap UrlText . join . fmap nullToNothing) <$> obj .:? "headimgurl"
                         subs_time <- epochIntToUtcTime <$> obj .: "subscribe_time"
                         m_union_id <- obj .:? "unionid"
                         return $ EndUserQueryResult
@@ -1343,7 +1396,7 @@ instance ToJSON EndUserQueryResult where
         , "city"        .= city
         , "province"    .= province
         , "country"     .= country
-        , "headimgurl"  .= unUrlText headimgurl
+        , "headimgurl"  .= headimgurl
         , "subscribe_time".= utcTimeToEpochInt subs_time
         , "unionid"     .= m_union_id
         ]
@@ -1504,6 +1557,14 @@ instance NFData OAuthAccessTokenPkg
 
 $(deriveSafeCopy 0 'base ''OAuthAccessTokenPkg)
 
+
+class HasOAuthAccessTokenPkg a where
+  getOAuthAccessTokenPkg :: a -> OAuthAccessTokenPkg
+
+instance HasOAuthAccessTokenPkg OAuthAccessTokenPkg where
+  getOAuthAccessTokenPkg = id
+
+
 data OAuthTokenInfo = OAuthTokenInfo
                         !OAuthAccessToken
                         !OAuthRefreshToken
@@ -1520,6 +1581,10 @@ packOAuthTokenInfo :: WxppAppID
                     -> OAuthAccessTokenPkg
 packOAuthTokenInfo app_id open_id (OAuthTokenInfo atk rtk scopes _expiry) =
     OAuthAccessTokenPkg atk rtk scopes open_id app_id
+
+
+instance HasOAuthAccessTokenPkg ((WxppAppID, WxppOpenID), OAuthTokenInfo) where
+  getOAuthAccessTokenPkg ((x, y), z) = packOAuthTokenInfo x y z
 
 
 fromOAuthAccessTokenResult :: UTCTime
@@ -1542,6 +1607,16 @@ data OAuthAccessTokenResult = OAuthAccessTokenResult {
                                 }
                                 deriving (Eq, Show)
 
+instance HasOAuthAccessTokenPkg (WxppAppID, OAuthAccessTokenResult) where
+  getOAuthAccessTokenPkg (app_id, x) =
+      OAuthAccessTokenPkg
+        (oauthAtkToken x)
+        (oauthAtkRefreshToken x)
+        (oauthAtkScopes x)
+        (oauthAtkOpenID x)
+        app_id
+
+
 instance FromJSON OAuthAccessTokenResult where
     parseJSON = withObject "OAuthAccessTokenResult" $ \o -> do
                     OAuthAccessTokenResult
@@ -1550,7 +1625,7 @@ instance FromJSON OAuthAccessTokenResult where
                         <*> (fmap Set.fromList $ o .: "scope" >>= parseTextByParsec p_scopes)
                         <*> o .: "refresh_token"
                         <*> o .: "openid"
-                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+                        <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
                 where
                     p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
 
@@ -1598,9 +1673,9 @@ instance FromJSON OAuthGetUserInfoResult where
                         <*> o .: "country"
                         <*> o .: "province"
                         <*> o .: "city"
-                        <*> (fmap UrlText . join . fmap emptyTextToNothing <$> o .:? "headimgurl")
+                        <*> (fmap UrlText . join . fmap nullToNothing <$> o .:? "headimgurl")
                         <*> o .: "privilege"
-                        <*> (fmap WxppUnionID . join . fmap emptyTextToNothing <$> o .:? "unionid")
+                        <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
 
 newtype WxppJsTicket = WxppJsTicket { unWxppJsTicket :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, NFData)

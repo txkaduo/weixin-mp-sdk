@@ -11,7 +11,7 @@ import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
-import Data.List.NonEmpty                   as LNE
+import Data.List.NonEmpty                   as LNE hiding (map)
 
 
 -- | 微信要求一些类似电子令牌、票据的数据尽量全局统一更新使用
@@ -82,7 +82,6 @@ class WxppCacheTemp a where
                             -> WxppAppID
                             -> Lang
                             -> OAuthGetUserInfoResult
-                            -> UTCTime
                             -> IO ()
 
     -- | User info from SNS api
@@ -91,6 +90,7 @@ class WxppCacheTemp a where
                             -> WxppOpenID
                             -> Lang
                             -> IO (Maybe (OAuthGetUserInfoResult, UTCTime))
+                            -- ^ user info and updated time
 
 
     wxppCacheSaveUserInfo ::
@@ -295,6 +295,21 @@ instance HasWxppOpenID WxppOpenID where
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst
 
+instance HasWxppAppID WxppAppConf where
+  getWxppAppID = wxppConfAppID
+
+instance HasWxppAppID WxppAppConfig where
+  getWxppAppID = getWxppAppID . wxppConfigCore
+
+
+class HasWxppSecret a where
+  getWxppSecret :: a -> WxppAppSecret
+
+instance HasWxppSecret WxppAppSecret where getWxppSecret = id
+
+instance HasWxppSecret WxppAppConf where getWxppSecret = wxppConfAppSecret
+
+instance HasWxppSecret WxppAppConfig where getWxppSecret = getWxppSecret . wxppConfigCore
 
 
 class HasSomeWxppCacheBackend a where
@@ -319,6 +334,31 @@ instance HasWxppOutMsgDir (NonEmpty FilePath) where
 instance HasWxppOutMsgDir FilePath where
     getWxppOutMsgDir x = x :| []
 
+
+class HasWxppToken a where
+  getWxppToken :: a -> Token
+
+instance HasWxppToken Token where getWxppToken = id
+
+instance HasWxppToken WxppAppConf where
+  getWxppToken = wxppConfAppToken
+
+instance HasWxppToken WxppAppConfig where
+  getWxppToken = getWxppToken . wxppConfigCore
+
+class HasAesKeys a where
+  getAesKeys :: a -> [AesKey]
+
+instance HasAesKeys AesKey where getAesKeys = return
+
+instance HasAesKeys [AesKey] where getAesKeys = id
+
+instance HasAesKeys WxppAppConf where
+  getAesKeys app_config = catMaybes $ wxppConfAppAesKey app_config :
+                                        map Just (wxppConfAppBackupAesKeys app_config)
+
+instance HasAesKeys WxppAppConfig where
+  getAesKeys = getAesKeys . wxppConfigCore
 
 
 -- | As a placeholder for testing
@@ -347,7 +387,7 @@ instance WxppCacheTemp FakeWxppCache where
 
     wxppCachePurgeOAuthAccessToken _ _ = return ()
 
-    wxppCacheAddSnsUserInfo _ _ _ _ _ = return ()
+    wxppCacheAddSnsUserInfo _ _ _ _ = return ()
 
     wxppCacheGetSnsUserInfo _ _ _ _ = return Nothing
 
