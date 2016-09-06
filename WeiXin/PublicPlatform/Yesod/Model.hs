@@ -121,7 +121,8 @@ instance WxppCacheTemp WxppDbRunner where
                         (wxppCachedSnsUserInfoUnionId rec)
             return (info, wxppCachedSnsUserInfoUpdatedTime rec)
 
-    wxppCacheAddSnsUserInfo (WxppDbRunner run_db) app_id lang info now = do
+    wxppCacheAddSnsUserInfo (WxppDbRunner run_db) app_id lang info = do
+        now <- liftIO getCurrentTime
         let rec = WxppCachedSnsUserInfo
                     app_id
                     open_id

@@ -82,7 +82,6 @@ class WxppCacheTemp a where
                             -> WxppAppID
                             -> Lang
                             -> OAuthGetUserInfoResult
-                            -> UTCTime
                             -> IO ()
 
     -- | User info from SNS api
@@ -91,6 +90,7 @@ class WxppCacheTemp a where
                             -> WxppOpenID
                             -> Lang
                             -> IO (Maybe (OAuthGetUserInfoResult, UTCTime))
+                            -- ^ user info and updated time
 
 
     wxppCacheSaveUserInfo ::
@@ -387,7 +387,7 @@ instance WxppCacheTemp FakeWxppCache where
 
     wxppCachePurgeOAuthAccessToken _ _ = return ()
 
-    wxppCacheAddSnsUserInfo _ _ _ _ _ = return ()
+    wxppCacheAddSnsUserInfo _ _ _ _ = return ()
 
     wxppCacheGetSnsUserInfo _ _ _ _ = return Nothing
 
