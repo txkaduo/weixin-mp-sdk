@@ -122,15 +122,14 @@ getMessageR = withWxppSubHandler $ \foundation -> do
 
 postMessageR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
-  realHandlerMsg foundation (Just $ getWxppAppID foundation)
+  realHandlerMsg foundation
 
 realHandlerMsg :: forall site master a.
                (RenderMessage site FormMessage, HasWxppToken a,
                HasWxppAppID a, HasAesKeys a, HasWxppProcessor a)
                => a
-               -> Maybe WxppAppID
                -> HandlerT site (HandlerT master IO) Text
-realHandlerMsg foundation m_def_app_id = do
+realHandlerMsg foundation = do
     checkSignature foundation "signature" ""
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
@@ -168,13 +167,14 @@ realHandlerMsg foundation m_def_app_id = do
         ime0 <- case m_ime0 of
                   Nothing -> do
                     -- cannot parse incoming XML message
-                    liftIO $ wxppOnParseInMsgError processor m_def_app_id lbs
+                    liftIO $ wxppOnParseInMsgError processor my_app_id lbs
                     throwError $ "Cannot parse incoming XML"
 
                   Just x -> return x
 
         let target_username0 = wxppInToUserName ime0
-        pre_result <- liftIO $ wxppPreProcessInMsg processor target_username0 decrypted_xml0 ime0
+
+        pre_result <- liftIO $ wxppPreProcessInMsg processor my_app_id target_username0 decrypted_xml0 ime0
 
         case pre_result of
             Left err -> do
@@ -202,7 +202,7 @@ realHandlerMsg foundation m_def_app_id = do
 
                 let post_handle_msg = wxppPostProcessInMsg processor
                     do_post_handle_msg out_res0 = ExceptT $ do
-                        tryAny (liftIO $ post_handle_msg target_username decrypted_xml ime out_res0)
+                        tryAny (liftIO $ post_handle_msg my_app_id target_username decrypted_xml ime out_res0)
                             >>= \err_or_x -> do
                                     case err_or_x of
                                       Left err -> do
@@ -212,7 +212,7 @@ realHandlerMsg foundation m_def_app_id = do
                                       Right x -> return x
 
                 let do_on_error err = ExceptT $
-                        liftIO (wxppOnProcessInMsgError processor target_username decrypted_xml ime err)
+                        liftIO (wxppOnProcessInMsgError processor my_app_id target_username decrypted_xml ime err)
 
                 out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
                                 >>= do_post_handle_msg
@@ -733,7 +733,7 @@ getTpMessageR = do
 postTpMessageR :: HandlerT WxppTpSub (HandlerT master IO) Text
 postTpMessageR = do
   foundation <- getYesod
-  realHandlerMsg foundation Nothing
+  realHandlerMsg foundation
 
 
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)

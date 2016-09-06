@@ -64,7 +64,10 @@ data WxppMsgProcessor = WxppMsgProcessor
   -- 第2个参数是收到的报文内的 ToUserName
   -- 可以根据这个参数找到必要的配置文件
 
-  , wxppPreProcessInMsg :: WeixinUserName
+  , wxppPreProcessInMsg :: WxppAppID
+                        -- ^ 我们的app id
+                        -- 若是第三方平台，则这是 component_app_id
+                        -> WeixinUserName
                         -> LB.ByteString
                          -- raw data of message (unparsed)
                         -> WxppInMsgEntity
@@ -73,7 +76,10 @@ data WxppMsgProcessor = WxppMsgProcessor
                                 (Maybe (LB.ByteString, WxppInMsgEntity))
                                 )
 
-  , wxppPostProcessInMsg :: WeixinUserName
+  , wxppPostProcessInMsg :: WxppAppID
+                         -- ^ 我们的app id
+                         -- 若是第三方平台，则这是 component_app_id
+                         -> WeixinUserName
                          -> LB.ByteString
                          -- raw data of message (unparsed)
                          -> WxppInMsgEntity
@@ -81,7 +87,10 @@ data WxppMsgProcessor = WxppMsgProcessor
                          -> WxppInMsgHandlerResult
                          -> IO (Either String WxppInMsgHandlerResult)
 
-  , wxppOnProcessInMsgError :: WeixinUserName
+  , wxppOnProcessInMsgError :: WxppAppID
+                            -- ^ 我们的app id
+                            -- 若是第三方平台，则这是 component_app_id
+                            -> WeixinUserName
                             -> LB.ByteString
                             -- raw data of message (unparsed)
                             -> WxppInMsgEntity
@@ -90,8 +99,12 @@ data WxppMsgProcessor = WxppMsgProcessor
                             -> String
                             -> IO (Either String ())
 
-  , wxppOnParseInMsgError :: Maybe WxppAppID -> LB.ByteString -> IO ()
+  , wxppOnParseInMsgError :: WxppAppID -> LB.ByteString -> IO ()
   -- ^ called when incoming message cannot be parsed
+  -- 第1个参数是我们自己的app id
+  --            如果我们是第三方平台，则这个不同于收到的消息所指向的接收公号
+  --            而是所谓的 component_app_id
+  --            对于非第三方平台，这个就是消息所发往的app id(设置死的，所以知道）
   }
 
 

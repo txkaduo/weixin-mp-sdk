@@ -199,13 +199,13 @@ mkWxppMsgProcessor ::
     -> (WxppAppID -> WeixinUserName -> IO (Maybe hvar))
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
             -- 1st param: 我们的 app id. 若是第三平台，则是 component_app_id
-    -> (Maybe WxppAppID -> LB.ByteString -> IO ())
+    -> (WxppAppID -> LB.ByteString -> IO ())
     -- ^ called when message cannot be parsed
     -> (WxppAppID -> WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
     -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
     -> (WxppAppID -> WeixinUserName -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -- ^ send message to weixin user in background
-    -> (WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
+    -> (WxppAppID -> WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppMsgProcessor
 mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware =
     WxppMsgProcessor
@@ -216,16 +216,16 @@ mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_ms
       onerr_proc_msg
       onerr_parse_msg
     where
-        pre_proc_msg target_username x1 x2 = m_to_io $ do
-            middlewares <- liftIO $ get_middleware target_username
+        pre_proc_msg my_app_id target_username x1 x2 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware my_app_id target_username
             preProcessInMsgByMiddlewares middlewares cache x1 x2
 
-        post_proc_msg target_username x1 x2 x3 = m_to_io $ do
-            middlewares <- liftIO $ get_middleware target_username
+        post_proc_msg my_app_id target_username x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware my_app_id target_username
             postProcessInMsgByMiddlewares middlewares x1 x2 x3
 
-        onerr_proc_msg target_username x1 x2 x3 = m_to_io $ do
-            middlewares <- liftIO $ get_middleware target_username
+        onerr_proc_msg my_app_id target_username x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware my_app_id target_username
             onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3
 
         handle_msg my_app_id target_username bs ime = do
