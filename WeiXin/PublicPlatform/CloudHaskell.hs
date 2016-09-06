@@ -47,35 +47,34 @@ instance JsonConfigable TeeEventToCloud where
 instance (MonadIO m, MonadCatch m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
       (TeeEventToCloud app_id (CloudBackendInfo new_local_node get_ports) evt_types)
-      _cache bs m_ime = do
-          forM_ m_ime $ \ime -> do
-            case wxppInMessage ime of
-              WxppInMsgEvent evt -> do
-                when (null evt_types || wxppEventTypeString evt `elem` evt_types) $ do
-                  send_port_list <- liftIO get_ports
-                  if null send_port_list
-                     then do
-                       $logWarnS wxppLogSource $ "No SendPort available to send event notifications"
-                     else do
-                       {-
-                       m_union_id <- runMaybeT $ do
-                         atk <- fmap fst $ MaybeT $ liftIO $ wxppCacheGetAccessToken cache app_id
-                         MaybeT $ wxppCachedGetEndUserUnionID cache
-                                       (fromIntegral (maxBound :: Int)) -- because union id is stable
-                                       atk
-                                       (wxppInFromUserName ime)
-                        --}
-                       let m_union_id = Nothing
-                       let msg = WrapInMsgHandlerInput app_id bs ime m_union_id
+      _cache bs ime = do
+          case wxppInMessage ime of
+            WxppInMsgEvent evt -> do
+              when (null evt_types || wxppEventTypeString evt `elem` evt_types) $ do
+                send_port_list <- liftIO get_ports
+                if null send_port_list
+                   then do
+                     $logWarnS wxppLogSource $ "No SendPort available to send event notifications"
+                   else do
+                     {-
+                     m_union_id <- runMaybeT $ do
+                       atk <- fmap fst $ MaybeT $ liftIO $ wxppCacheGetAccessToken cache app_id
+                       MaybeT $ wxppCachedGetEndUserUnionID cache
+                                     (fromIntegral (maxBound :: Int)) -- because union id is stable
+                                     atk
+                                     (wxppInFromUserName ime)
+                      --}
+                     let m_union_id = Nothing
+                     let msg = WrapInMsgHandlerInput app_id bs ime m_union_id
 
-                       node <- liftIO new_local_node
-                       liftIO $ runProcess node $ do
-                         forM_ send_port_list $ \sp -> do
-                           sendChan sp msg
+                     node <- liftIO new_local_node
+                     liftIO $ runProcess node $ do
+                       forM_ send_port_list $ \sp -> do
+                         sendChan sp msg
 
-              _ -> return ()
+            _ -> return ()
 
-          return $ Just (bs, m_ime)
+          return $ Just (bs, ime)
 
 
 -- | A message handler that send WxppInMsgEntity to peers and wait for responses
@@ -110,10 +109,7 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
       (DelegateInMsgToCloud app_id (CloudBackendInfo new_local_node get_ports) t1)
-      _cache bs m_ime = runExceptT $ do
-        case m_ime of
-          Nothing   -> return []
-          Just ime  -> do
+      _cache bs ime = runExceptT $ do
             send_port_list <- liftIO get_ports
             when (null send_port_list) $ do
               let msg = "No SendPort available in cloud haskell"
