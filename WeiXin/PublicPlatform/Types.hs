@@ -20,7 +20,7 @@ import qualified Data.Set                   as Set
 import Data.Binary                          (Binary)
 import Data.Binary.Orphans                  ()
 import Data.Byteable                        (toBytes)
-import Data.Char                            (isSpace)
+import Data.Char                            (isSpace, isAscii, isAlphaNum)
 import Data.Default                         (Default(..))
 import Data.Monoid                          (Endo(..))
 import Crypto.Cipher                        (makeKey, Key)
@@ -435,6 +435,11 @@ newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                              , NFData
                              , ToMessage, ToMarkup)
 
+-- | Test if a text can be a app id
+-- undocumented rules, just wild guess
+validateWxppAppIdText :: Text -> Bool
+validateWxppAppIdText t = not (null t) && all (\x -> isAscii x && isAlphaNum x) t
+
 instance SafeCopy WxppAppID where
     getCopy                 = contain $ WxppAppID <$> safeGet
     putCopy (WxppAppID x)   = contain $ safePut x
@@ -450,9 +455,11 @@ instance PersistFieldSql WxppAppID where
 instance PathPiece WxppAppID where
     toPathPiece (WxppAppID x)   = toPathPiece x
     fromPathPiece t             =   let t' = T.strip t
-                                    in if T.null t'
-                                          then Nothing
-                                          else WxppAppID <$> fromPathPiece t'
+                                    in do
+                                      guard $ validateWxppAppIdText t'
+                                      if T.null t'
+                                        then Nothing
+                                        else WxppAppID <$> fromPathPiece t'
 
 instance ToJSON WxppAppID where toJSON = toJSON . unWxppAppID
 
