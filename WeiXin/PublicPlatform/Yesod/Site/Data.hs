@@ -113,10 +113,7 @@ class HasWxppProcessor a where
 
 -- | 为每个运行的 App 对应一个 subsite
 data WxppSub =
-        WxppSub { wxppSubAppId          :: WxppAppID
-                , wxppSubAppToken       :: Token
-                , wxppSubAesKeys        :: [AesKey]
-                , wxppSubAppSecret      :: WxppAppSecret
+        WxppSub { wxppSubAppConf        :: WxppAppConf
                 , wxppSubCacheBackend   :: SomeWxppCacheClient
                 , wxppSubRunDBAction    :: WxppDbRunner -- ^ execute any DB actions
                 , wxppSubProcessor      :: WxppMsgProcessor
@@ -126,19 +123,22 @@ data WxppSub =
                 }
 
 instance Show WxppSub where
-    show x = "WxppSub: " ++ show (wxppSubAppId x)
+    show x = "WxppSub: " ++ show (getWxppAppID x)
 
 instance HasWxppToken WxppSub where
-  getWxppToken = wxppSubAppToken
+  getWxppToken = getWxppToken . wxppSubAppConf
 
 instance LoggingTRunner WxppSub where
   runLoggingTWith = wxppSubRunLoggingT
 
 instance HasWxppAppID WxppSub where
-  getWxppAppID = wxppSubAppId
+  getWxppAppID = getWxppAppID . wxppSubAppConf
 
 instance HasAesKeys WxppSub where
-  getAesKeys = wxppSubAesKeys
+  getAesKeys = getAesKeys . wxppSubAppConf
+
+instance HasWxppSecret WxppSub where
+  getWxppSecret = getWxppSecret . wxppSubAppConf
 
 instance HasWxppProcessor WxppSub where
   getWxppProcessor = wxppSubProcessor

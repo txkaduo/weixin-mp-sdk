@@ -282,23 +282,17 @@ mkMaybeWxppSubC ::
     )
     => app
     -> c
-    -> WxppAppID
-    -- ^ 这个是我们自身的app id，不一定是消息的接收者的app id
-    -- 对于第三方平台，消息的接收者app id就是我们被授权的app id，我们自身作为第三方平台，也有一个app id
-    -> Token
-    -> [AesKey]
-    -> WxppAppSecret
+    -> IO (Maybe WxppAppConf)
     -> WxppSubsiteOpts
     -> WxppApiEnv
     -> WxppMsgProcessor
     -> MaybeWxppSub
-mkMaybeWxppSubC foundation cache my_app_id my_app_token my_app_aes_keys my_app_secret opts api_env processor =
+mkMaybeWxppSubC foundation cache io_get_conf opts api_env processor =
     MaybeWxppSub $ runMaybeT $ do
+        conf <- MaybeT io_get_conf
+
         return $ WxppSub
-                    my_app_id
-                    my_app_token
-                    my_app_aes_keys
-                    my_app_secret
+                    conf
                     (SomeWxppCacheClient cache)
                     (WxppDbRunner $ runDBWith foundation)
                     processor

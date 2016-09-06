@@ -355,7 +355,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
     return_url <- reqPathPieceParamPostGet "return"
     let app_id = getWxppAppID sub
-        secret = wxppSubAppSecret sub
+        secret = getWxppSecret sub
         cache  = wxppSubCacheBackend sub
 
     oauth_state <- liftM (fromMaybe "") $ lookupGetParam "state"
