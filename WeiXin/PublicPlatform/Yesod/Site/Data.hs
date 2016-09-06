@@ -50,8 +50,10 @@ instance FromJSON WxppSubsiteOpts where
 
 
 data WxppMsgProcessor = WxppMsgProcessor
-  { wxppSendOutMsgs     :: Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ()
+  { wxppSendOutMsgs     :: WxppAppID -> WeixinUserName -> [(WxppOpenID, WxppOutMsg)] -> IO ()
                          -- ^ a computation to send outgoing messages
+                         -- 1st: my app id.
+                         --      若是第三方平台
 
   , wxppMsgHandler      :: WxppAppID -> WeixinUserName -> WxppInMsgHandler IO
   -- ^ 参数意义：

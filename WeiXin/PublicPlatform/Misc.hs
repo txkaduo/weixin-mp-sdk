@@ -203,7 +203,7 @@ mkWxppMsgProcessor ::
     -- ^ called when message cannot be parsed
     -> (WxppAppID -> WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
     -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
-    -> (Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -> (WxppAppID -> WeixinUserName -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -- ^ send message to weixin user in background
     -> (WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppMsgProcessor

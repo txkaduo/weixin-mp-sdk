@@ -262,7 +262,7 @@ realHandlerMsg foundation m_def_app_id = do
                 void $ liftIO $ async $ do
                     -- 延迟半秒只要为了让直接回复的回应能第一个到达用户
                     threadDelay $ 1000 * 500
-                    wxppSendOutMsgs processor (Left target_username) other_out_msgs
+                    wxppSendOutMsgs processor my_app_id target_username other_out_msgs
 
           return xmls
 
