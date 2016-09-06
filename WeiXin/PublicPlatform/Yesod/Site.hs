@@ -191,7 +191,7 @@ realHandlerMsg foundation m_def_app_id = do
 
                 let handle_msg      = wxppMsgHandler processor
                     try_handle_msg = ExceptT $ do
-                                tryAny (liftIO $ handle_msg target_username decrypted_xml ime)
+                                tryAny (liftIO $ handle_msg my_app_id target_username decrypted_xml ime)
                                     >>= \err_or_x -> do
                                             case err_or_x of
                                               Left err -> do

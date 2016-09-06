@@ -196,11 +196,12 @@ mkWxppMsgProcessor ::
     => (forall a. m a -> IO (Either String a))
     -> c
     -> s  -- ^ cache parsed Yaml content
-    -> (WeixinUserName -> IO (Maybe hvar))
+    -> (WxppAppID -> WeixinUserName -> IO (Maybe hvar))
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
+            -- 1st param: 我们的 app id. 若是第三平台，则是 component_app_id
     -> (Maybe WxppAppID -> LB.ByteString -> IO ())
     -- ^ called when message cannot be parsed
-    -> (WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
+    -> (WxppAppID -> WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
     -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
     -> (Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -- ^ send message to weixin user in background
@@ -209,7 +210,7 @@ mkWxppMsgProcessor ::
 mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware =
     WxppMsgProcessor
       send_msg
-      (\target_username x1 x2 -> liftM join $ m_to_io $ handle_msg target_username x1 x2)
+      (\my_app_id target_username x1 x2 -> liftM join $ m_to_io $ handle_msg my_app_id target_username x1 x2)
       pre_proc_msg
       post_proc_msg
       onerr_proc_msg
@@ -227,16 +228,16 @@ mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_ms
             middlewares <- liftIO $ get_middleware target_username
             onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3
 
-        handle_msg target_username bs ime = do
+        handle_msg my_app_id target_username bs ime = do
             err_or_in_msg_handlers <- liftIO $ runExceptT $ do
-                    (protos, data_dirs) <- ExceptT $ get_protos target_username
+                    (protos, data_dirs) <- ExceptT $ get_protos my_app_id target_username
                     withExceptT show $ ExceptT $
                       readWxppInMsgHandlersCached cache_yaml
                         protos
                         data_dirs
                         (T.unpack "msg-handlers.yml")
 
-            m_last_handlers_ref <- liftIO $ get_last_handlers_ref target_username
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref my_app_id target_username
             m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $

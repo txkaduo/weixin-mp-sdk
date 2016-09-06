@@ -53,8 +53,13 @@ data WxppMsgProcessor = WxppMsgProcessor
   { wxppSendOutMsgs     :: Either WeixinUserName WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ()
                          -- ^ a computation to send outgoing messages
 
-  , wxppMsgHandler      :: WeixinUserName -> WxppInMsgHandler IO
-  -- ^ 第一个参数是收到的报文内的 ToUserName
+  , wxppMsgHandler      :: WxppAppID -> WeixinUserName -> WxppInMsgHandler IO
+  -- ^ 参数意义：
+  -- 第1个参数是我们自己的app id
+  --            如果我们是第三方平台，则这个不同于收到的消息所指向的接收公号
+  --            而是所谓的 component_app_id
+  --            对于非第三方平台，这个就是消息所发往的app id
+  -- 第2个参数是收到的报文内的 ToUserName
   -- 可以根据这个参数找到必要的配置文件
 
   , wxppPreProcessInMsg :: WeixinUserName
