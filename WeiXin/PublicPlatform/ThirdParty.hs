@@ -10,6 +10,7 @@ import           ClassyPrelude
 import           Control.DeepSeq       (NFData)
 import           Control.Lens          hiding ((.=))
 import           Control.Monad.Logger
+import           Control.Monad.Except
 import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
@@ -699,6 +700,25 @@ class WxppTpTokenReader a where
 
 
 data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a
+
+
+-- | Helper for simplify use of wxppTpTokenGetComponentAccessToken
+wxppTpTokenGetComponentAccessTokenE :: (MonadError e m, MonadIO m, IsString e, WxppTpTokenReader a)
+                                    => a
+                                    -> WxppAppID
+                                    -> m WxppTpAccessToken
+wxppTpTokenGetComponentAccessTokenE x comp_app_id = do
+  m_atk_t <- liftIO $ wxppTpTokenGetComponentAccessToken x comp_app_id
+
+  case m_atk_t of
+    Nothing -> throwError $ fromString "no component_access_token found"
+
+    Just (atk, expiry) -> do
+      now <- liftIO getCurrentTime
+      when (now >= expiry) $ do
+        throwError $ "component_access_token expired"
+
+      return atk
 
 
 class WxppTpTokenWriter a where
