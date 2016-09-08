@@ -329,14 +329,13 @@ mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_t
     auther_app_id
 
 
-defaultInMsgProcMiddlewares :: forall env m.
-    (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m) =>
-    WxppDbRunner
-    -> WxppAppID
-    -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
-    -> IO [SomeWxppInMsgProcMiddleware m]
-defaultInMsgProcMiddlewares db_runner app_id down_media = do
-    mvar <- newMVar Map.empty
+defaultInMsgProcMiddlewares :: forall env m.  (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
+                            => WxppDbRunner
+                            -> WxppAppID
+                            -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
+                            -> MVar TrackHandledInMsgInnerMap
+                            -> IO [SomeWxppInMsgProcMiddleware m]
+defaultInMsgProcMiddlewares db_runner app_id down_media mvar = do
     return
         [ SomeWxppInMsgProcMiddleware $
             (TrackHandledInMsg
