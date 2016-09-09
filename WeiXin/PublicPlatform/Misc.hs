@@ -196,48 +196,47 @@ mkWxppMsgProcessor ::
     => (forall a. m a -> IO (Either String a))
     -> c
     -> s  -- ^ cache parsed Yaml content
-    -> (WxppAppID -> WeixinUserName -> IO (Maybe hvar))
+    -> (ProcAppIdInfo -> IO (Maybe hvar))
             -- ^ 用于记录上次成功配置的，可用的，消息处理规则列表
-            -- 1st param: 我们的 app id. 若是第三平台，则是 component_app_id
-    -> (WxppAppID -> LB.ByteString -> IO ())
+    -> (ProcAppIdInfo -> LB.ByteString -> IO ())
     -- ^ called when message cannot be parsed
-    -> (WxppAppID -> WeixinUserName -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
+    -> (ProcAppIdInfo -> IO (Either String ([WxppInMsgHandlerPrototype m], NonEmpty FilePath)))
     -- ^ 根据消息的真实目标公众号（例如授权公众号）找到配置的处理策略
-    -> (WxppAppID -> WeixinUserName -> [(WxppOpenID, WxppOutMsg)] -> IO ())
+    -> (WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ())
     -- ^ send message to weixin user in background
-    -> (WxppAppID -> WeixinUserName -> IO [SomeWxppInMsgProcMiddleware m])
+    -> (ProcAppIdInfo -> IO [SomeWxppInMsgProcMiddleware m])
     -> WxppMsgProcessor
 mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_msg get_protos send_msg get_middleware =
     WxppMsgProcessor
       send_msg
-      (\my_app_id target_username x1 x2 -> liftM join $ m_to_io $ handle_msg my_app_id target_username x1 x2)
+      (\x1 x2 x3 -> liftM join $ m_to_io $ handle_msg x1 x2 x3)
       pre_proc_msg
       post_proc_msg
       onerr_proc_msg
       onerr_parse_msg
     where
-        pre_proc_msg my_app_id target_username x1 x2 = m_to_io $ do
-            middlewares <- liftIO $ get_middleware my_app_id target_username
-            preProcessInMsgByMiddlewares middlewares cache x1 x2
+        pre_proc_msg app_info x1 x2 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware app_info
+            preProcessInMsgByMiddlewares middlewares cache app_info x1 x2
 
-        post_proc_msg my_app_id target_username x1 x2 x3 = m_to_io $ do
-            middlewares <- liftIO $ get_middleware my_app_id target_username
-            postProcessInMsgByMiddlewares middlewares x1 x2 x3
+        post_proc_msg app_info x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware app_info
+            postProcessInMsgByMiddlewares middlewares app_info x1 x2 x3
 
-        onerr_proc_msg my_app_id target_username x1 x2 x3 = m_to_io $ do
-            middlewares <- liftIO $ get_middleware my_app_id target_username
-            onErrorProcessInMsgByMiddlewares middlewares x1 x2 x3
+        onerr_proc_msg app_info x1 x2 x3 = m_to_io $ do
+            middlewares <- liftIO $ get_middleware app_info
+            onErrorProcessInMsgByMiddlewares middlewares app_info x1 x2 x3
 
-        handle_msg my_app_id target_username bs ime = do
+        handle_msg app_info bs ime = do
             err_or_in_msg_handlers <- liftIO $ runExceptT $ do
-                    (protos, data_dirs) <- ExceptT $ get_protos my_app_id target_username
+                    (protos, data_dirs) <- ExceptT $ get_protos app_info
                     withExceptT show $ ExceptT $
                       readWxppInMsgHandlersCached cache_yaml
                         protos
                         data_dirs
                         (T.unpack "msg-handlers.yml")
 
-            m_last_handlers_ref <- liftIO $ get_last_handlers_ref my_app_id target_username
+            m_last_handlers_ref <- liftIO $ get_last_handlers_ref app_info
             m_in_msg_handlers <- case err_or_in_msg_handlers of
                 Left err -> do
                     $logErrorS wxppLogSource $ fromString $
@@ -270,7 +269,7 @@ mkWxppMsgProcessor m_to_io cache cache_yaml get_last_handlers_ref onerr_parse_ms
                     tryInMsgHandlerUntilFirstPrimary'
                             cache
                             in_msg_handlers
-                            bs ime
+                            app_info bs ime
 
 
 -- mkMaybeWxppSub with cache
@@ -315,10 +314,8 @@ mkWxppTpSub :: ( LoggingTRunner app
                     => WxppTpEventNotice
                     -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
                )
-            -> WxppAppID
-            -- ^ 被授权公众号的 app id
             -> WxppTpSub
-mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt auther_app_id =
+mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt =
   WxppTpSub
     my_app_id
     my_app_token
@@ -326,25 +323,22 @@ mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_t
     (runLoggingTWith foundation)
     processor
     handle_tp_evt
-    auther_app_id
 
 
 defaultInMsgProcMiddlewares :: forall env m.  (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
                             => WxppDbRunner
-                            -> WxppAppID
                             -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
                             -> MVar TrackHandledInMsgInnerMap
                             -> IO [SomeWxppInMsgProcMiddleware m]
-defaultInMsgProcMiddlewares db_runner app_id down_media mvar = do
+defaultInMsgProcMiddlewares db_runner down_media mvar = do
     return
         [ SomeWxppInMsgProcMiddleware $
             (TrackHandledInMsg
                 (fromIntegral (2 :: Int))
-                app_id
                 mvar
             )
         , SomeWxppInMsgProcMiddleware $
-            (StoreInMsgToDB app_id
+            (StoreInMsgToDB
                 db_runner
                 (\x y z -> liftIO $ down_media x y z)
             :: StoreInMsgToDB m
@@ -352,7 +346,6 @@ defaultInMsgProcMiddlewares db_runner app_id down_media mvar = do
 
         , SomeWxppInMsgProcMiddleware $
             (CacheAppOpenIdToUnionId
-                app_id
                 db_runner
             )
         ]

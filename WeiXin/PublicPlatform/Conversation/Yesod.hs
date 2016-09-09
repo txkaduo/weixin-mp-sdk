@@ -226,7 +226,8 @@ type instance WxppInMsgProcessResult (WxppTalkHandlerGeneral r m) = WxppInMsgHan
 instance (MonadBaseControl IO m, WxppApiMonad env m) =>
     IsWxppInMsgProcessor m (WxppTalkHandlerGeneral r m)
     where
-    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache _bs ime = runExceptT $ do
+    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache _app_info _bs ime =
+      runExceptT $ do
         mapExceptT (runWxppDB db_runner) $ do
             let open_id = wxppInFromUserName ime
             m_state_rec <- lift $ loadWxppTalkStateCurrent open_id
@@ -293,7 +294,8 @@ instance
     ) =>
     IsWxppInMsgProcessor m (WxppTalkInitiator r s)
     where
-    processInMsg (WxppTalkInitiator db_runner env extra_env) _cache _bs ime = runExceptT $ do
+    processInMsg (WxppTalkInitiator db_runner env extra_env) _cache _app_info _bs ime =
+      runExceptT $ do
         let from_open_id = wxppInFromUserName ime
             app_id = getWxppAppID env
         mapExceptT (runWxppDB db_runner) $ do
@@ -353,7 +355,8 @@ instance
     ) =>
     IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
     where
-    processInMsg (WxppTalkEvtKeyInitiator db_runner env entries) _cache _bs ime = runExceptT $ do
+    processInMsg (WxppTalkEvtKeyInitiator db_runner env entries) _cache _app_info _bs ime =
+      runExceptT $ do
         case wxppInMessage ime of
             WxppInMsgEvent (WxppEvtClickItem evtkey) -> do
                 case T.stripPrefix "initiate-talk:" evtkey of
@@ -394,20 +397,19 @@ instance
 
 -- | 消息处理器：调用后会无条件结束当前会话
 data WxppTalkTerminator = WxppTalkTerminator
-  { wxppTalkTermAppId    :: WxppAppID
-  , wxppTalkTermDir      :: (NonEmpty FilePath) -- ^ out-msg dir path
+  { wxppTalkTermDir      :: (NonEmpty FilePath) -- ^ out-msg dir path
   , wxppTalkTermDbRunner :: WxppDbRunner
   , wxppTalkTermPrimary  :: Bool                -- ^ if primary
   , wxppTalkTermOurMsg   :: WxppOutMsgLoader    -- ^ 打算回复用户的消息
   }
 
 instance JsonConfigable WxppTalkTerminator where
-    type JsonConfigableUnconfigData WxppTalkTerminator = (WxppAppID, NonEmpty FilePath, WxppDbRunner)
+    type JsonConfigableUnconfigData WxppTalkTerminator = (NonEmpty FilePath, WxppDbRunner)
 
     isNameOfInMsgHandler _ x = x == "terminate-talk"
 
-    parseWithExtraData _ (f1, f2, f3) obj =
-        WxppTalkTerminator f1 f2 f3
+    parseWithExtraData _ (f1, f2) obj =
+        WxppTalkTerminator f1 f2
                 <$> (obj .:? "primary" .!= True)
                 <*> parseWxppOutMsgLoader obj
 
@@ -416,7 +418,8 @@ type instance WxppInMsgProcessResult WxppTalkTerminator = WxppInMsgHandlerResult
 
 instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
     IsWxppInMsgProcessor m WxppTalkTerminator where
-    processInMsg (WxppTalkTerminator app_id msg_dirs db_runner primary get_outmsg) cache _bs ime = runExceptT $ do
+    processInMsg (WxppTalkTerminator msg_dirs db_runner primary get_outmsg) cache app_info _bs ime =
+      runExceptT $ do
         let from_open_id = wxppInFromUserName ime
         mapExceptT (runWxppDB db_runner) $ do
             lift $ abortCurrentWxppTalkState app_id from_open_id
@@ -427,6 +430,8 @@ instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
         outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
         liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
                         tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg
+      where
+        app_id = procAppIdInfoReceiverId app_info
 
 
 
