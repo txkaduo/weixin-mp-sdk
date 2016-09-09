@@ -200,7 +200,7 @@ instance HasWxppProcessor WxppTpSub where
 mkYesodSubData "WxppTpSub" [parseRoutes|
 -- 第三方平台事件接收
 /notice                   TpEventNoticeR      GET POST
-/#WxppAppID/msg           TpMessageR          GET POST
+/auther/#WxppAppID/msg    TpMessageR          GET POST
 |]
 
 
