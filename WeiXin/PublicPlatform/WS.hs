@@ -152,11 +152,11 @@ tryWxppWsResult :: MonadCatch m =>
     m a -> m (Either WxppWsCallError a)
 tryWxppWsResult f = liftM Right f `catches` wxppWsExcHandlers
 
-tryWxppWsResultE :: (MonadCatch m, MonadError String m) =>
+tryWxppWsResultE :: (MonadCatch m, MonadError e m, IsString e) =>
     String -> m b -> m b
 tryWxppWsResultE op_name f =
     tryWxppWsResult f
-        >>= either (\e -> throwError $ "Got Exception when " <> op_name <> ": " <> show e) return
+        >>= either (\e -> throwError $ fromString $ "Got Exception when " <> op_name <> ": " <> show e) return
 
 
 asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
