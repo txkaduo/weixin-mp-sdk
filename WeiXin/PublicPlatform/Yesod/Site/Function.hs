@@ -167,7 +167,8 @@ instance (WxppApiMonad env m
                         _                                               -> Nothing
 
         case m_subs_or_unsubs of
-            Just True -> void $ runExceptT $ do
+            Just True -> do
+              err_or <- runExceptT $ do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") (return . fst)
@@ -184,6 +185,10 @@ instance (WxppApiMonad env m
                         [ WxppUserCachedInfoUnionId =. m_uid
                         , WxppUserCachedInfoUpdatedTime =. now
                         ]
+
+              case err_or of
+                Left err -> $logErrorS wxppLogSource $ "CacheAppOpenIdToUnionId: " <> err
+                Right () -> return ()
 
             Just False -> do
                 -- 取消关注时，目前先不删除记录
