@@ -765,6 +765,21 @@ data SomeWxppTpTokenStore = forall a. (WxppTpTokenWriter a, WxppTpTokenReader a)
                             => SomeWxppTpTokenStore a
 
 
+instance WxppTpTokenReader SomeWxppTpTokenStore where
+  wxppTpTokenGetVeriyTicket (SomeWxppTpTokenStore s)          = wxppTpTokenGetVeriyTicket s
+  wxppTpTokenGetComponentAccessToken (SomeWxppTpTokenStore s) = wxppTpTokenGetComponentAccessToken s
+  wxppTpTokenGetAuthorizerTokens (SomeWxppTpTokenStore s)     = wxppTpTokenGetAuthorizerTokens s
+  wxppTpTokenSourceAuthorizerTokens (SomeWxppTpTokenStore s)  = wxppTpTokenSourceAuthorizerTokens s
+
+instance WxppTpTokenWriter SomeWxppTpTokenStore where
+  wxppTpTokenSaveVerifyTicket (SomeWxppTpTokenStore s)          = wxppTpTokenSaveVerifyTicket s
+  wxppTpTokenDeleteVerifyTicket (SomeWxppTpTokenStore s)        = wxppTpTokenDeleteVerifyTicket s
+  wxppTpTokenAddComponentAccessToken (SomeWxppTpTokenStore s)   = wxppTpTokenAddComponentAccessToken s
+  wxppTpTokenPurgeComponentAccessToken (SomeWxppTpTokenStore s) = wxppTpTokenPurgeComponentAccessToken s
+  wxppTpTokenAddAuthorizerTokens (SomeWxppTpTokenStore s)       = wxppTpTokenAddAuthorizerTokens s
+  wxppTpTokenPurgeAuthorizerTokens (SomeWxppTpTokenStore s)     = wxppTpTokenPurgeAuthorizerTokens s
+
+
 -- | 从微信平台取新的 component_access_token 并保存之
 wxppTpAcquireAndSaveComponentAccessToken :: (WxppApiMonad env m, WxppTpTokenWriter c)
                                          => c
