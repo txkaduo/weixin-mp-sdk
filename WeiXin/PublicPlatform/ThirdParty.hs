@@ -279,7 +279,7 @@ instance Enum WxppTpAuthFuncCategory where
   toEnum 13 = WxppTpAuthFuncOutlet
   toEnum 14 = WxppTpAuthFuncPay
   toEnum 15 = WxppTpAuthFuncMenu
-  toEnum x  = error $ "Invalid WxppTpAuthFuncCategory id" <> show x
+  toEnum x  = error $ "Invalid WxppTpAuthFuncCategory id: " <> show x
 
 
 data WxppTpAuthFuncInfo = WxppTpAuthFuncInfo
