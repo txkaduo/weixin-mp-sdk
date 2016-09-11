@@ -289,7 +289,7 @@ data WxppTpAuthInfo = WxppTpAuthInfo
                           WxppTpAccessToken
                           WxppTpRefreshToken
                           WxppTpAuthFuncInfo
-                          Int
+                          NominalDiffTime
 
 instance FromJSON WxppTpAuthInfo where
   parseJSON = withObject "WxppTpAuthInfo" $ \o -> do
@@ -304,7 +304,7 @@ instance FromJSON WxppTpAuthInfo where
             <*> pure target_app_id
           )
       <*> o .: "func_info"
-      <*> o .: "expires_in"
+      <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
 
 
 data WxppTpAuthInfoResp = WxppTpAuthInfoResp WxppTpAuthInfo
