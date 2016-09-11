@@ -322,11 +322,11 @@ instance FromJSON WxppTpAuthInfoResp where
 
 
 -- | 调用远程接口，取得接口调用凭证及授权信息
-wxppTpGetAuthInfo :: (WxppApiMonad env m)
-                  => WxppTpAccessToken
-                  -> WxppTpAuthCode
-                  -> m WxppTpAuthInfoResp
-wxppTpGetAuthInfo atk auth_code = do
+wxppTpQueryAuthInfoByCode :: (WxppApiMonad env m)
+                          => WxppTpAccessToken
+                          -> WxppTpAuthCode
+                          -> m WxppTpAuthInfoResp
+wxppTpQueryAuthInfoByCode atk auth_code = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_query_auth"
       post_data = object [ "component_appid" .= app_id
