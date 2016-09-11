@@ -286,10 +286,11 @@ instance FromJSON WxppTpAuthFuncInfo where
 
 
 data WxppTpAuthInfo = WxppTpAuthInfo
-                          WxppTpAccessToken
-                          WxppTpRefreshToken
-                          WxppTpAuthFuncInfo
-                          NominalDiffTime
+  { wxppTpAuthInfoAtk      :: WxppTpAccessToken
+  , wxppTpAuthInfoRtk      :: WxppTpRefreshToken
+  , wxppTpAuthInfoFuncInfo :: WxppTpAuthFuncInfo
+  , wxppTpAuthInfoTTL      :: NominalDiffTime
+  }
 
 instance FromJSON WxppTpAuthInfo where
   parseJSON = withObject "WxppTpAuthInfo" $ \o -> do
