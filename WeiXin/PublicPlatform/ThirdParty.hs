@@ -47,6 +47,12 @@ newtype WxppTpAuthCode = WxppTpAuthCode { unWxppTpAuthCode :: Text }
                                  , ToMessage, ToMarkup
                                  )
 
+-- | 文档没有说明授权失败时，如何从微信平台返回
+-- 暂时认为跟 oauth 一样的逻辑
+deniedTpAuthCode :: WxppTpAuthCode -> Bool
+deniedTpAuthCode (WxppTpAuthCode x) = null x || x == "authdeny"
+
+
 -- | refresh token
 -- 因为通常跟相应的 AppId 一起使用，所以打包在一起
 data WxppTpRefreshToken = WxppTpRefreshToken
