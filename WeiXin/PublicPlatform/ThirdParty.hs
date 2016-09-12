@@ -2,7 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.ThirdParty
-  ( module WeiXin.PublicPlatform.Types
+  ( module WeiXin.PublicPlatform.Class
   , module WeiXin.PublicPlatform.ThirdParty
   ) where
 
@@ -27,7 +27,7 @@ import           Text.XML.Cursor
 import           Yesod.Core            (MonadBaseControl, MonadResource)
 import           Yesod.Helpers.Utils   (queryTextSetParam, urlUpdateQueryText)
 
-import           WeiXin.PublicPlatform.Types
+import           WeiXin.PublicPlatform.Class
 import           WeiXin.PublicPlatform.Utils
 import           WeiXin.PublicPlatform.WS
 import           WeiXin.PublicPlatform.XmlUtils
@@ -292,7 +292,7 @@ instance FromJSON WxppTpAuthFuncInfo where
 
 
 data WxppTpAuthInfo = WxppTpAuthInfo
-  { wxppTpAuthInfoAtk      :: WxppTpAccessToken
+  { wxppTpAuthInfoAtk      :: AccessToken
   , wxppTpAuthInfoRtk      :: WxppTpRefreshToken
   , wxppTpAuthInfoFuncInfo :: WxppTpAuthFuncInfo
   , wxppTpAuthInfoTTL      :: NominalDiffTime
@@ -302,7 +302,7 @@ instance FromJSON WxppTpAuthInfo where
   parseJSON = withObject "WxppTpAuthInfo" $ \o -> do
     target_app_id <- fmap WxppAppID (o .: "authorizer_appid")
     WxppTpAuthInfo
-      <$> (WxppTpAccessToken
+      <$> (AccessToken
             <$> o .: "authorizer_access_token"
             <*> pure target_app_id
           )
@@ -358,6 +358,21 @@ data WxppTpAuthorizerTokens = WxppTpAuthorizerTokens
                                     AccessToken
                                     WxppTpRefreshToken
                                     UTCTime
+
+instance HasAccessToken WxppTpAuthorizerTokens where
+  wxppGetAccessToken (WxppTpAuthorizerTokens atk _ expiry) = return $ Just (atk, expiry)
+
+
+class HasWxppTpAuthorizerTokens a where
+  wxppGetTpAuthorizerTokens :: a -> UTCTime -> WxppTpAuthorizerTokens
+
+instance HasWxppTpAuthorizerTokens WxppTpAuthorizerTokens where
+  wxppGetTpAuthorizerTokens x _now = x
+
+instance HasWxppTpAuthorizerTokens WxppTpAuthInfo where
+  wxppGetTpAuthorizerTokens (WxppTpAuthInfo atk rtk _ ttl) now =
+    WxppTpAuthorizerTokens atk rtk (addUTCTime ttl now)
+
 
 -- | 调用远程接口: 获取（刷新）授权公众号的接口调用凭据（令牌）
 wxppTpRefreshAuthorizerTokens :: (WxppApiMonad env m)
