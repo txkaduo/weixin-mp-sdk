@@ -100,7 +100,9 @@ checkSignature foundation sign_param msg = do
                              <*> ireq textField sign_param
 
     case check_sign (tt, nn, sign) of
-      Left err  -> invalidArgs $ return err
+      Left err  -> do $logErrorS wxppLogSource $ "got invalid signature: " <> sign_param
+                      invalidArgs $ return err
+
       Right _   -> return ()
 
 
