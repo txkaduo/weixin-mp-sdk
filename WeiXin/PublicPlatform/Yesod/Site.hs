@@ -13,6 +13,7 @@ import Yesod
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
+import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
@@ -680,16 +681,18 @@ postTpEventNoticeR = do
   foundation <- getYesod
   req <- waiRequest
   lbs <- liftIO $ lazyRequestBody req
-  let post_body_txt = toStrict $ decodeUtf8 lbs
-  checkSignature foundation "msg_signature" post_body_txt
 
   let enc_key   = LNE.head $ wxppTpSubAesKeys foundation
       my_app_id = wxppTpSubComponentAppId foundation
 
   err_or_resp <- runExceptT $ do
-      decrypted_xml0 <- either throwError
-                              (return . fromStrict)
-                              (parse_xml_lbs lbs >>= wxppDecryptByteStringDocumentE my_app_id enc_key)
+      encrypted_xml_t <- either throwError return
+                          (parse_xml_lbs lbs >>= wxppEncryptedTextInDocumentE)
+
+      lift $ checkSignature foundation "msg_signature" encrypted_xml_t
+
+      decrypted_xml0 <- either throwError (return . fromStrict)
+                              (B64.decode (encodeUtf8 encrypted_xml_t) >>= wxppDecrypt my_app_id enc_key)
 
       let err_or_parsed = parse_xml_lbs decrypted_xml0 >>= wxppTpDiagramFromCursor . fromDocument
       uts_or_notice <- case err_or_parsed of
