@@ -7,6 +7,7 @@ module WeiXin.PublicPlatform.ThirdParty
   ) where
 
 import           ClassyPrelude
+import           Control.Arrow         (left)
 import           Control.DeepSeq       (NFData)
 import           Control.Lens          hiding ((.=))
 import           Control.Monad.Logger
@@ -15,6 +16,7 @@ import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
 import           Data.Conduit          (Source)
+import           Data.Int              (Int8)
 import           Data.Proxy            (Proxy (..))
 import           Data.Time             (NominalDiffTime, addUTCTime)
 import           Database.Persist.Sql  (PersistField (..), PersistFieldSql (..))
@@ -420,16 +422,27 @@ data TpAppType = TpAppPublisher             -- ^ 订阅号
                  | TpAppServer              -- ^ 服务号
                  deriving (Show, Eq, Ord, Bounded)
 
+-- {{{1 instances
+instance ToEnumEither TpAppType where
+  toEnumEither 0 = Right TpAppPublisher
+  toEnumEither 1 = Right TpAppPublisherFromOld
+  toEnumEither 2 = Right TpAppServer
+  toEnumEither x = Left $ "Invalid TpAppType id: " <> show x
+
 instance Enum TpAppType where
   fromEnum TpAppPublisher        = 0
   fromEnum TpAppPublisherFromOld = 1
   fromEnum TpAppServer           = 2
 
-  toEnum 0 = TpAppPublisher
-  toEnum 1 = TpAppPublisherFromOld
-  toEnum 2 = TpAppServer
-  toEnum x = error $ "Invalid TpAppType id: " <> show x
+  toEnum x = either error id (toEnumEither x)
 
+instance PersistField TpAppType where
+  toPersistValue = toPersistValue . fromEnum
+  fromPersistValue =  fromPersistValue >=> (left pack . toEnumEither)
+
+instance PersistFieldSql TpAppType where
+  sqlType _ = sqlType (Proxy :: Proxy Int8)
+-- }}}1
 
 -- | 授权方认证类型
 -- 从取值看，似乎每个值应该是互斥的
@@ -450,6 +463,17 @@ data TpAppVerifyType = TpAppVerifyNone
                         -- ^ 已资质认证通过，还未通过名称认证，但通过了腾讯微博认证
                      deriving (Show, Eq, Ord, Bounded)
 
+-- {{{1 instances
+instance ToEnumEither TpAppVerifyType where
+  toEnumEither (-1) = Right TpAppVerifyNone
+  toEnumEither 0    = Right TpAppVerifyWeiXin
+  toEnumEither 1    = Right TpAppVerifySinaWeibo
+  toEnumEither 2    = Right TpAppVerifyTxWeibo
+  toEnumEither 3    = Right TpAppVerifyQualifiedNotName
+  toEnumEither 4    = Right TpAppVerifyQualifiedNotNameSinaWeibo
+  toEnumEither 5    = Right TpAppVerifyQualifiedNotNameTxWeibo
+  toEnumEither x    = Left $ "Invalid TpAppVerifyType id: " <> show x
+
 instance Enum TpAppVerifyType where
   fromEnum TpAppVerifyNone                      = -1
   fromEnum TpAppVerifyWeiXin                    = 0
@@ -459,15 +483,15 @@ instance Enum TpAppVerifyType where
   fromEnum TpAppVerifyQualifiedNotNameSinaWeibo = 4
   fromEnum TpAppVerifyQualifiedNotNameTxWeibo   = 5
 
-  toEnum (-1) = TpAppVerifyNone
-  toEnum 0  = TpAppVerifyWeiXin
-  toEnum 1  = TpAppVerifySinaWeibo
-  toEnum 2  = TpAppVerifyTxWeibo
-  toEnum 3  = TpAppVerifyQualifiedNotName
-  toEnum 4  = TpAppVerifyQualifiedNotNameSinaWeibo
-  toEnum 5  = TpAppVerifyQualifiedNotNameTxWeibo
-  toEnum x  = error $ "Invalid TpAppVerifyType id: " <> show x
+  toEnum x = either error id (toEnumEither x)
 
+instance PersistField TpAppVerifyType where
+  toPersistValue = toPersistValue . fromEnum
+  fromPersistValue =  fromPersistValue >=> (left pack . toEnumEither)
+
+instance PersistFieldSql TpAppVerifyType where
+  sqlType _ = sqlType (Proxy :: Proxy Int8)
+-- }}}1
 
 -- | 文档中的 business_info 字段的值
 -- 从内容看，实际上是各种功能的开关值
@@ -491,6 +515,7 @@ data AuthorizerInfo = AuthorizerInfo
   , tpAuthorizerAbility    :: Set TpAppAbility
   }
 
+-- {{{1 instances
 instance FromJSON AuthorizerInfo where
   parseJSON = withObject "AuthorizerInfo" $ \o -> do
     AuthorizerInfo  <$> o .: "nick_name"
@@ -515,6 +540,7 @@ instance FromJSON AuthorizerInfo where
             if i /= 0
                then return $ Just perm
                else return Nothing
+-- }}}1
 
 
 -- | 获取授权方的公众号帐号基本信息接口报文
