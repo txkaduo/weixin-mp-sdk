@@ -505,9 +505,10 @@ data TpAppAbility = TpAppCanOutlet
 
 
 -- | 授权方公众号的基本信息
--- 注意：这个信息不包含app id及qrcode url
+-- 注意：这个信息不包含app
 data AuthorizerInfo = AuthorizerInfo
-  { tpAuthorizerNickname   :: Text
+  { tpAuthorizerQrCodeUrl  :: UrlText
+  , tpAuthorizerNickname   :: Text
   , tpAuthorizerHeadImgUrl :: UrlText
   , tpAuthorizerUserName   :: WeixinUserName
   , tpAuthorizerAppType    :: TpAppType
@@ -518,7 +519,8 @@ data AuthorizerInfo = AuthorizerInfo
 -- {{{1 instances
 instance FromJSON AuthorizerInfo where
   parseJSON = withObject "AuthorizerInfo" $ \o -> do
-    AuthorizerInfo  <$> o .: "nick_name"
+    AuthorizerInfo  <$> o .: "qrcode_url"
+                    <*> o .: "nick_name"
                     <*> o .: "head_img"
                     <*> o .: "user_name"
                     <*> (o .: "service_type_info" >>= jsonParseIdInObj "TpAppType")
@@ -547,23 +549,22 @@ instance FromJSON AuthorizerInfo where
 -- 实际上，这个报文包含的公众号的基本信息及授权行为的基本信息
 -- 注意：这个类型的结构内部层次与报文略有不同
 data AuthorizationPack = AuthorizationPack
-  { tpAuthPackAuthorizer :: AuthorizerInfo
-  , tpAuthPackQrCodeUrl  :: UrlText
-  , tpAuthPackAppId      :: WxppAppID
-  , tpAuthPackFuncInfo   :: WxppTpAuthFuncInfo
+  { tpAuthPackAppId      :: WxppAppID       -- 此字段在报文中在 authorization_info/authorizer_appid
+  , tpAuthPackAuthorizer :: AuthorizerInfo
+  , tpAuthPackFuncInfo   :: WxppTpAuthFuncInfo  -- 此字段在报文中在 authorization_info/func_info
   }
 
+-- {{{1
 instance FromJSON AuthorizationPack where
   parseJSON = withObject "AuthorizationPack" $ \o -> do
     o2 <- o .: "authorization_info"
-    AuthorizationPack <$> o .: "authorizer_info"
-                      <*> o .: "qrcode_url"
-                      <*> o2 .: "appid"
+    AuthorizationPack <$> o2 .: "authorizer_appid" -- 实测所得，与文档不一致
+                      <*> o .: "authorizer_info"
                       <*> o2 .: "func_info"
-
+-- }}}1
 
 -- | 调用远程接口:授权公众号帐号基本信息
-wxppTpGetAuthorizationInfo :: (WxppApiMonad env m)
+wxppTpGetAuthorizationInfo :: (WxppApiMonad env m, MonadCatch m)
                            => WxppTpAccessToken
                            -> WxppAppID
                            -> m AuthorizationPack
@@ -575,8 +576,7 @@ wxppTpGetAuthorizationInfo atk target_app_id = do
                          ]
       opt       = defaults & param "component_access_token" .~ [ atk_raw ]
 
-  liftIO (WS.postWith opt sess url post_data)
-          >>= asWxppWsResponseNormal'
+  liftIO (WS.postWith opt sess url post_data) >>= asWxppWsResponseNormal'L
 
   where
     WxppTpAccessToken atk_raw app_id = atk
