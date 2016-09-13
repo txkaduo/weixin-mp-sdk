@@ -282,13 +282,23 @@ instance Enum WxppTpAuthFuncCategory where
   toEnum x  = error $ "Invalid WxppTpAuthFuncCategory id: " <> show x
 
 
+-- | Just for the instance FromJSON
+newtype WrapWxppTpAuthFuncCategory = WrapWxppTpAuthFuncCategory
+  { unWrapWxppTpAuthFuncCategory :: WxppTpAuthFuncCategory
+  }
+
+instance FromJSON WrapWxppTpAuthFuncCategory where
+  parseJSON = withObject "WrapWxppTpAuthFuncCategory" $ \o -> do
+    WrapWxppTpAuthFuncCategory
+      <$> (o .: "funcscope_category" >>= jsonParseIdInObj' "WxppTpAuthFuncCategory")
+
 data WxppTpAuthFuncInfo = WxppTpAuthFuncInfo
                               (Set WxppTpAuthFuncCategory)
 
 instance FromJSON WxppTpAuthFuncInfo where
   parseJSON = withArray "WxppTpAuthFuncInfo" $ \vv -> do
-    WxppTpAuthFuncInfo . setFromList <$>
-        mapM (jsonParseIdInObj' "WxppTpAuthFuncCategory") (toList vv)
+    WxppTpAuthFuncInfo . (setFromList . map unWrapWxppTpAuthFuncCategory) <$>
+        mapM parseJSON (toList vv)
 
 
 data WxppTpAuthInfo = WxppTpAuthInfo
