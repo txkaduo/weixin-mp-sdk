@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DefaultSignatures #-}
 module WeiXin.PublicPlatform.Types
     ( module WeiXin.PublicPlatform.Types
     , Gender(..)
@@ -53,6 +54,12 @@ import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 
 import WeiXin.PublicPlatform.Utils
+
+
+class ToEnumEither a where
+  toEnumEither :: Int -> Either String a
+  default toEnumEither :: Enum a => Int -> Either String a
+  toEnumEither = Right . toEnum
 
 
 data WxppUrlConfig = WxppUrlConfig
