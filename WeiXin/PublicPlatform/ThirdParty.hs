@@ -543,7 +543,7 @@ wxppTpGetAuthorizationPack :: (WxppApiMonad env m)
                            -> m AuthorizationPack
 wxppTpGetAuthorizationPack atk target_app_id = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
-  let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_authorizer_info"
+  let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_get_authorizer_info"
       post_data = object [ "component_appid" .= app_id
                          , "authorizer_appid" .= target_app_id
                          ]
