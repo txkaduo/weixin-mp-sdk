@@ -644,6 +644,7 @@ instance ToJSON TpAuthVoiceRecognize where
 -- | 选项：多客服开关
 newtype TpAuthCustomerService = TpAuthCustomerService { unTpAuthCustomerService :: Bool }
 
+-- {{{1
 instance TpAuthOption TpAuthCustomerService where
   tpAuthOptionName _ = "customer_service"
 
@@ -656,7 +657,7 @@ instance TpAuthOption TpAuthCustomerService where
 
 instance ToJSON TpAuthCustomerService where
   toJSON (TpAuthCustomerService b) = toJSON $ show (if b then 1 else 0 :: Int)
-
+-- }}}1
 
 -- | 取选项设置信息的报文
 data TpAuthOptionResp a = TpAuthOptionResp
@@ -988,3 +989,5 @@ jsonParseIdInObj type_name o = do
 
 jsonParseIdInObj' :: (Enum a, Bounded a) => String -> Value -> A.Parser a
 jsonParseIdInObj' type_name = withObject type_name $ jsonParseIdInObj type_name
+
+-- vim: set foldmethod=marker:
