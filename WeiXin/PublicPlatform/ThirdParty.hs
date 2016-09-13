@@ -595,15 +595,19 @@ data TpAuthLocationReport = TpAuthLocationReportNone
                           | TpAuthLocationReportPeriodic
                           deriving (Show, Eq, Ord, Bounded)
 
+-- {{{1 instances
+instance ToEnumEither TpAuthLocationReport where
+  toEnumEither 0 = Right TpAuthLocationReportNone
+  toEnumEither 1 = Right TpAuthLocationReportEntry
+  toEnumEither 2 = Right TpAuthLocationReportPeriodic
+  toEnumEither x = Left $ "Invalid TpAuthLocationReport Int value: " <> show x
+
 instance Enum TpAuthLocationReport where
   fromEnum TpAuthLocationReportNone     = 0
   fromEnum TpAuthLocationReportEntry    = 1
   fromEnum TpAuthLocationReportPeriodic = 2
 
-  toEnum 0 = TpAuthLocationReportNone
-  toEnum 1 = TpAuthLocationReportEntry
-  toEnum 2 = TpAuthLocationReportPeriodic
-  toEnum x = error $ "Invalid TpAuthLocationReport Int value: " <> show x
+  toEnum x = either error id (toEnumEither x)
 
 instance ToJSON TpAuthLocationReport where
   toJSON = toJSON . show . fromEnum
@@ -617,6 +621,7 @@ instance TpAuthOption TpAuthLocationReport where
       "1" -> return TpAuthLocationReportEntry
       "2" -> return TpAuthLocationReportPeriodic
       _   -> fail $ "Invalid TpAuthLocationReport value: " <> unpack s
+-- }}}1
 
 
 -- | 选项：语音识别开关
