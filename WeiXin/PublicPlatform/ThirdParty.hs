@@ -563,11 +563,11 @@ instance FromJSON AuthorizationPack where
 
 
 -- | 调用远程接口:授权公众号帐号基本信息
-wxppTpGetAuthorizationPack :: (WxppApiMonad env m)
+wxppTpGetAuthorizationInfo :: (WxppApiMonad env m)
                            => WxppTpAccessToken
                            -> WxppAppID
                            -> m AuthorizationPack
-wxppTpGetAuthorizationPack atk target_app_id = do
+wxppTpGetAuthorizationInfo atk target_app_id = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_get_authorizer_info"
       post_data = object [ "component_appid" .= app_id
