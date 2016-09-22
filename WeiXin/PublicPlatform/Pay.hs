@@ -36,7 +36,6 @@ import           Text.Parsec.TX.Utils   (SimpleStringRep (..), deriveJsonS,
 import           Yesod.Helpers.Parsec   (derivePathPieceS)
 
 import WeiXin.PublicPlatform.Types
-import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
 
