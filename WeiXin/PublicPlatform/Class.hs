@@ -283,6 +283,9 @@ class HasWxppAppID a where
 instance HasWxppAppID WxppAppID where
     getWxppAppID = id
 
+instance HasWxppAppID WxppAppOpenID where
+  getWxppAppID (WxppAppOpenID app_id _) = app_id
+
 instance HasWxppAppID a => HasWxppAppID (a,b) where
     getWxppAppID = getWxppAppID . fst
 
@@ -291,6 +294,9 @@ class HasWxppOpenID a where
 
 instance HasWxppOpenID WxppOpenID where
     getWxppOpenID = id
+
+instance HasWxppOpenID WxppAppOpenID where
+  getWxppOpenID (WxppAppOpenID _ oid) = oid
 
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst

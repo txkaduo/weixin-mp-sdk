@@ -16,7 +16,6 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Message        (wxppInMsgEntityFromLbs)
 import WeiXin.PublicPlatform.ThirdParty
-import Yesod.Helpers.Persist                (insertOrReplace)
 
 
 wxppSubModelsDefBasic ::
@@ -415,7 +414,16 @@ instance WxppTpTokenWriter WxppDbRunner where
   wxppTpTokenSaveVerifyTicket (WxppDbRunner run_db) app_id ticket = do
     now <- getCurrentTime
     run_db $ do
-      void $ insertOrReplace $ WxppCachedTpCompVerifyTicket app_id ticket now
+      let rec_key = WxppCachedTpCompVerifyTicketKey app_id
+          rec     = WxppCachedTpCompVerifyTicket app_id ticket now
+
+      -- does not work without Unique
+      -- void $ insertOrReplace rec
+
+      m_old <- get rec_key
+      if isNothing m_old
+         then insert_ rec
+         else replace rec_key rec
 
 
   wxppTpTokenDeleteVerifyTicket (WxppDbRunner run_db) app_id = do

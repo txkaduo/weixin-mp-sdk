@@ -40,19 +40,24 @@ wxppInMsgEntityFromLbsA app_id ak bs =
         Right doc   -> wxppInMsgEntityFromDocumentA app_id ak doc
 
 
+-- | get "Encrypt" node text
+wxppEncryptedTextInDocumentE :: Document -> Either String Text
+wxppEncryptedTextInDocumentE doc = do
+  get_ele_s "Encrypt"
+  where
+    get_ele_s = getElementContent cursor
+    cursor = fromDocument doc
+
 -- | decrypt bytestring from 'Encrypt' element
-wxppDecryptByteStringDocumentE ::
-    WxppAppID
-    -> AesKey
-    -> Document
-    -> Either String ByteString
+wxppDecryptByteStringDocumentE :: WxppAppID
+                               -> AesKey
+                               -> Document
+                               -> Either String ByteString
 wxppDecryptByteStringDocumentE app_id ak doc = do
-    get_ele_s "Encrypt" >>= decrypt
-    where
-        get_ele_s = getElementContent cursor
-        cursor = fromDocument doc
-        decrypt t = (B64.decode $ encodeUtf8 t)
-                            >>= wxppDecrypt app_id ak
+  wxppEncryptedTextInDocumentE doc >>= decrypt
+  where
+    decrypt t = (B64.decode $ encodeUtf8 t)
+                        >>= wxppDecrypt app_id ak
 
 -- | call wxppInMsgEntityFromDocumentE with each of the AesKey
 wxppTryDecryptByteStringDocumentE ::

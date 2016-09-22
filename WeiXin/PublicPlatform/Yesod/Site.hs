@@ -13,6 +13,7 @@ import Yesod
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
+import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
@@ -100,7 +101,9 @@ checkSignature foundation sign_param msg = do
                              <*> ireq textField sign_param
 
     case check_sign (tt, nn, sign) of
-      Left err  -> invalidArgs $ return err
+      Left err  -> do $logErrorS wxppLogSource $ "got invalid signature: " <> sign_param
+                      invalidArgs $ return err
+
       Right _   -> return ()
 
 
@@ -122,14 +125,16 @@ getMessageR = withWxppSubHandler $ \foundation -> do
 
 postMessageR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
 postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
-  realHandlerMsg foundation
+  let app_id = getWxppAppID foundation
+  realHandlerMsg foundation (ProcAppSingle app_id)
 
 realHandlerMsg :: forall site master a.
                (RenderMessage site FormMessage, HasWxppToken a,
-               HasWxppAppID a, HasAesKeys a, HasWxppProcessor a)
+               HasAesKeys a, HasWxppProcessor a)
                => a
+               -> ProcAppIdInfo
                -> HandlerT site (HandlerT master IO) Text
-realHandlerMsg foundation = do
+realHandlerMsg foundation app_info = do
     checkSignature foundation "signature" ""
     m_enc_type <- lookupGetParam "encrypt_type"
     enc <- case m_enc_type of
@@ -143,8 +148,7 @@ realHandlerMsg foundation = do
                             "Retry with valid parameters: encrypt_type(not supported)"
     req <- waiRequest
     lbs <- liftIO $ lazyRequestBody req
-    let my_app_id   = getWxppAppID foundation
-        aks         = getAesKeys foundation
+    let aks         = getAesKeys foundation
         app_token   = getWxppToken foundation
         processor   = getWxppProcessor foundation
 
@@ -167,14 +171,12 @@ realHandlerMsg foundation = do
         ime0 <- case m_ime0 of
                   Nothing -> do
                     -- cannot parse incoming XML message
-                    liftIO $ wxppOnParseInMsgError processor my_app_id lbs
+                    liftIO $ wxppOnParseInMsgError processor app_info lbs
                     throwError $ "Cannot parse incoming XML"
 
                   Just x -> return x
 
-        let target_username0 = wxppInToUserName ime0
-
-        pre_result <- liftIO $ wxppPreProcessInMsg processor my_app_id target_username0 decrypted_xml0 ime0
+        pre_result <- liftIO $ wxppPreProcessInMsg processor app_info decrypted_xml0 ime0
 
         case pre_result of
             Left err -> do
@@ -191,7 +193,7 @@ realHandlerMsg foundation = do
 
                 let handle_msg      = wxppMsgHandler processor
                     try_handle_msg = ExceptT $ do
-                                tryAny (liftIO $ handle_msg my_app_id target_username decrypted_xml ime)
+                                tryAny (liftIO $ handle_msg app_info decrypted_xml ime)
                                     >>= \err_or_x -> do
                                             case err_or_x of
                                               Left err -> do
@@ -202,7 +204,7 @@ realHandlerMsg foundation = do
 
                 let post_handle_msg = wxppPostProcessInMsg processor
                     do_post_handle_msg out_res0 = ExceptT $ do
-                        tryAny (liftIO $ post_handle_msg my_app_id target_username decrypted_xml ime out_res0)
+                        tryAny (liftIO $ post_handle_msg app_info decrypted_xml ime out_res0)
                             >>= \err_or_x -> do
                                     case err_or_x of
                                       Left err -> do
@@ -212,7 +214,7 @@ realHandlerMsg foundation = do
                                       Right x -> return x
 
                 let do_on_error err = ExceptT $
-                        liftIO (wxppOnProcessInMsgError processor my_app_id target_username decrypted_xml ime err)
+                        liftIO (wxppOnProcessInMsgError processor app_info decrypted_xml ime err)
 
                 out_res <- (try_handle_msg `catchError` \err -> do_on_error err >> throwError err)
                                 >>= do_post_handle_msg
@@ -236,7 +238,7 @@ realHandlerMsg foundation = do
                                             now
                                             x
 
-                let extra_data = (target_username, map (user_open_id,) other_out_msgs)
+                let extra_data = map (user_open_id,) other_out_msgs
 
                 liftM (, Just extra_data) $
                     fmap (fromMaybe "") $ forM m_resp_out_msg $ \out_msg -> do
@@ -257,12 +259,12 @@ realHandlerMsg foundation = do
                 InternalError "cannot encode outgoing message into XML"
 
         Right (xmls, m_extra_data) -> do
-          forM_ m_extra_data $ \(target_username, other_out_msgs) -> do
+          forM_ m_extra_data $ \other_out_msgs -> do
             when (not $ null other_out_msgs) $ do
                 void $ liftIO $ async $ do
                     -- 延迟半秒只要为了让直接回复的回应能第一个到达用户
                     threadDelay $ 1000 * 500
-                    wxppSendOutMsgs processor my_app_id target_username other_out_msgs
+                    wxppSendOutMsgs processor to_app_id other_out_msgs
 
           return xmls
 
@@ -270,6 +272,9 @@ realHandlerMsg foundation = do
         parse_xml_lbs x  = case parseLBS def x of
                                 Left ex     -> Left $ "Failed to parse XML: " <> show ex
                                 Right xdoc  -> return xdoc
+
+        to_app_id = procAppIdInfoReceiverId app_info
+        my_app_id = procAppIdInfoMyId app_info
 
 
 -- | 生成随机字串作为 oauth 的state参数之用
@@ -676,16 +681,18 @@ postTpEventNoticeR = do
   foundation <- getYesod
   req <- waiRequest
   lbs <- liftIO $ lazyRequestBody req
-  let post_body_txt = toStrict $ decodeUtf8 lbs
-  checkSignature foundation "msg_signature" post_body_txt
 
   let enc_key   = LNE.head $ wxppTpSubAesKeys foundation
       my_app_id = wxppTpSubComponentAppId foundation
 
   err_or_resp <- runExceptT $ do
-      decrypted_xml0 <- either throwError
-                              (return . fromStrict)
-                              (parse_xml_lbs lbs >>= wxppDecryptByteStringDocumentE my_app_id enc_key)
+      encrypted_xml_t <- either throwError return
+                          (parse_xml_lbs lbs >>= wxppEncryptedTextInDocumentE)
+
+      lift $ checkSignature foundation "msg_signature" encrypted_xml_t
+
+      decrypted_xml0 <- either throwError (return . fromStrict)
+                              (B64.decode (encodeUtf8 encrypted_xml_t) >>= wxppDecrypt my_app_id enc_key)
 
       let err_or_parsed = parse_xml_lbs decrypted_xml0 >>= wxppTpDiagramFromCursor . fromDocument
       uts_or_notice <- case err_or_parsed of
@@ -724,16 +731,18 @@ postTpEventNoticeR = do
 -- | 第三方平台接收公众号消息与事件的端点入口
 -- GET 方法用于通讯检测
 -- POST 方法用于业务逻辑
-getTpMessageR :: HandlerT WxppTpSub (HandlerT master IO) Text
-getTpMessageR = do
+getTpMessageR :: WxppAppID -> HandlerT WxppTpSub (HandlerT master IO) Text
+getTpMessageR _auther_app_id = do
   foundation <- getYesod
   checkSignature foundation "signature" ""
   runInputGet $ ireq textField "echostr"
 
-postTpMessageR :: HandlerT WxppTpSub (HandlerT master IO) Text
-postTpMessageR = do
+postTpMessageR :: WxppAppID -> HandlerT WxppTpSub (HandlerT master IO) Text
+postTpMessageR auther_app_id = do
   foundation <- getYesod
-  realHandlerMsg foundation
+  let comp_app_id = getWxppAppID foundation
+
+  realHandlerMsg foundation (ProcAppThirdParty comp_app_id auther_app_id)
 
 
 instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)

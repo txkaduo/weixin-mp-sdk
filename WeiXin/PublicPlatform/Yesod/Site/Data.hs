@@ -50,24 +50,14 @@ instance FromJSON WxppSubsiteOpts where
 
 
 data WxppMsgProcessor = WxppMsgProcessor
-  { wxppSendOutMsgs     :: WxppAppID -> WeixinUserName -> [(WxppOpenID, WxppOutMsg)] -> IO ()
+  { wxppSendOutMsgs     :: WxppAppID -> [(WxppOpenID, WxppOutMsg)] -> IO ()
                          -- ^ a computation to send outgoing messages
                          -- 1st: my app id.
                          --      若是第三方平台
 
-  , wxppMsgHandler      :: WxppAppID -> WeixinUserName -> WxppInMsgHandler IO
-  -- ^ 参数意义：
-  -- 第1个参数是我们自己的app id
-  --            如果我们是第三方平台，则这个不同于收到的消息所指向的接收公号
-  --            而是所谓的 component_app_id
-  --            对于非第三方平台，这个就是消息所发往的app id
-  -- 第2个参数是收到的报文内的 ToUserName
-  -- 可以根据这个参数找到必要的配置文件
+  , wxppMsgHandler      :: WxppInMsgHandler IO
 
-  , wxppPreProcessInMsg :: WxppAppID
-                        -- ^ 我们的app id
-                        -- 若是第三方平台，则这是 component_app_id
-                        -> WeixinUserName
+  , wxppPreProcessInMsg :: ProcAppIdInfo
                         -> LB.ByteString
                          -- raw data of message (unparsed)
                         -> WxppInMsgEntity
@@ -76,10 +66,7 @@ data WxppMsgProcessor = WxppMsgProcessor
                                 (Maybe (LB.ByteString, WxppInMsgEntity))
                                 )
 
-  , wxppPostProcessInMsg :: WxppAppID
-                         -- ^ 我们的app id
-                         -- 若是第三方平台，则这是 component_app_id
-                         -> WeixinUserName
+  , wxppPostProcessInMsg :: ProcAppIdInfo
                          -> LB.ByteString
                          -- raw data of message (unparsed)
                          -> WxppInMsgEntity
@@ -87,10 +74,7 @@ data WxppMsgProcessor = WxppMsgProcessor
                          -> WxppInMsgHandlerResult
                          -> IO (Either String WxppInMsgHandlerResult)
 
-  , wxppOnProcessInMsgError :: WxppAppID
-                            -- ^ 我们的app id
-                            -- 若是第三方平台，则这是 component_app_id
-                            -> WeixinUserName
+  , wxppOnProcessInMsgError :: ProcAppIdInfo
                             -> LB.ByteString
                             -- raw data of message (unparsed)
                             -> WxppInMsgEntity
@@ -99,12 +83,8 @@ data WxppMsgProcessor = WxppMsgProcessor
                             -> String
                             -> IO (Either String ())
 
-  , wxppOnParseInMsgError :: WxppAppID -> LB.ByteString -> IO ()
+  , wxppOnParseInMsgError :: ProcAppIdInfo -> LB.ByteString -> IO ()
   -- ^ called when incoming message cannot be parsed
-  -- 第1个参数是我们自己的app id
-  --            如果我们是第三方平台，则这个不同于收到的消息所指向的接收公号
-  --            而是所谓的 component_app_id
-  --            对于非第三方平台，这个就是消息所发往的app id(设置死的，所以知道）
   }
 
 
@@ -193,10 +173,6 @@ data WxppTpSub = WxppTpSub
                                 => WxppTpEventNotice
                                 -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
   -- ^ 处理第三方平台事件通知的逻辑
-  , wxppTpSubAuthorizerAppId    :: WxppAppID
-  -- ^ 文档一方面说可以从 ToUserName 中得到消息的来源公众号
-  -- 但又红字标明接收已授权公众号消息的url中要带有已授权公众号的app id
-  -- 所以还是留有这了字段
   }
 
 instance Show WxppTpSub where
@@ -224,7 +200,7 @@ instance HasWxppProcessor WxppTpSub where
 mkYesodSubData "WxppTpSub" [parseRoutes|
 -- 第三方平台事件接收
 /notice                   TpEventNoticeR      GET POST
-/msg                      TpMessageR          GET POST
+/auther/#WxppAppID/msg    TpMessageR          GET POST
 |]
 
 

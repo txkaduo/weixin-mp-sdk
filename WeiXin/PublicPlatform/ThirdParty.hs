@@ -2,18 +2,21 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.ThirdParty
-  ( module WeiXin.PublicPlatform.Types
+  ( module WeiXin.PublicPlatform.Class
   , module WeiXin.PublicPlatform.ThirdParty
   ) where
 
 import           ClassyPrelude
+import           Control.Arrow         (left)
 import           Control.DeepSeq       (NFData)
 import           Control.Lens          hiding ((.=))
 import           Control.Monad.Logger
+import           Control.Monad.Except
 import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
 import           Data.Conduit          (Source)
+import           Data.Int              (Int8)
 import           Data.Proxy            (Proxy (..))
 import           Data.Time             (NominalDiffTime, addUTCTime)
 import           Database.Persist.Sql  (PersistField (..), PersistFieldSql (..))
@@ -26,7 +29,7 @@ import           Text.XML.Cursor
 import           Yesod.Core            (MonadBaseControl, MonadResource)
 import           Yesod.Helpers.Utils   (queryTextSetParam, urlUpdateQueryText)
 
-import           WeiXin.PublicPlatform.Types
+import           WeiXin.PublicPlatform.Class
 import           WeiXin.PublicPlatform.Utils
 import           WeiXin.PublicPlatform.WS
 import           WeiXin.PublicPlatform.XmlUtils
@@ -45,6 +48,12 @@ newtype WxppTpAuthCode = WxppTpAuthCode { unWxppTpAuthCode :: Text }
                                  , NFData
                                  , ToMessage, ToMarkup
                                  )
+
+-- | 文档没有说明授权失败时，如何从微信平台返回
+-- 暂时认为跟 oauth 一样的逻辑
+deniedTpAuthCode :: WxppTpAuthCode -> Bool
+deniedTpAuthCode (WxppTpAuthCode x) = null x || x == "authdeny"
+
 
 -- | refresh token
 -- 因为通常跟相应的 AppId 一起使用，所以打包在一起
@@ -272,29 +281,40 @@ instance Enum WxppTpAuthFuncCategory where
   toEnum 13 = WxppTpAuthFuncOutlet
   toEnum 14 = WxppTpAuthFuncPay
   toEnum 15 = WxppTpAuthFuncMenu
-  toEnum x  = error $ "Invalid WxppTpAuthFuncCategory id" <> show x
+  toEnum x  = error $ "Invalid WxppTpAuthFuncCategory id: " <> show x
 
+
+-- | Just for the instance FromJSON
+newtype WrapWxppTpAuthFuncCategory = WrapWxppTpAuthFuncCategory
+  { unWrapWxppTpAuthFuncCategory :: WxppTpAuthFuncCategory
+  }
+
+instance FromJSON WrapWxppTpAuthFuncCategory where
+  parseJSON = withObject "WrapWxppTpAuthFuncCategory" $ \o -> do
+    WrapWxppTpAuthFuncCategory
+      <$> (o .: "funcscope_category" >>= jsonParseIdInObj' "WxppTpAuthFuncCategory")
 
 data WxppTpAuthFuncInfo = WxppTpAuthFuncInfo
                               (Set WxppTpAuthFuncCategory)
 
 instance FromJSON WxppTpAuthFuncInfo where
   parseJSON = withArray "WxppTpAuthFuncInfo" $ \vv -> do
-    WxppTpAuthFuncInfo . setFromList <$>
-        mapM (jsonParseIdInObj' "WxppTpAuthFuncCategory") (toList vv)
+    WxppTpAuthFuncInfo . (setFromList . map unWrapWxppTpAuthFuncCategory) <$>
+        mapM parseJSON (toList vv)
 
 
 data WxppTpAuthInfo = WxppTpAuthInfo
-                          WxppTpAccessToken
-                          WxppTpRefreshToken
-                          WxppTpAuthFuncInfo
-                          Int
+  { wxppTpAuthInfoAtk      :: AccessToken
+  , wxppTpAuthInfoRtk      :: WxppTpRefreshToken
+  , wxppTpAuthInfoFuncInfo :: WxppTpAuthFuncInfo
+  , wxppTpAuthInfoTTL      :: NominalDiffTime
+  }
 
 instance FromJSON WxppTpAuthInfo where
   parseJSON = withObject "WxppTpAuthInfo" $ \o -> do
     target_app_id <- fmap WxppAppID (o .: "authorizer_appid")
     WxppTpAuthInfo
-      <$> (WxppTpAccessToken
+      <$> (AccessToken
             <$> o .: "authorizer_access_token"
             <*> pure target_app_id
           )
@@ -303,7 +323,7 @@ instance FromJSON WxppTpAuthInfo where
             <*> pure target_app_id
           )
       <*> o .: "func_info"
-      <*> o .: "expires_in"
+      <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
 
 
 data WxppTpAuthInfoResp = WxppTpAuthInfoResp WxppTpAuthInfo
@@ -314,11 +334,11 @@ instance FromJSON WxppTpAuthInfoResp where
 
 
 -- | 调用远程接口，取得接口调用凭证及授权信息
-wxppTpGetAuthInfo :: (WxppApiMonad env m)
-                  => WxppTpAccessToken
-                  -> WxppTpAuthCode
-                  -> m WxppTpAuthInfoResp
-wxppTpGetAuthInfo atk auth_code = do
+wxppTpQueryAuthInfoByCode :: (WxppApiMonad env m)
+                          => WxppTpAccessToken
+                          -> WxppTpAuthCode
+                          -> m WxppTpAuthInfoResp
+wxppTpQueryAuthInfoByCode atk auth_code = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_query_auth"
       post_data = object [ "component_appid" .= app_id
@@ -350,6 +370,21 @@ data WxppTpAuthorizerTokens = WxppTpAuthorizerTokens
                                     AccessToken
                                     WxppTpRefreshToken
                                     UTCTime
+
+instance HasAccessToken WxppTpAuthorizerTokens where
+  wxppGetAccessToken (WxppTpAuthorizerTokens atk _ expiry) = return $ Just (atk, expiry)
+
+
+class HasWxppTpAuthorizerTokens a where
+  wxppGetTpAuthorizerTokens :: a -> UTCTime -> WxppTpAuthorizerTokens
+
+instance HasWxppTpAuthorizerTokens WxppTpAuthorizerTokens where
+  wxppGetTpAuthorizerTokens x _now = x
+
+instance HasWxppTpAuthorizerTokens WxppTpAuthInfo where
+  wxppGetTpAuthorizerTokens (WxppTpAuthInfo atk rtk _ ttl) now =
+    WxppTpAuthorizerTokens atk rtk (addUTCTime ttl now)
+
 
 -- | 调用远程接口: 获取（刷新）授权公众号的接口调用凭据（令牌）
 wxppTpRefreshAuthorizerTokens :: (WxppApiMonad env m)
@@ -387,16 +422,27 @@ data TpAppType = TpAppPublisher             -- ^ 订阅号
                  | TpAppServer              -- ^ 服务号
                  deriving (Show, Eq, Ord, Bounded)
 
+-- {{{1 instances
+instance ToEnumEither TpAppType where
+  toEnumEither 0 = Right TpAppPublisher
+  toEnumEither 1 = Right TpAppPublisherFromOld
+  toEnumEither 2 = Right TpAppServer
+  toEnumEither x = Left $ "Invalid TpAppType id: " <> show x
+
 instance Enum TpAppType where
   fromEnum TpAppPublisher        = 0
   fromEnum TpAppPublisherFromOld = 1
   fromEnum TpAppServer           = 2
 
-  toEnum 0 = TpAppPublisher
-  toEnum 1 = TpAppPublisherFromOld
-  toEnum 2 = TpAppServer
-  toEnum x = error $ "Invalid TpAppType id: " <> show x
+  toEnum x = either error id (toEnumEither x)
 
+instance PersistField TpAppType where
+  toPersistValue = toPersistValue . fromEnum
+  fromPersistValue =  fromPersistValue >=> (left pack . toEnumEither)
+
+instance PersistFieldSql TpAppType where
+  sqlType _ = sqlType (Proxy :: Proxy Int8)
+-- }}}1
 
 -- | 授权方认证类型
 -- 从取值看，似乎每个值应该是互斥的
@@ -417,6 +463,17 @@ data TpAppVerifyType = TpAppVerifyNone
                         -- ^ 已资质认证通过，还未通过名称认证，但通过了腾讯微博认证
                      deriving (Show, Eq, Ord, Bounded)
 
+-- {{{1 instances
+instance ToEnumEither TpAppVerifyType where
+  toEnumEither (-1) = Right TpAppVerifyNone
+  toEnumEither 0    = Right TpAppVerifyWeiXin
+  toEnumEither 1    = Right TpAppVerifySinaWeibo
+  toEnumEither 2    = Right TpAppVerifyTxWeibo
+  toEnumEither 3    = Right TpAppVerifyQualifiedNotName
+  toEnumEither 4    = Right TpAppVerifyQualifiedNotNameSinaWeibo
+  toEnumEither 5    = Right TpAppVerifyQualifiedNotNameTxWeibo
+  toEnumEither x    = Left $ "Invalid TpAppVerifyType id: " <> show x
+
 instance Enum TpAppVerifyType where
   fromEnum TpAppVerifyNone                      = -1
   fromEnum TpAppVerifyWeiXin                    = 0
@@ -426,15 +483,15 @@ instance Enum TpAppVerifyType where
   fromEnum TpAppVerifyQualifiedNotNameSinaWeibo = 4
   fromEnum TpAppVerifyQualifiedNotNameTxWeibo   = 5
 
-  toEnum (-1) = TpAppVerifyNone
-  toEnum 0  = TpAppVerifyWeiXin
-  toEnum 1  = TpAppVerifySinaWeibo
-  toEnum 2  = TpAppVerifyTxWeibo
-  toEnum 3  = TpAppVerifyQualifiedNotName
-  toEnum 4  = TpAppVerifyQualifiedNotNameSinaWeibo
-  toEnum 5  = TpAppVerifyQualifiedNotNameTxWeibo
-  toEnum x  = error $ "Invalid TpAppVerifyType id: " <> show x
+  toEnum x = either error id (toEnumEither x)
 
+instance PersistField TpAppVerifyType where
+  toPersistValue = toPersistValue . fromEnum
+  fromPersistValue =  fromPersistValue >=> (left pack . toEnumEither)
+
+instance PersistFieldSql TpAppVerifyType where
+  sqlType _ = sqlType (Proxy :: Proxy Int8)
+-- }}}1
 
 -- | 文档中的 business_info 字段的值
 -- 从内容看，实际上是各种功能的开关值
@@ -448,9 +505,10 @@ data TpAppAbility = TpAppCanOutlet
 
 
 -- | 授权方公众号的基本信息
--- 注意：这个信息不包含app id及qrcode url
+-- 注意：这个信息不包含app
 data AuthorizerInfo = AuthorizerInfo
-  { tpAuthorizerNickname   :: Text
+  { tpAuthorizerQrCodeUrl  :: UrlText
+  , tpAuthorizerNickname   :: Text
   , tpAuthorizerHeadImgUrl :: UrlText
   , tpAuthorizerUserName   :: WeixinUserName
   , tpAuthorizerAppType    :: TpAppType
@@ -458,9 +516,11 @@ data AuthorizerInfo = AuthorizerInfo
   , tpAuthorizerAbility    :: Set TpAppAbility
   }
 
+-- {{{1 instances
 instance FromJSON AuthorizerInfo where
   parseJSON = withObject "AuthorizerInfo" $ \o -> do
-    AuthorizerInfo  <$> o .: "nick_name"
+    AuthorizerInfo  <$> o .: "qrcode_url"
+                    <*> o .: "nick_name"
                     <*> o .: "head_img"
                     <*> o .: "user_name"
                     <*> (o .: "service_type_info" >>= jsonParseIdInObj "TpAppType")
@@ -482,42 +542,41 @@ instance FromJSON AuthorizerInfo where
             if i /= 0
                then return $ Just perm
                else return Nothing
+-- }}}1
 
 
 -- | 获取授权方的公众号帐号基本信息接口报文
 -- 实际上，这个报文包含的公众号的基本信息及授权行为的基本信息
 -- 注意：这个类型的结构内部层次与报文略有不同
 data AuthorizationPack = AuthorizationPack
-  { tpAuthPackAuthorizer :: AuthorizerInfo
-  , tpAuthPackQrCodeUrl  :: UrlText
-  , tpAuthPackAppId      :: WxppAppID
-  , tpAuthPackFuncInfo   :: WxppTpAuthFuncInfo
+  { tpAuthPackAppId      :: WxppAppID       -- 此字段在报文中在 authorization_info/authorizer_appid
+  , tpAuthPackAuthorizer :: AuthorizerInfo
+  , tpAuthPackFuncInfo   :: WxppTpAuthFuncInfo  -- 此字段在报文中在 authorization_info/func_info
   }
 
+-- {{{1
 instance FromJSON AuthorizationPack where
   parseJSON = withObject "AuthorizationPack" $ \o -> do
     o2 <- o .: "authorization_info"
-    AuthorizationPack <$> o .: "authorizer_info"
-                      <*> o .: "qrcode_url"
-                      <*> o2 .: "appid"
+    AuthorizationPack <$> o2 .: "authorizer_appid" -- 实测所得，与文档不一致
+                      <*> o .: "authorizer_info"
                       <*> o2 .: "func_info"
-
+-- }}}1
 
 -- | 调用远程接口:授权公众号帐号基本信息
-wxppTpGetAuthorizationPack :: (WxppApiMonad env m)
+wxppTpGetAuthorizationInfo :: (WxppApiMonad env m, MonadCatch m)
                            => WxppTpAccessToken
                            -> WxppAppID
                            -> m AuthorizationPack
-wxppTpGetAuthorizationPack atk target_app_id = do
+wxppTpGetAuthorizationInfo atk target_app_id = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
-  let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_authorizer_info"
+  let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_get_authorizer_info"
       post_data = object [ "component_appid" .= app_id
                          , "authorizer_appid" .= target_app_id
                          ]
       opt       = defaults & param "component_access_token" .~ [ atk_raw ]
 
-  liftIO (WS.postWith opt sess url post_data)
-          >>= asWxppWsResponseNormal'
+  liftIO (WS.postWith opt sess url post_data) >>= asWxppWsResponseNormal'L
 
   where
     WxppTpAccessToken atk_raw app_id = atk
@@ -536,15 +595,19 @@ data TpAuthLocationReport = TpAuthLocationReportNone
                           | TpAuthLocationReportPeriodic
                           deriving (Show, Eq, Ord, Bounded)
 
+-- {{{1 instances
+instance ToEnumEither TpAuthLocationReport where
+  toEnumEither 0 = Right TpAuthLocationReportNone
+  toEnumEither 1 = Right TpAuthLocationReportEntry
+  toEnumEither 2 = Right TpAuthLocationReportPeriodic
+  toEnumEither x = Left $ "Invalid TpAuthLocationReport Int value: " <> show x
+
 instance Enum TpAuthLocationReport where
   fromEnum TpAuthLocationReportNone     = 0
   fromEnum TpAuthLocationReportEntry    = 1
   fromEnum TpAuthLocationReportPeriodic = 2
 
-  toEnum 0 = TpAuthLocationReportNone
-  toEnum 1 = TpAuthLocationReportEntry
-  toEnum 2 = TpAuthLocationReportPeriodic
-  toEnum x = error $ "Invalid TpAuthLocationReport Int value: " <> show x
+  toEnum x = either error id (toEnumEither x)
 
 instance ToJSON TpAuthLocationReport where
   toJSON = toJSON . show . fromEnum
@@ -558,6 +621,7 @@ instance TpAuthOption TpAuthLocationReport where
       "1" -> return TpAuthLocationReportEntry
       "2" -> return TpAuthLocationReportPeriodic
       _   -> fail $ "Invalid TpAuthLocationReport value: " <> unpack s
+-- }}}1
 
 
 -- | 选项：语音识别开关
@@ -580,6 +644,7 @@ instance ToJSON TpAuthVoiceRecognize where
 -- | 选项：多客服开关
 newtype TpAuthCustomerService = TpAuthCustomerService { unTpAuthCustomerService :: Bool }
 
+-- {{{1
 instance TpAuthOption TpAuthCustomerService where
   tpAuthOptionName _ = "customer_service"
 
@@ -592,7 +657,7 @@ instance TpAuthOption TpAuthCustomerService where
 
 instance ToJSON TpAuthCustomerService where
   toJSON (TpAuthCustomerService b) = toJSON $ show (if b then 1 else 0 :: Int)
-
+-- }}}1
 
 -- | 取选项设置信息的报文
 data TpAuthOptionResp a = TpAuthOptionResp
@@ -701,6 +766,25 @@ class WxppTpTokenReader a where
 data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a
 
 
+-- | Helper for simplify use of wxppTpTokenGetComponentAccessToken
+wxppTpTokenGetComponentAccessTokenE :: (MonadError e m, MonadIO m, IsString e, WxppTpTokenReader a)
+                                    => a
+                                    -> WxppAppID
+                                    -> m WxppTpAccessToken
+wxppTpTokenGetComponentAccessTokenE x comp_app_id = do
+  m_atk_t <- liftIO $ wxppTpTokenGetComponentAccessToken x comp_app_id
+
+  case m_atk_t of
+    Nothing -> throwError $ fromString "no component_access_token found"
+
+    Just (atk, expiry) -> do
+      now <- liftIO getCurrentTime
+      when (now >= expiry) $ do
+        throwError $ "component_access_token expired"
+
+      return atk
+
+
 class WxppTpTokenWriter a where
   wxppTpTokenSaveVerifyTicket :: a
                              -> WxppAppID
@@ -743,6 +827,21 @@ data SomeWxppTpTokenWriter = forall a. WxppTpTokenWriter a => SomeWxppTpTokenWri
 
 data SomeWxppTpTokenStore = forall a. (WxppTpTokenWriter a, WxppTpTokenReader a)
                             => SomeWxppTpTokenStore a
+
+
+instance WxppTpTokenReader SomeWxppTpTokenStore where
+  wxppTpTokenGetVeriyTicket (SomeWxppTpTokenStore s)          = wxppTpTokenGetVeriyTicket s
+  wxppTpTokenGetComponentAccessToken (SomeWxppTpTokenStore s) = wxppTpTokenGetComponentAccessToken s
+  wxppTpTokenGetAuthorizerTokens (SomeWxppTpTokenStore s)     = wxppTpTokenGetAuthorizerTokens s
+  wxppTpTokenSourceAuthorizerTokens (SomeWxppTpTokenStore s)  = wxppTpTokenSourceAuthorizerTokens s
+
+instance WxppTpTokenWriter SomeWxppTpTokenStore where
+  wxppTpTokenSaveVerifyTicket (SomeWxppTpTokenStore s)          = wxppTpTokenSaveVerifyTicket s
+  wxppTpTokenDeleteVerifyTicket (SomeWxppTpTokenStore s)        = wxppTpTokenDeleteVerifyTicket s
+  wxppTpTokenAddComponentAccessToken (SomeWxppTpTokenStore s)   = wxppTpTokenAddComponentAccessToken s
+  wxppTpTokenPurgeComponentAccessToken (SomeWxppTpTokenStore s) = wxppTpTokenPurgeComponentAccessToken s
+  wxppTpTokenAddAuthorizerTokens (SomeWxppTpTokenStore s)       = wxppTpTokenAddAuthorizerTokens s
+  wxppTpTokenPurgeAuthorizerTokens (SomeWxppTpTokenStore s)     = wxppTpTokenPurgeAuthorizerTokens s
 
 
 -- | 从微信平台取新的 component_access_token 并保存之
@@ -890,3 +989,5 @@ jsonParseIdInObj type_name o = do
 
 jsonParseIdInObj' :: (Enum a, Bounded a) => String -> Value -> A.Parser a
 jsonParseIdInObj' type_name = withObject type_name $ jsonParseIdInObj type_name
+
+-- vim: set foldmethod=marker:

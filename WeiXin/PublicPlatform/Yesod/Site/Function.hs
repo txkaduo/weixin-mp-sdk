@@ -36,7 +36,6 @@ import WeiXin.PublicPlatform.Yesod.Model
 
 -- | Handler: 保存所有收到的比较原始的消息（解密之后的结果）到数据库
 data StoreInMsgToDB m = StoreInMsgToDB
-                            WxppAppID
                             WxppDbRunner
                                 -- function to run DB actions
                             (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> m ())
@@ -47,21 +46,20 @@ type instance WxppInMsgProcessResult (StoreInMsgToDB m) = WxppInMsgHandlerResult
 
 instance JsonConfigable (StoreInMsgToDB m) where
     type JsonConfigableUnconfigData (StoreInMsgToDB m) =
-            ( WxppAppID
-            , WxppDbRunner
+            ( WxppDbRunner
             , Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> m ()
             )
 
     isNameOfInMsgHandler _ = ( == "db-store-all" )
 
-    parseWithExtraData _ (x,y,z) _obj = return $ StoreInMsgToDB x y z
+    parseWithExtraData _ (x,y) _obj = return $ StoreInMsgToDB x y
 
 
 instance (MonadIO m, MonadLogger m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
 
-    processInMsg (StoreInMsgToDB {}) _cache _bs _ime = do
+    processInMsg (StoreInMsgToDB {}) _cache _app_info _bs _ime = do
         $logWarnS wxppLogSource $
             "StoreInMsgToDB now do nothing when used as incoming message handler"
         return $ Right []
@@ -70,7 +68,7 @@ instance (MonadIO m, MonadLogger m
 instance (MonadIO m, MonadLogger m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
-    preProcInMsg (StoreInMsgToDB app_id db_runner media_downloader) _cache bs ime = runMaybeT $ do
+    preProcInMsg (StoreInMsgToDB db_runner media_downloader) _cache app_info bs ime = runMaybeT $ do
         now <- liftIO getCurrentTime
         (msg_record_id, (is_video, mids)) <- mapMaybeT (runWxppDB db_runner) $ do
             let m_to        = Just $ wxppInToUserName ime
@@ -105,6 +103,9 @@ instance (MonadIO m, MonadLogger m
             media_downloader (not is_video) msg_record_id mid
         return (bs, ime)
 
+        where
+          app_id = procAppIdInfoReceiverId app_info
+
 
 -- | 现在StoreInMsgToDB的preProcInMsg仅当消息xml已被成功解释后才能被调用
 -- 要提供另一个函数特别为xml解释失败时回调
@@ -125,21 +126,17 @@ defaultOnInMsgParseFailed m_app_id lbs = do
 
 -- | Handler: 更新 WxppOpenIdUnionId 的记录
 data CacheAppOpenIdToUnionId = CacheAppOpenIdToUnionId
-                                    WxppAppID
                                     WxppDbRunner
                                         -- ^ function to run DB actions
 
 type instance WxppInMsgProcessResult CacheAppOpenIdToUnionId = WxppInMsgHandlerResult
 
 instance JsonConfigable CacheAppOpenIdToUnionId where
-    type JsonConfigableUnconfigData CacheAppOpenIdToUnionId =
-            ( WxppAppID
-            , WxppDbRunner
-            )
+    type JsonConfigableUnconfigData CacheAppOpenIdToUnionId = WxppDbRunner
 
     isNameOfInMsgHandler _ = ( == "update-openid-to-unionid" )
 
-    parseWithExtraData _ (x, y) _obj = return $ CacheAppOpenIdToUnionId x y
+    parseWithExtraData _ x _obj = return $ CacheAppOpenIdToUnionId x
 
 
 instance (MonadIO m
@@ -147,7 +144,7 @@ instance (MonadIO m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcessor m CacheAppOpenIdToUnionId where
 
-    processInMsg (CacheAppOpenIdToUnionId {}) _cache _bs _ime = runExceptT $ do
+    processInMsg (CacheAppOpenIdToUnionId {}) _cache _app_info _bs _ime = runExceptT $ do
         $logWarnS wxppLogSource $
             "CacheAppOpenIdToUnionId now do nothing when used as incoming message handler"
         return []
@@ -159,7 +156,7 @@ instance (WxppApiMonad env m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m CacheAppOpenIdToUnionId where
 
-    preProcInMsg (CacheAppOpenIdToUnionId app_id db_runner) cache bs ime = do
+    preProcInMsg (CacheAppOpenIdToUnionId db_runner) cache app_info bs ime = do
         let m_subs_or_unsubs = case wxppInMessage ime of
                         (WxppInMsgEvent WxppEvtSubscribe)               -> Just True
                         (WxppInMsgEvent (WxppEvtSubscribeAtScene {}))   -> Just True
@@ -167,7 +164,8 @@ instance (WxppApiMonad env m
                         _                                               -> Nothing
 
         case m_subs_or_unsubs of
-            Just True -> void $ runExceptT $ do
+            Just True -> do
+              err_or <- runExceptT $ do
                 atk <- (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwE $ "no access token available") (return . fst)
@@ -185,6 +183,10 @@ instance (WxppApiMonad env m
                         , WxppUserCachedInfoUpdatedTime =. now
                         ]
 
+              case err_or of
+                Left err -> $logErrorS wxppLogSource $ "CacheAppOpenIdToUnionId: " <> err
+                Right () -> return ()
+
             Just False -> do
                 -- 取消关注时，目前先不删除记录
                 -- 估计 openid unionid 对于固定的用户是固定的
@@ -193,6 +195,8 @@ instance (WxppApiMonad env m
             _ -> return ()
 
         return $ Just (bs, ime)
+        where
+          app_id = procAppIdInfoReceiverId app_info
 
 
 type TrackHandledInMsgInnerMap = Map (WxppAppID, WxppInMsgAmostUniqueID)
@@ -201,19 +205,17 @@ type TrackHandledInMsgInnerMap = Map (WxppAppID, WxppInMsgAmostUniqueID)
 -- | 检查收到的信息有没有处理过，如果是，则不再处理
 data TrackHandledInMsg = TrackHandledInMsg
                             NominalDiffTime
-                            WxppAppID
                             (MVar TrackHandledInMsgInnerMap)
 
 instance JsonConfigable TrackHandledInMsg where
   type JsonConfigableUnconfigData TrackHandledInMsg =
     ( NominalDiffTime
-    , WxppAppID
     , MVar TrackHandledInMsgInnerMap
     )
 
   isNameOfInMsgHandler _ t = t == "track-handled-in-msg"
 
-  parseWithExtraData _ (x1, x2, x3) _ = return $ TrackHandledInMsg x1 x2 x3
+  parseWithExtraData _ (x1, x2) _ = return $ TrackHandledInMsg x1 x2
 
 
 instance (MonadIO m
@@ -221,7 +223,7 @@ instance (MonadIO m
     , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m TrackHandledInMsg where
 
-    preProcInMsg (TrackHandledInMsg _ app_id map_mar) _cache bs ime = do
+    preProcInMsg (TrackHandledInMsg _ map_mar) _cache app_info bs ime = do
       let msg_id = almostUniqueIdOfWxppInMsgEntity ime
 
       now <- liftIO getCurrentTime
@@ -261,13 +263,19 @@ instance (MonadIO m
                 "Duplicate incoming message with previous one was handled successfully:"
                 <> tshow msg_id
               return Nothing
+      where
+        app_id = procAppIdInfoReceiverId app_info
 
-    postProcInMsg (TrackHandledInMsg slow_threshold app_id map_mar) _bs ime res = do
+    postProcInMsg (TrackHandledInMsg slow_threshold map_mar) app_info _bs ime res = do
       trackHandleInMsgSaveResult slow_threshold app_id map_mar ime Nothing
       return res
+      where
+        app_id = procAppIdInfoReceiverId app_info
 
-    onProcInMsgError (TrackHandledInMsg slow_threshold app_id map_mar) _bs ime err = do
+    onProcInMsgError (TrackHandledInMsg slow_threshold map_mar) app_info _bs ime err = do
       trackHandleInMsgSaveResult slow_threshold app_id map_mar ime (Just err)
+      where
+        app_id = procAppIdInfoReceiverId app_info
 
 
 trackHandleInMsgSaveResult :: (MonadIO m, MonadLogger m)

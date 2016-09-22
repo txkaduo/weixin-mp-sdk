@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DefaultSignatures #-}
 module WeiXin.PublicPlatform.Types
     ( module WeiXin.PublicPlatform.Types
     , Gender(..)
@@ -53,6 +54,12 @@ import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 
 import WeiXin.PublicPlatform.Utils
+
+
+class ToEnumEither a where
+  toEnumEither :: Int -> Either String a
+  default toEnumEither :: Enum a => Int -> Either String a
+  toEnumEither = Right . toEnum
 
 
 data WxppUrlConfig = WxppUrlConfig
@@ -1710,6 +1717,23 @@ instance PathPiece WxppJsTicket where
 data WxppSignal = WxppSignalNewApp WxppAppID
                 | WxppSignalRemoveApp WxppAppID
                 deriving (Eq, Show)
+
+
+-- | 分别描述是否第三方平台时，我们在处理消息时可知道的app id
+data ProcAppIdInfo = ProcAppSingle        -- ^ 开发者服务器: 只有一个 app id
+                      WxppAppID           -- ^ the only app id
+                    | ProcAppThirdParty   -- ^ work as third-party
+                        WxppAppID         -- ^ component_appid
+                        WxppAppID         -- ^ authorizer_appid
+                    deriving (Show, Eq, Ord)
+
+procAppIdInfoMyId :: ProcAppIdInfo -> WxppAppID
+procAppIdInfoMyId (ProcAppSingle x)       = x
+procAppIdInfoMyId (ProcAppThirdParty x _) = x
+
+procAppIdInfoReceiverId :: ProcAppIdInfo -> WxppAppID
+procAppIdInfoReceiverId (ProcAppSingle x)       = x
+procAppIdInfoReceiverId (ProcAppThirdParty _ x) = x
 
 --------------------------------------------------------------------------------
 

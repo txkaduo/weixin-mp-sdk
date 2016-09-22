@@ -2,7 +2,7 @@
 {-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.WS where
 
-import ClassyPrelude hiding (catch)
+import ClassyPrelude hiding (catch, onException)
 import Network.Wreq
 import Control.Monad.Except
 import Control.Monad.Logger
@@ -10,7 +10,7 @@ import Control.Lens hiding ((.=))
 import qualified Data.ByteString.Lazy       as LB
 
 #if !MIN_VERSION_classy_prelude(1, 0, 0)
-import Control.Monad.Catch                  ( Handler(..), catches )
+import Control.Monad.Catch                  ( Handler(..), catches, onException )
 #endif
 
 --import Control.Monad.Trans.Control          (MonadBaseControl)
@@ -152,11 +152,11 @@ tryWxppWsResult :: MonadCatch m =>
     m a -> m (Either WxppWsCallError a)
 tryWxppWsResult f = liftM Right f `catches` wxppWsExcHandlers
 
-tryWxppWsResultE :: (MonadCatch m, MonadError String m) =>
+tryWxppWsResultE :: (MonadCatch m, MonadError e m, IsString e) =>
     String -> m b -> m b
 tryWxppWsResultE op_name f =
     tryWxppWsResult f
-        >>= either (\e -> throwError $ "Got Exception when " <> op_name <> ": " <> show e) return
+        >>= either (\e -> throwError $ fromString $ "Got Exception when " <> op_name <> ": " <> show e) return
 
 
 asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
@@ -192,11 +192,23 @@ alterContentTypeToJson r =
 
 -- | 解释远程调用的结果，返回正常的值，异常情况会抛出
 -- 抛出的异常主要类型就是 WxppWsCallError 列出的情况
-asWxppWsResponseNormal' :: (MonadThrow m, FromJSON a) =>
-    Response LB.ByteString -> m a
+asWxppWsResponseNormal' :: (MonadThrow m, FromJSON a)
+                        => Response LB.ByteString
+                        -> m a
 asWxppWsResponseNormal' =
-    asWxppWsResponseNormal
-        >=> either throwM return . unWxppWsResp
+    asWxppWsResponseNormal >=> either throwM return . unWxppWsResp
+
+
+-- | Like asWxppWsResponseNormal', but log responseBody when got exception
+asWxppWsResponseNormal'L :: (MonadThrow m, FromJSON a, MonadLogger m, MonadCatch m)
+                        => Response LB.ByteString
+                        -> m a
+asWxppWsResponseNormal'L resp = do
+  let report = $logErrorS wxppLogSource $
+                  "Invalid diagram:\n" <> toStrict (decodeUtf8 $ resp ^. responseBody) <> "\n"
+
+  asWxppWsResponseNormal' resp `onException` report
+
 
 asWxppWsResponseNormal2' :: (MonadThrow m, FromJSON a) =>
     Response LB.ByteString -> m (Text, a)
