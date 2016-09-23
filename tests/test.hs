@@ -98,7 +98,7 @@ testMsgToXml :: IO ()
 testMsgToXml = do
     let f = LT.toStrict . renderText def . wxppOutMsgEntityToDocument
     now <- getCurrentTime
-    putStrLn $ f $ WxppOutMsgEntity (WxppOpenID "openID收") "一个人" now $
+    putStrLn $ f $ WxppOutMsgEntity (WxppOpenID "openID收") (WeixinUserName "一个人") now $
                         WxppOutMsgText "中文\n<xml>"
 
 
@@ -170,7 +170,7 @@ testWxPaySign = do
   putStrLn $ "WX Pay call document:"
   putStrLn $ LT.toStrict doc_t
 
-  case wxPayParseIncmingXmlDoc app_key doc of
+  case wxPayParseIncomingXmlDoc app_key doc of
     Left err -> do
       putStrLn $ "Failed to parse pay doc: " <> err
       exitFailure
@@ -181,10 +181,10 @@ testWxPaySign = do
         exitFailure
 
 
-testWxPayParseTime :: IO ()
-testWxPayParseTime = do
+testWxPayMmTransParseTime :: IO ()
+testWxPayMmTransParseTime = do
   let test_it s lt = do
-        case wxPayParseTimeStr s of
+        case wxPayMchTransParseTimeStr s of
           Nothing -> do
             putStrLn $ "Failed to parse time string: " <> fromString s
             exitFailure
@@ -201,7 +201,7 @@ testWxPayParseTime = do
 main :: IO ()
 main = do
     testWxPaySign
-    testWxPayParseTime
+    testWxPayMmTransParseTime
     testJsApiTicket
     testMsgToXml
     -- testLikeJava
