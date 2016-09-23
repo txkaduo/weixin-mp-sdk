@@ -198,10 +198,28 @@ testWxPayMmTransParseTime = do
   test_it "2015-05-19 15：26：59" lt
   test_it "2015-05-19 15:26:59" lt
 
+
+testWxPayParseBankCode :: IO ()
+testWxPayParseBankCode = do
+  let test_it s code = do
+        case parseBankCode s of
+          Nothing -> do
+            putStrLn $ "Failed to parse bank code string: " <> fromString s
+            exitFailure
+
+          Just code0 -> do
+            when ( code0 /= code ) $ do
+              putStrLn $ "bank code string parse result is wrong: " <> tshow code0
+              exitFailure
+
+  test_it "VISA_CREDIT" VISA_CREDIT
+
+
 main :: IO ()
 main = do
     testWxPaySign
     testWxPayMmTransParseTime
+    testWxPayParseBankCode
     testJsApiTicket
     testMsgToXml
     -- testLikeJava

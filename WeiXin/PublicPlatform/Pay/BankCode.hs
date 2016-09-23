@@ -129,8 +129,11 @@ data BankCode = ICBC_DEBIT
               | JCB_CREDIT
               | MASTERCARD_CREDIT
               | VISA_CREDIT
-              deriving (Show, Eq, Ord, Enum, Bounded)
+              deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
+
+parseBankCode :: (Element c ~ Char, MonoFoldable c) => c -> Maybe BankCode
+parseBankCode = readMay
 
 renderBankCodeSC :: BankCode -> Text
 renderBankCodeSC ICBC_DEBIT        = "工商银行(借记卡)"
