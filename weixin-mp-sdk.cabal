@@ -71,6 +71,7 @@ library
                        WeiXin.PublicPlatform.OAuth
                        WeiXin.PublicPlatform.JS
                        WeiXin.PublicPlatform.Pay
+                       WeiXin.PublicPlatform.Pay.Types
                        WeiXin.PublicPlatform.ThirdParty
                        WeiXin.PublicPlatform
 
