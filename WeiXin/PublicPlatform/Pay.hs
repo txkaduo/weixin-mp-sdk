@@ -96,7 +96,7 @@ data WxPayResultCode = WxPaySuccess
                      | WxPayFail
                      deriving (Show, Eq, Ord, Enum, Bounded)
 
--- {{{1
+-- {{{1 instances
 $(derivePersistFieldS "WxPayResultCode")
 $(derivePathPieceS "WxPayResultCode")
 $(deriveJsonS "WxPayResultCode")
@@ -302,7 +302,7 @@ wxPayMchTransfer :: (WxppApiMonad env m)
 wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_name pay_amount desc ip_str = do
 -- {{{1
   url_conf <- asks getWxppUrlConfig
-  let url = wxppUrlConfPayApiBase url_conf <> "/promotion/transfers"
+  let url = wxppUrlConfMmPayApiBase url_conf <> "/promotion/transfers"
 
   let params :: WxPayParams
       params = mempty &
@@ -400,7 +400,7 @@ wxPayMchTransferInfo :: (WxppApiMonad env m)
 wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
 -- {{{1
   url_conf <- asks getWxppUrlConfig
-  let url = wxppUrlConfPayApiBase url_conf <> "/gettransferinfo"
+  let url = wxppUrlConfMmPayApiBase url_conf <> "/gettransferinfo"
   let params :: WxPayParams
       params = mempty &
                 (appEndo $ mconcat $ catMaybes
