@@ -3,6 +3,7 @@ module WeiXin.PublicPlatform.Pay where
 
 import ClassyPrelude
 
+-- {{{1 imports
 import           Control.DeepSeq        (NFData)
 import           Control.Lens           hiding ((.=))
 import           Control.Monad.Except
@@ -14,6 +15,7 @@ import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8  as C8
 import           Data.Default           (def)
 import           Data.Monoid            (Endo (..))
+import           Data.Aeson             (ToJSON(..), object, (.=), encode)
 import qualified Data.Text              as T
 import qualified Data.Text.Lazy         as LT
 import           Data.Time              (LocalTime, hoursToTimeZone,
@@ -32,12 +34,43 @@ import           Text.XML.Cursor        (child, content, fromDocument, fromNode
 
 import           Text.Parsec.TX.Utils   (SimpleStringRep (..), deriveJsonS,
                                          derivePersistFieldS,
-                                         makeSimpleParserByTable)
+                                         makeSimpleParserByTable,
+                                        parseMaybeSimpleEncoded)
 import           Yesod.Helpers.Parsec   (derivePathPieceS)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
+-- }}}1
+
+
+-- | 微信支付：预支付交易会话标识
+newtype WxPayPrepayId = WxPayPrepayId { unWxPayPrepayId :: Text }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
+           , NFData
+           , ToMessage, ToMarkup)
+
+
+-- | 微信支付：商户订单号
+newtype WxPayOutTradeNo = WxPayOutTradeNo { unWxPayOutTradeNo :: Text }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
+           , NFData
+           , ToMessage, ToMarkup)
+
+
+-- | 体现某个类型包含了已生成好的商户订单
+class HaveWxPayOutTradeNo a where
+  getWxPayOutTradeNo :: a -> WxPayOutTradeNo
+
+
+-- | 多个接口要求输入一个ip参数
+newtype WxPayParamIpStr = WxPayParamIpStr { unWxPayParamIpStr :: Text }
+
+
+-- | 商户自定义的商品ID
+newtype WxPayProductId = WxPayProductId { unWxPayProductId :: Text }
 
 
 -- | 微信企业支付所产生的订单号
@@ -87,6 +120,94 @@ newtype WxPayDeviceInfo = WxPayDeviceInfo { unWxPayDeviceInfo :: Text }
            , PersistFieldSql, PersistField
            , NFData
            , ToMessage, ToMarkup)
+
+webWxPayDeviceInfo :: WxPayDeviceInfo
+webWxPayDeviceInfo = WxPayDeviceInfo "WEB"
+
+
+-- | body 字段有格式要求，因此为它做一个专门的类型
+data WxPayParamBody = WxPayParamBody Text Text
+  deriving (Show)
+
+renderWxPayParamBody :: WxPayParamBody -> Text
+renderWxPayParamBody (WxPayParamBody x y) = x <> "-" <> y
+
+
+-- | 金额指定用分作单位
+newtype WxPayMoneyAmount = WxPayMoneyAmount { unWxPayMoneyAmount :: Int }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary, NFData)
+
+
+-- | 从单位是元的数字转成 WxPayMoneyAmount
+wxPayMoneyAmountFromYuanEither :: (Show a, Num a, RealFrac a, IsString s)
+                               => a
+                               -> Either s WxPayMoneyAmount
+wxPayMoneyAmountFromYuanEither y =
+  if fromIntegral fen_int /= fen
+     then Left $ fromString $ "Cannot convert to convert to WxPayMoneyAmount loselessly: " <> show y
+     else Right $ WxPayMoneyAmount fen_int
+  where
+    fen = y * fromIntegral (100 :: Int)
+    fen_int = round fen
+
+wxPayMoneyAmountFromYuan :: (Show a, Num a, RealFrac a)
+                         => a
+                         -> WxPayMoneyAmount
+wxPayMoneyAmountFromYuan y =
+  either error id $ wxPayMoneyAmountFromYuanEither y
+
+
+wxPayMoneyAmountToYuan :: Integral a => WxPayMoneyAmount -> a
+wxPayMoneyAmountToYuan = fromIntegral . unWxPayMoneyAmount
+
+
+-- | 对应文档 goods_detail 数组里的一个元素
+-- 但只保留必要的字段
+-- 其它文档没解释清楚，又是可选的字段直接不反映在这里
+data WxPayGoodsDetail = WxPayGoodsDetail
+  { wxPayGoodsIdStr     :: Text
+  , wxPayGoodsName      :: Text
+  , wxPayGoodsNum       :: Int
+  , wxPayGoodsUnitPrice :: WxPayMoneyAmount
+  }
+  deriving (Show)
+
+instance ToJSON WxPayGoodsDetail where
+  toJSON x = object
+              [ "goods_id" .= wxPayGoodsIdStr x
+              , "goods_name" .= wxPayGoodsName x
+              , "goods_num" .= wxPayGoodsNum x
+              , "price" .= unWxPayMoneyAmount (wxPayGoodsUnitPrice x)
+              ]
+
+
+-- | 交易类型
+data WxPayTradeType = WxPayTradeJsApi
+                    | WxPayTradeNative
+                    | WxPayTradeApp
+                    | WxPayTradeMicroPay  -- ^ 刷卡支付，不调用统一接口
+                    deriving (Show, Eq, Ord, Enum, Bounded)
+
+-- {{{1 instances
+$(derivePersistFieldS "WxPayTradeType")
+$(derivePathPieceS "WxPayTradeType")
+$(deriveJsonS "WxPayTradeType")
+
+instance SimpleStringRep WxPayTradeType where
+    simpleEncode mtype =
+        case mtype of
+            WxPayTradeJsApi    -> "JSAPI"
+            WxPayTradeNative   -> "NATIVE"
+            WxPayTradeApp      -> "APP"
+            WxPayTradeMicroPay -> "MICROPAY"
+
+    simpleParser = makeSimpleParserByTable
+                    [ ("JSAPI", WxPayTradeJsApi)
+                    , ("NATIVE", WxPayTradeNative)
+                    , ("APP", WxPayTradeApp)
+                    , ("MICROPAY", WxPayTradeMicroPay)
+                    ]
+-- }}}1
 
 
 -- | 微信支付接口的结果代码
@@ -214,33 +335,6 @@ data WxCheckName =  WxNoCheckName
                   | WxReqCheckName Text
                   deriving (Eq, Show)
 
--- | 金额指定用分作单位
-newtype WxPayMoneyAmount = WxPayMoneyAmount { unWxPayMoneyAmount :: Int }
-  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary, NFData)
-
-
--- | 从单位是元的数字转成 WxPayMoneyAmount
-wxPayMoneyAmountFromYuanEither :: (Show a, Num a, RealFrac a, IsString s)
-                               => a
-                               -> Either s WxPayMoneyAmount
-wxPayMoneyAmountFromYuanEither y =
-  if fromIntegral fen_int /= fen
-     then Left $ fromString $ "Cannot convert to convert to WxPayMoneyAmount loselessly: " <> show y
-     else Right $ WxPayMoneyAmount fen_int
-  where
-    fen = y * fromIntegral (100 :: Int)
-    fen_int = round fen
-
-wxPayMoneyAmountFromYuan :: (Show a, Num a, RealFrac a)
-                         => a
-                         -> WxPayMoneyAmount
-wxPayMoneyAmountFromYuan y =
-  either error id $ wxPayMoneyAmountFromYuanEither y
-
-
-wxPayMoneyAmountToYuan :: Integral a => WxPayMoneyAmount -> a
-wxPayMoneyAmountToYuan = fromIntegral . unWxPayMoneyAmount
-
 
 -- | 调用时的"通信标识" 为 FAIL 时的数据
 -- 出现这种错误时, 认为是程序错误, 直接抛出异常
@@ -264,6 +358,13 @@ data WxPayCallResultError = WxPayCallResultError
                             deriving (Show)
 
 
+-- | 统一下单接口成功时的返回报文
+data WxPayPrepayOk = WxPayPrepayOk
+  { wxPayPrepayId        :: WxPayPrepayId
+  , wxPayPrepayTradeType :: WxPayTradeType
+  , wxPayPrepayQrCodeUrl :: Maybe UrlText
+  }
+
 -- | 支付时的商户订单号
 newtype WxMchTransMchNo = WxMchTransMchNo { unWxMchTransMchNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
@@ -283,6 +384,72 @@ data WxPayTransOk = WxPayTransOk
   }
 
 
+-- | 支付接口基本上都要这些参数
+data WxPayCommonParams = WxPayCommonParams
+                          WxppAppID
+                          WxPayAppKey
+                          WxPayMchID
+
+---------------------------------------------------------
+
+
+-- | 统一下单接口
+wxPayPrepay :: WxppApiMonad env m
+            => WxPayCommonParams
+            -> UrlText             -- ^ 通知地址
+            -> WxPayMoneyAmount
+            -> WxPayOutTradeNo     -- ^ 商户订单号
+            -> WxPayTradeType      -- ^ 交易类型
+            -> WxPayParamIpStr     -- ^ 终端IP
+            -> WxPayParamBody
+            -> [WxPayGoodsDetail]
+            -> Maybe WxPayProductId
+            -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
+            -> Maybe Text          -- ^ 附加数据
+            -> m (Either WxPayCallResultError WxPayPrepayOk)
+wxPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
+-- {{{1
+  url_conf <- asks getWxppUrlConfig
+  let url = wxppUrlConfUserPayApiBase url_conf <> "/unifiedorder"
+  let params :: WxPayParams
+      params = mempty &
+                (appEndo $ mconcat $ catMaybes
+                    [ Just $ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Just $ Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , Just $ Endo $ insertMap "out_trade_no" (unWxPayOutTradeNo out_trade_no)
+                    , Just $ Endo $ insertMap "body" $ renderWxPayParamBody body
+                    , Just $ Endo $ insertMap "detail" $ toStrict $ decodeUtf8 $ encode $ object [ "goods_detail" .= details ]
+                    , fmap (Endo . insertMap "attach") m_attach
+                    , Just $ Endo $ insertMap "total_fee" $ tshow $ unWxPayMoneyAmount amount
+                    , Just $ Endo $ insertMap "spbill_create_ip" (unWxPayParamIpStr ip_str)
+                    , Just $ Endo $ insertMap "notify_url" $ unUrlText notify_url
+                    , Just $ Endo $ insertMap "trade_type" $ pack $ simpleEncode trade_type
+                    , fmap (Endo . insertMap "product_id" . unWxPayProductId) m_prod_id
+                    , fmap (Endo . insertMap "openid" . unWxppOpenID) m_open_id
+                    ])
+
+  runExceptT $ do
+    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+    let lookup_param n = maybe
+                          (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
+                          return
+                          (lookup n resp_params)
+
+    prepay_id <- fmap WxPayPrepayId $ lookup_param "prepay_id"
+    trade_type_t <- lookup_param "trade_type"
+    r_trade_type <- case parseMaybeSimpleEncoded trade_type_t of
+                    Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type" <> trade_type_t
+                    Just x  -> return x
+
+    let m_code_url = fmap UrlText $ lookup "code_url" resp_params
+
+    return $ WxPayPrepayOk prepay_id r_trade_type m_code_url
+
+    where
+      WxPayCommonParams app_id app_key mch_id = common_params
+-- }}}1
+
+
 -- | 微信企业支付
 -- CAUTION: 目前未实现双向数字证书认证
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
@@ -297,7 +464,7 @@ wxPayMchTransfer :: (WxppApiMonad env m)
                  -> WxCheckName
                  -> WxPayMoneyAmount
                  -> Text          -- ^ description
-                 -> Text          -- ^ ip address
+                 -> WxPayParamIpStr          -- ^ ip address
                  -> m (Either WxPayCallResultError WxPayTransOk)
 wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_name pay_amount desc ip_str = do
 -- {{{1
@@ -332,7 +499,7 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
 
                     , Just $ Endo $ insertMap "amount" (tshow $ unWxPayMoneyAmount pay_amount)
                     , Just $ Endo $ insertMap "desc" desc
-                    , Just $ Endo $ insertMap "spbill_create_ip" ip_str
+                    , Just $ Endo $ insertMap "spbill_create_ip" (unWxPayParamIpStr ip_str)
                     ])
 
 
