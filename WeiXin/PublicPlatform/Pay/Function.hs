@@ -302,9 +302,9 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
 
     st <- lookup_param "status"
     status <- case st of
-                "SUCCESS"     -> return WxPayStatusSccess
-                "PROCESSING"  -> return WxPayStatusProcessing
-                "FAILED"      -> WxPayStatusFailed <$> lookup_param "reason"
+                "SUCCESS"     -> return WxPayMmTransStatusSccess
+                "PROCESSING"  -> return WxPayMmTransStatusProcessing
+                "FAILED"      -> WxPayMmTransStatusFailed <$> lookup_param "reason"
                 _             -> throwM $ WxPayDiagError $ "status is recognized: " <> st
 
     open_id <- WxppOpenID <$> lookup_param "openid"
