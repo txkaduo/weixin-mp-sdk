@@ -16,7 +16,6 @@ import qualified Data.ByteString.Char8  as C8
 import           Data.Default           (def)
 import           Data.Monoid            (Endo (..))
 import           Data.Aeson             (ToJSON(..), object, (.=), encode)
-import qualified Data.Text              as T
 import qualified Data.Text.Lazy         as LT
 import           Data.Time              (LocalTime, hoursToTimeZone,
                                          localTimeToUTC)
@@ -45,7 +44,7 @@ import WeiXin.PublicPlatform.Security
 
 
 -- | 微信支付：预支付交易会话标识
-newtype WxPayPrepayId = WxPayPrepayId { unWxPayPrepayId :: Text }
+newtype WxUserPayPrepayId = WxUserPayPrepayId { unWxUserPayPrepayId :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , PersistFieldSql, PersistField
            , NFData
@@ -53,7 +52,7 @@ newtype WxPayPrepayId = WxPayPrepayId { unWxPayPrepayId :: Text }
 
 
 -- | 微信支付：商户订单号
-newtype WxPayOutTradeNo = WxPayOutTradeNo { unWxPayOutTradeNo :: Text }
+newtype WxUserPayOutTradeNo = WxUserPayOutTradeNo { unWxUserPayOutTradeNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , PersistFieldSql, PersistField
            , NFData
@@ -61,8 +60,8 @@ newtype WxPayOutTradeNo = WxPayOutTradeNo { unWxPayOutTradeNo :: Text }
 
 
 -- | 体现某个类型包含了已生成好的商户订单
-class HaveWxPayOutTradeNo a where
-  getWxPayOutTradeNo :: a -> WxPayOutTradeNo
+class HaveWxUserPayOutTradeNo a where
+  getWxUserPayOutTradeNo :: a -> WxUserPayOutTradeNo
 
 
 -- | 多个接口要求输入一个ip参数
@@ -293,10 +292,10 @@ wxPayRenderOutgoingXmlDoc app_key params nonce =
   renderText def $ wxPayOutgoingXmlDoc app_key params nonce
 
 
-wxPayParseIncmingXmlDoc :: WxPayAppKey
+wxPayParseIncomingXmlDoc :: WxPayAppKey
                         -> Document
                         -> Either Text WxPayParams
-wxPayParseIncmingXmlDoc app_key doc = do
+wxPayParseIncomingXmlDoc app_key doc = do
 -- {{{1
   (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
   (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
@@ -360,7 +359,7 @@ data WxPayCallResultError = WxPayCallResultError
 
 -- | 统一下单接口成功时的返回报文
 data WxPayPrepayOk = WxPayPrepayOk
-  { wxPayPrepayId        :: WxPayPrepayId
+  { wxPayPrepayId        :: WxUserPayPrepayId
   , wxPayPrepayTradeType :: WxPayTradeType
   , wxPayPrepayQrCodeUrl :: Maybe UrlText
   }
@@ -394,20 +393,20 @@ data WxPayCommonParams = WxPayCommonParams
 
 
 -- | 统一下单接口
-wxPayPrepay :: WxppApiMonad env m
-            => WxPayCommonParams
-            -> UrlText             -- ^ 通知地址
-            -> WxPayMoneyAmount
-            -> WxPayOutTradeNo     -- ^ 商户订单号
-            -> WxPayTradeType      -- ^ 交易类型
-            -> WxPayParamIpStr     -- ^ 终端IP
-            -> WxPayParamBody
-            -> [WxPayGoodsDetail]
-            -> Maybe WxPayProductId
-            -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
-            -> Maybe Text          -- ^ 附加数据
-            -> m (Either WxPayCallResultError WxPayPrepayOk)
-wxPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
+wxPayUserPayPrepay :: WxppApiMonad env m
+                   => WxPayCommonParams
+                   -> UrlText             -- ^ 通知地址
+                   -> WxPayMoneyAmount
+                   -> WxUserPayOutTradeNo     -- ^ 商户订单号
+                   -> WxPayTradeType      -- ^ 交易类型
+                   -> WxPayParamIpStr     -- ^ 终端IP
+                   -> WxPayParamBody
+                   -> [WxPayGoodsDetail]
+                   -> Maybe WxPayProductId
+                   -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
+                   -> Maybe Text          -- ^ 附加数据
+                   -> m (Either WxPayCallResultError WxPayPrepayOk)
+wxPayUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
 -- {{{1
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfUserPayApiBase url_conf <> "/unifiedorder"
@@ -416,7 +415,7 @@ wxPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body 
                 (appEndo $ mconcat $ catMaybes
                     [ Just $ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
                     , Just $ Endo $ insertMap "appid" (unWxppAppID app_id)
-                    , Just $ Endo $ insertMap "out_trade_no" (unWxPayOutTradeNo out_trade_no)
+                    , Just $ Endo $ insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
                     , Just $ Endo $ insertMap "body" $ renderWxPayParamBody body
                     , Just $ Endo $ insertMap "detail" $ toStrict $ decodeUtf8 $ encode $ object [ "goods_detail" .= details ]
                     , fmap (Endo . insertMap "attach") m_attach
@@ -435,7 +434,7 @@ wxPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body 
                           return
                           (lookup n resp_params)
 
-    prepay_id <- fmap WxPayPrepayId $ lookup_param "prepay_id"
+    prepay_id <- fmap WxUserPayPrepayId $ lookup_param "prepay_id"
     trade_type_t <- lookup_param "trade_type"
     r_trade_type <- case parseMaybeSimpleEncoded trade_type_t of
                     Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type" <> trade_type_t
@@ -521,7 +520,7 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
     local_time <- maybe
                     (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> pay_time_t)
                     return
-                    (wxPayMchTransParseTimeStr $ T.unpack pay_time_t)
+                    (wxPayMchTransParseTimeStr $ unpack pay_time_t)
 
     let pay_time = localTimeToUTC tz local_time
 
@@ -613,7 +612,7 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
     local_time <- maybe
                     (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> trans_time_t)
                     return
-                    (wxPayMchTransParseTimeStr $ T.unpack trans_time_t)
+                    (wxPayMchTransParseTimeStr $ unpack trans_time_t)
 
     let trans_time = localTimeToUTC tz local_time
 
@@ -654,7 +653,7 @@ wxPayCallInternal app_key url params = do
         throwM ex
 
       Right resp_doc  -> do
-        case wxPayParseIncmingXmlDoc app_key resp_doc of
+        case wxPayParseIncomingXmlDoc app_key resp_doc of
           Left err -> do
             $logErrorS wxppLogSource $ "Invalid response XML: " <> err
             throwM $ WxPayDiagError err
