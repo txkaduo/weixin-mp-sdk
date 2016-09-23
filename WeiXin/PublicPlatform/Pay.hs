@@ -521,7 +521,7 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
     local_time <- maybe
                     (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> pay_time_t)
                     return
-                    (wxPayParseTimeStr $ T.unpack pay_time_t)
+                    (wxPayMchTransParseTimeStr $ T.unpack pay_time_t)
 
     let pay_time = localTimeToUTC tz local_time
 
@@ -613,7 +613,7 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
     local_time <- maybe
                     (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> trans_time_t)
                     return
-                    (wxPayParseTimeStr $ T.unpack trans_time_t)
+                    (wxPayMchTransParseTimeStr $ T.unpack trans_time_t)
 
     let trans_time = localTimeToUTC tz local_time
 
@@ -685,8 +685,8 @@ wxPayCallInternal app_key url params = do
 
 -- | 文档里的示示例, 时分秒的分隔符是全角的
 -- 这个函数能兼容全角和半角两种情况
-wxPayParseTimeStr :: String -> Maybe LocalTime
-wxPayParseTimeStr t =
+wxPayMchTransParseTimeStr :: String -> Maybe LocalTime
+wxPayMchTransParseTimeStr t =
 -- {{{1
   parseTimeM True locale fmt1 t <|> parseTimeM True locale fmt2 t
   where
