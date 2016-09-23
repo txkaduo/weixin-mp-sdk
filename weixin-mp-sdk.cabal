@@ -72,6 +72,7 @@ library
                        WeiXin.PublicPlatform.JS
                        WeiXin.PublicPlatform.Pay
                        WeiXin.PublicPlatform.Pay.Types
+                       WeiXin.PublicPlatform.Pay.BankCode
                        WeiXin.PublicPlatform.ThirdParty
                        WeiXin.PublicPlatform
 
