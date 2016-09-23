@@ -184,18 +184,16 @@ wxPayUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_st
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
 --          我们这里只发起普通的http/https请求
 wxPayMchTransfer :: (WxppApiMonad env m)
-                 => WxPayAppKey
-                 -> WxPayMchID
+                 => WxPayCommonParams
                  -> Maybe WxPayDeviceInfo
                  -> WxMchTransMchNo
-                 -> WxppAppID
                  -> WxppOpenID
                  -> WxCheckName
                  -> WxPayMoneyAmount
                  -> Text          -- ^ description
                  -> WxPayParamIpStr          -- ^ ip address
                  -> m (Either WxPayCallResultError WxPayTransOk)
-wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_name pay_amount desc ip_str = do
+wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_amount desc ip_str = do
 -- {{{1
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfMmPayApiBase url_conf <> "/promotion/transfers"
@@ -258,6 +256,7 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
 
   where
     tz = hoursToTimeZone 8
+    WxPayCommonParams app_id app_key mch_id = common_params
 -- }}}1
 
 
@@ -267,12 +266,10 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
 --          我们这里只发起普通的http/https请求
 wxPayMchTransferInfo :: (WxppApiMonad env m)
-                     => WxPayAppKey
-                     -> WxPayMchID
+                     => WxPayCommonParams
                      -> WxMchTransMchNo
-                     -> WxppAppID
                      -> m (Either WxPayCallResultError WxPayMchTransInfo)
-wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
+wxPayMchTransferInfo common_params mch_trade_no = do
 -- {{{1
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfMmPayApiBase url_conf <> "/gettransferinfo"
@@ -339,6 +336,7 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
 
   where
     tz = hoursToTimeZone 8
+    WxPayCommonParams app_id app_key mch_id = common_params
 -- }}}1
 
 
