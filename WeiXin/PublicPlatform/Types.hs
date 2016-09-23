@@ -67,6 +67,8 @@ data WxppUrlConfig = WxppUrlConfig
   , wxppUrlConfNonSecureApiBase :: String
   , wxppUrlConfSnsApiBase       :: String
   , wxppUrlConfFileApiBase      :: String
+  , wxppUrlConfUserPayApiBase   :: String
+  -- ^ 用户付款接口的接口基地址
   , wxppUrlConfMmPayApiBase     :: String
   -- ^ 企业付款接口的接口基地址
   }
@@ -78,6 +80,7 @@ instance Default WxppUrlConfig where
     , wxppUrlConfNonSecureApiBase = "http://api.weixin.qq.com/cgi-bin"
     , wxppUrlConfSnsApiBase       = "https://api.weixin.qq.com/sns"
     , wxppUrlConfFileApiBase      = "https://file.api.weixin.qq.com/cgi-bin"
+    , wxppUrlConfUserPayApiBase   = "https://api.mch.weixin.qq.com/pay"
     , wxppUrlConfMmPayApiBase     = "https://api.mch.weixin.qq.com/mmpaymkttransfers"
     }
 
@@ -89,7 +92,8 @@ instance FromJSON WxppUrlConfig where
       , o .:? "non-secure-base" >>= return . maybe mempty (Endo . upd_wxppUrlConfNonSecureBase) . chk_empty
       , o .:? "sns-base"        >>= return . maybe mempty (Endo . upd_wxppUrlConfSnsApiBase) . chk_empty
       , o .:? "file-base"       >>= return . maybe mempty (Endo . upd_wxppUrlConfFileApiBase) . chk_empty
-      , o .:? "mm-pay-base"     >>= return . maybe mempty (Endo . upd_wxppUrlConfPayApiBase) . chk_empty
+      , o .:? "user-pay-base"   >>= return . maybe mempty (Endo . upd_wxppUrlConfUserPayApiBase) . chk_empty
+      , o .:? "mm-pay-base"     >>= return . maybe mempty (Endo . upd_wxppUrlConfMmPayApiBase) . chk_empty
       ]
     where
         null_to_empty s                  = if null s then Nothing else Just s
@@ -98,7 +102,8 @@ instance FromJSON WxppUrlConfig where
         upd_wxppUrlConfNonSecureBase x c = c { wxppUrlConfNonSecureApiBase = x }
         upd_wxppUrlConfSnsApiBase x c    = c { wxppUrlConfSnsApiBase = x }
         upd_wxppUrlConfFileApiBase x c   = c { wxppUrlConfFileApiBase = x }
-        upd_wxppUrlConfPayApiBase x c    = c { wxppUrlConfMmPayApiBase = x }
+        upd_wxppUrlConfUserPayApiBase x c = c { wxppUrlConfUserPayApiBase = x }
+        upd_wxppUrlConfMmPayApiBase x c  = c { wxppUrlConfMmPayApiBase = x }
 
 
 -- | 微信用户名
