@@ -96,6 +96,7 @@ data WxPayResultCode = WxPaySuccess
                      | WxPayFail
                      deriving (Show, Eq, Ord, Enum, Bounded)
 
+-- {{{1
 $(derivePersistFieldS "WxPayResultCode")
 $(derivePathPieceS "WxPayResultCode")
 $(deriveJsonS "WxPayResultCode")
@@ -108,6 +109,7 @@ instance SimpleStringRep WxPayResultCode where
                     [ ("SUCCESS", WxPaySuccess)
                     , ("FAIL", WxPayFail)
                     ]
+-- }}}1
 
 
 -- | 微信支付错误代码
@@ -127,6 +129,7 @@ wxPaySign :: WxPayAppKey
           -> Nonce
           -> WxPaySignature
 wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
+-- {{{1
   WxPaySignature $ toUpper $ fromString $
     C8.unpack $ B16.encode $ MD5.hash $ encodeUtf8 str_to_sign
   where
@@ -136,6 +139,7 @@ wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
                     fmap (uncurry mks) $
                       filter (not . null . snd) $
                         (sortBy (comparing fst) (mapToList params_all)) <> [("key", ak)]
+-- }}}1
 
 
 -- | 微信支付调用XML
@@ -145,6 +149,7 @@ wxPayOutgoingXmlDoc :: WxPayAppKey
                     -> Nonce
                     -> Document
 wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
+-- {{{1
   Document (Prologue [] Nothing []) root []
   where
     root        = Element "xml" mempty nodes
@@ -155,6 +160,7 @@ wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
     mk_node k v = NodeElement $
                     Element (Name k Nothing Nothing) mempty
                       [ NodeContent v ]
+-- }}}1
 
 
 wxPayRenderOutgoingXmlDoc :: WxPayAppKey
@@ -170,6 +176,7 @@ wxPayParseIncmingXmlDoc :: WxPayAppKey
                         -> Document
                         -> Either Text WxPayParams
 wxPayParseIncmingXmlDoc app_key doc = do
+-- {{{1
   (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
   (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
   let params = params2
@@ -199,6 +206,7 @@ wxPayParseIncmingXmlDoc app_key doc = do
       return (name, v)
 
     param_from_node _ = Nothing
+-- }}}1
 
 
 data WxCheckName =  WxNoCheckName
@@ -292,6 +300,7 @@ wxPayMchTransfer :: (WxppApiMonad env m)
                  -> Text          -- ^ ip address
                  -> m (Either WxPayCallResultError WxPayTransOk)
 wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_name pay_amount desc ip_str = do
+-- {{{1
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfPayApiBase url_conf <> "/promotion/transfers"
 
@@ -353,6 +362,7 @@ wxPayMchTransfer app_key mch_id m_dev_info mch_trade_no app_id open_id check_nam
 
   where
     tz = hoursToTimeZone 8
+-- }}}1
 
 
 -- | 支付转账状态
@@ -388,6 +398,7 @@ wxPayMchTransferInfo :: (WxppApiMonad env m)
                      -> WxppAppID
                      -> m (Either WxPayCallResultError WxPayMchTransInfo)
 wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
+-- {{{1
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfPayApiBase url_conf <> "/gettransferinfo"
   let params :: WxPayParams
@@ -453,6 +464,7 @@ wxPayMchTransferInfo app_key mch_id mch_trade_no app_id = do
 
   where
     tz = hoursToTimeZone 8
+-- }}}1
 
 
 
@@ -462,6 +474,7 @@ wxPayCallInternal :: (WxppApiMonad env m)
                   -> WxPayParams
                   -> m (Either WxPayCallResultError WxPayParams)
 wxPayCallInternal app_key url params = do
+-- {{{1
   sess <- asks getWreqSession
   nonce <- wxppMakeNonce 32
   let doc_txt = wxPayRenderOutgoingXmlDoc app_key params nonce
@@ -500,14 +513,20 @@ wxPayCallInternal app_key url params = do
                  err_code <- fmap WxPayErrorCode $ lookup_param "err_code"
                  err_desc <- lookup_param "err_code_des"
                  return $ Left $ WxPayCallResultError err_code err_desc
+-- }}}1
 
 
 -- | 文档里的示示例, 时分秒的分隔符是全角的
 -- 这个函数能兼容全角和半角两种情况
 wxPayParseTimeStr :: String -> Maybe LocalTime
 wxPayParseTimeStr t =
+-- {{{1
   parseTimeM True locale fmt1 t <|> parseTimeM True locale fmt2 t
   where
     fmt1   = "%Y-%m-%d %H:%M:%S"
     fmt2   = "%Y-%m-%d %H：%M：%S"
     locale = defaultTimeLocale
+-- }}}1
+
+
+-- vim: set foldmethod=marker:
