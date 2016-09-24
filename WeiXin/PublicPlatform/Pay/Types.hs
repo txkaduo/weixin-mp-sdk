@@ -279,13 +279,20 @@ data WxPayCommonParams = WxPayCommonParams
                           WxPayAppKey
                           WxPayMchID
 
-
+-- | 用户支付状态
+data WxUserPayStatus = WxUserPaySuccess
+                     | WxUserPayRefund
+                     | WxUserPayNotPay
+                     | WxUserPayClosed
+                     | WxUserPayRevoked
+                     | WxUserPayUserPaying
+                     deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- | 企业支付转账状态
-data WxPayMmTransStatus = WxPayMmTransStatusSccess
-                        | WxPayMmTransStatusFailed Text  -- ^ 失败及其原因
-                        | WxPayMmTransStatusProcessing
-                        deriving (Show)
+data WxMmTransStatus = WxMmTransStatusSccess
+                     | WxMmTransStatusFailed Text  -- ^ 失败及其原因
+                     | WxMmTransStatusProcessing
+                     deriving (Show)
 
 
 -- | 微信企业支付的查询接口成功时的有效返回内容
@@ -293,7 +300,7 @@ data WxPayMchTransInfo = WxPayMchTransInfo
   { wxPayMchTransInfoMchNo      :: WxMchTransMchNo
   , wxPayMchTransInfoWxNo       :: WxMchTransWxNo
   -- ^ detail_id
-  , wxPayMchTransInfoStatus     :: WxPayMmTransStatus
+  , wxPayMchTransInfoStatus     :: WxMmTransStatus
   , wxPayMchTransInfoOpenID     :: WxppOpenID
   , wxPayMchTransInfoRecvName   :: Maybe Text
   , wxPayMchTransInfoAmount     :: WxPayMoneyAmount

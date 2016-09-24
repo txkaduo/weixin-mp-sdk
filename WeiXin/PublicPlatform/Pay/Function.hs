@@ -7,6 +7,7 @@ import           Control.Lens           hiding ((.=))
 import           Control.Monad.Except
 import           Control.Monad.Logger
 import           Control.Monad.Reader   (asks)
+import           Control.Monad.Trans.Maybe
 import qualified Crypto.Hash.MD5        as MD5
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8  as C8
@@ -159,15 +160,12 @@ wxPayUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_st
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    let lookup_param n = maybe
-                          (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
-                          return
-                          (lookup n resp_params)
+    let req_param = reqXmlTextField resp_params
 
-    prepay_id <- fmap WxUserPayPrepayId $ lookup_param "prepay_id"
-    trade_type_t <- lookup_param "trade_type"
+    prepay_id <- fmap WxUserPayPrepayId $ req_param "prepay_id"
+    trade_type_t <- req_param "trade_type"
     r_trade_type <- case parseMaybeSimpleEncoded trade_type_t of
-                    Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type" <> trade_type_t
+                    Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
                     Just x  -> return x
 
     let m_code_url = fmap UrlText $ lookup "code_url" resp_params
@@ -232,30 +230,20 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    let lookup_param n = maybe
-                          (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
-                          return
-                          (lookup n resp_params)
+    let req_param = reqXmlTextField resp_params
 
-    mch_out_trade_no <- fmap WxMchTransMchNo $ lookup_param "partner_trade_no"
+    mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
     unless (mch_out_trade_no == mch_trade_no) $ do
       throwM $ WxPayDiagError $
                 "Unexpected response data: partner_trade_no is not the same as input: "
                 <> tshow mch_out_trade_no
 
-    wx_trade_no <- fmap WxMchTransWxNo $ lookup_param "payment_no"
-    pay_time_t <- lookup_param "payment_time"
-    local_time <- maybe
-                    (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> pay_time_t)
-                    return
-                    (wxPayMchTransParseTimeStr $ unpack pay_time_t)
-
-    let pay_time = localTimeToUTC tz local_time
+    wx_trade_no <- fmap WxMchTransWxNo $ req_param "payment_no"
+    pay_time <- reqXmlTimeField resp_params "payment_time"
 
     return $ WxPayTransOk mch_out_trade_no wx_trade_no pay_time
 
   where
-    tz = hoursToTimeZone 8
     WxPayCommonParams app_id app_key mch_id = common_params
 -- }}}1
 
@@ -283,46 +271,32 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    let lookup_param n = maybe
-                          (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
-                          return
-                          (lookup n resp_params)
+    let req_param = reqXmlTextField resp_params
 
-    mch_out_trade_no <- fmap WxMchTransMchNo $ lookup_param "partner_trade_no"
+    mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
     unless (mch_out_trade_no == mch_trade_no) $ do
       throwM $ WxPayDiagError $
                 "Unexpected response data: partner_trade_no is not the same as input: "
                 <> tshow mch_out_trade_no
 
     -- 关于 detai_id 的意义不明，暂时认为这就是之前的 payment_no
-    wx_trade_no <- fmap WxMchTransWxNo $ lookup_param "detail_id"
+    wx_trade_no <- fmap WxMchTransWxNo $ req_param "detail_id"
 
-    st <- lookup_param "status"
+    st <- req_param "status"
     status <- case st of
-                "SUCCESS"     -> return WxPayMmTransStatusSccess
-                "PROCESSING"  -> return WxPayMmTransStatusProcessing
-                "FAILED"      -> WxPayMmTransStatusFailed <$> lookup_param "reason"
+                "SUCCESS"     -> return WxMmTransStatusSccess
+                "PROCESSING"  -> return WxMmTransStatusProcessing
+                "FAILED"      -> WxMmTransStatusFailed <$> req_param "reason"
                 _             -> throwM $ WxPayDiagError $ "status is recognized: " <> st
 
-    open_id <- WxppOpenID <$> lookup_param "openid"
+    open_id <- WxppOpenID <$> req_param "openid"
     let m_recv_name = lookup "transfer_name" resp_params
 
-    amount_t <- lookup_param "payment_amount"
-    amount <- fmap WxPayMoneyAmount $
-                maybe
-                  (throwM $ WxPayDiagError $ "payment_amount is not an integer: " <> amount_t)
-                  return
-                  (readMay amount_t)
+    amount <- reqXmlFeeField resp_params "payment_amount"
 
-    trans_time_t <- lookup_param "transfer_time"
-    local_time <- maybe
-                    (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> trans_time_t)
-                    return
-                    (wxPayMchTransParseTimeStr $ unpack trans_time_t)
+    trans_time <- reqXmlTimeField resp_params "transfer_time"
 
-    let trans_time = localTimeToUTC tz local_time
-
-    desc <- lookup_param "desc"
+    desc <- req_param "desc"
 
     return $ WxPayMchTransInfo
                 mch_out_trade_no
@@ -335,7 +309,6 @@ wxPayMchTransferInfo common_params mch_trade_no = do
                 desc
 
   where
-    tz = hoursToTimeZone 8
     WxPayCommonParams app_id app_key mch_id = common_params
 -- }}}1
 
@@ -366,25 +339,25 @@ wxPayCallInternal app_key url params = do
             throwM $ WxPayDiagError err
 
           Right resp_params -> do
-            let lookup_param n = maybe
+            let req_param n = maybe
                                   (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
                                   return
                                   (lookup n resp_params)
 
-            ret_code <- lookup_param "return_code"
+            ret_code <- req_param "return_code"
             unless (ret_code == "SUCCESS") $ do
               let m_err_msg = lookup "return_msg" resp_params
               throwM $ WxPayCallReturnError m_err_msg
 
-            result_code <- lookup_param "result_code"
+            result_code <- req_param "result_code"
             if result_code == "SUCCESS"
                then do
                  return $ Right resp_params
 
                else do
                  -- failed
-                 err_code <- fmap WxPayErrorCode $ lookup_param "err_code"
-                 err_desc <- lookup_param "err_code_des"
+                 err_code <- fmap WxPayErrorCode $ req_param "err_code"
+                 err_desc <- req_param "err_code_des"
                  return $ Left $ WxPayCallResultError err_code err_desc
 -- }}}1
 
@@ -420,4 +393,44 @@ wxPayUserPayRenderTime = formatTime locale fmt1
     fmt1   = "%Y%m%d%H%M%S"
     locale = defaultTimeLocale
 -- }}}1
+
+
+reqXmlTextField :: MonadThrow m => WxPayParams -> Text -> m Text
+reqXmlTextField vars n = maybe
+                        (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
+                        return
+                        (lookup n vars)
+
+
+reqXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m WxPayMoneyAmount
+reqXmlFeeField vars n = do
+  amount_t <- reqXmlTextField vars n
+  fmap WxPayMoneyAmount $
+    maybe
+      (throwM $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
+      return
+      (readMay amount_t)
+
+
+optXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m (Maybe WxPayMoneyAmount)
+optXmlFeeField vars n = runMaybeT $ do
+  amount_t <- MaybeT $ return $ lookup n vars
+  fmap WxPayMoneyAmount $
+    maybe
+      (throwM $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
+      return
+      (readMay amount_t)
+
+
+reqXmlTimeField :: MonadThrow m => WxPayParams -> Text -> m UTCTime
+reqXmlTimeField vars n = do
+  time_t <- reqXmlTextField vars n
+  fmap (localTimeToUTC tz) $
+    maybe
+      (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> time_t)
+      return
+      (wxPayMchTransParseTimeStr $ unpack time_t)
+  where
+    tz = hoursToTimeZone 8
+
 -- vim: set foldmethod=marker:

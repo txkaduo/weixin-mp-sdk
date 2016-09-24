@@ -181,8 +181,8 @@ testWxPaySign = do
         exitFailure
 
 
-testWxPayMmTransParseTime :: IO ()
-testWxPayMmTransParseTime = do
+testWxMmTransParseTime :: IO ()
+testWxMmTransParseTime = do
   let test_it s lt = do
         case wxPayMchTransParseTimeStr s of
           Nothing -> do
@@ -218,7 +218,7 @@ testWxPayParseBankCode = do
 main :: IO ()
 main = do
     testWxPaySign
-    testWxPayMmTransParseTime
+    testWxMmTransParseTime
     testWxPayParseBankCode
     testJsApiTicket
     testMsgToXml
