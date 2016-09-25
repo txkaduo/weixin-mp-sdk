@@ -239,7 +239,7 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
                 <> tshow mch_out_trade_no
 
     wx_trade_no <- fmap WxMchTransWxNo $ req_param "payment_no"
-    pay_time <- reqXmlTimeField resp_params "payment_time"
+    pay_time <- reqXmlTimeField resp_params wxPayMchTransParseTimeStr "payment_time"
 
     return $ WxPayTransOk mch_out_trade_no wx_trade_no pay_time
 
@@ -294,7 +294,7 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 
     amount <- reqXmlFeeField resp_params "payment_amount"
 
-    trans_time <- reqXmlTimeField resp_params "transfer_time"
+    trans_time <- reqXmlTimeField resp_params wxPayMchTransParseTimeStr "transfer_time"
 
     desc <- req_param "desc"
 
@@ -386,8 +386,8 @@ wxUserPayParseTimeStr t =
 -- }}}1
 
 
-wxUserPayRenderTime :: FormatTime t => t -> String
-wxUserPayRenderTime = formatTime locale fmt1
+wxPayUserPayRenderTime :: FormatTime t => t -> String
+wxPayUserPayRenderTime = formatTime locale fmt1
 -- {{{1
   where
     fmt1   = "%Y%m%d%H%M%S"
@@ -422,14 +422,18 @@ optXmlFeeField vars n = runMaybeT $ do
       (readMay amount_t)
 
 
-reqXmlTimeField :: MonadThrow m => WxPayParams -> Text -> m UTCTime
-reqXmlTimeField vars n = do
+reqXmlTimeField :: MonadThrow m
+                => WxPayParams
+                -> (String -> Maybe LocalTime)
+                -> Text
+                -> m UTCTime
+reqXmlTimeField vars parse_time n = do
   time_t <- reqXmlTextField vars n
   fmap (localTimeToUTC tz) $
     maybe
       (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> time_t)
       return
-      (wxPayMchTransParseTimeStr $ unpack time_t)
+      (parse_time $ unpack time_t)
   where
     tz = hoursToTimeZone 8
 
