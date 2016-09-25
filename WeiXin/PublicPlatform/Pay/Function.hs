@@ -236,6 +236,32 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
 -- }}}1
 
 
+-- | 用户支付：关闭支付单
+wxUserPayCloseOrder :: WxppApiMonad env m
+                    => WxPayCommonParams
+                    -> WxUserPayOutTradeNo
+                    -> m (Either WxPayCallResultError ())
+wxUserPayCloseOrder common_params out_trade_no = do
+-- {{{1
+  url_conf <- asks getWxppUrlConfig
+  let url = wxppUrlConfUserPayApiBase url_conf <> "/closeorder"
+  let params :: WxPayParams
+      params = mempty &
+                (appEndo $ mconcat $
+                    [ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , Endo $ insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
+                    ])
+
+  runExceptT $ do
+    _resp_params <- ExceptT $ wxPayCallInternal app_key url params
+    return ()
+
+  where
+    WxPayCommonParams app_id app_key mch_id = common_params
+-- }}}1
+
+
 -- | 微信企业支付
 -- CAUTION: 目前未实现双向数字证书认证
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
