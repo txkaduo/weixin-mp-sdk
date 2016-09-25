@@ -288,13 +288,7 @@ testWxUserPayStateDocHelper doc_txt = do
                           catMaybes $ map param_from_node $
                             cursor $| child &| node
 
-        err_or_pay_stat <- runStderrLoggingT $ wxUserPayParseStateParams all_params
-        case err_or_pay_stat of
-          Left err -> do
-            putStrLn $ "wxUserPayParseStateParams failed: " <> tshow err
-            exitFailure
-
-          Right pay_stat -> return pay_stat
+        runStderrLoggingT $ wxUserPayParseStateParams all_params
 
   where
     param_from_node n@(NodeElement ele) = do

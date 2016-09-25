@@ -11,6 +11,7 @@ import           Control.Monad.Trans.Maybe
 import qualified Crypto.Hash.MD5        as MD5
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8  as C8
+import qualified Data.ByteString.Lazy   as LB
 import           Data.Default           (def)
 import           Data.Monoid            (Endo (..))
 import           Data.Aeson             (object, (.=), encode)
@@ -64,18 +65,28 @@ wxPayOutgoingXmlDoc :: WxPayAppKey
                     -> Document
 wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
 -- {{{1
+  wxPayOutgoingXmlDocFromParams $ params <> mapFromList [ param_nonce, param_sign ]
+  where
+    param_nonce  = ("nonce_str", raw_nonce)
+    sign        = wxPaySign app_key params nonce
+    param_sign   = ("sign", unWxPaySignature sign)
+-- }}}1
+
+
+-- | for internal use: make a XML from all key-value pairs
+wxPayOutgoingXmlDocFromParams :: WxPayParams
+                              -- ^ INCLUDING: nonce_str, key
+                              -> Document
+wxPayOutgoingXmlDocFromParams params =
+-- {{{1
   Document (Prologue [] Nothing []) root []
   where
     root        = Element "xml" mempty nodes
-    nodes       = map (uncurry mk_node) (mapToList params) <> [ node_nonce, node_sign ]
-    node_nonce  = mk_node "nonce_str" raw_nonce
-    sign        = wxPaySign app_key params nonce
-    node_sign   = mk_node "sign" (unWxPaySignature sign)
+    nodes       = map (uncurry mk_node) (mapToList params)
     mk_node k v = NodeElement $
                     Element (Name k Nothing Nothing) mempty
                       [ NodeContent v ]
 -- }}}1
-
 
 wxPayRenderOutgoingXmlDoc :: WxPayAppKey
                           -> WxPayParams
@@ -203,7 +214,7 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
 
-    pay_state <- ExceptT $ wxUserPayParseStateParams resp_params
+    pay_state <- wxUserPayParseStateParams resp_params
 
     trade_state_t <- reqXmlTextField resp_params "trade_state"
     trade_state <- case trade_state_t of
@@ -366,71 +377,58 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 -- * 查询接口多了: trade_state, trade_state_desc (似乎通知接口默认是成功的)
 wxUserPayParseStateParams :: (MonadThrow m, MonadLogger m)
                           => WxPayParams
-                          -> m (Either WxPayCallResultError WxUserPayStatInfo)
+                          -> m WxUserPayStatInfo
 wxUserPayParseStateParams resp_params = do
 -- {{{1
   let req_param = reqXmlTextField resp_params
 
-  ret_code <- req_param "return_code"
-  unless (ret_code == "SUCCESS") $ do
-    let m_err_msg = lookup "return_msg" resp_params
-    throwM $ WxPayCallReturnError m_err_msg
+  let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
 
-  result_code <- req_param "result_code"
-  if result_code == "SUCCESS"
-     then do
-       let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
+  open_id <- fmap WxppOpenID $ req_param "openid"
+  let m_is_subs_t = lookup "is_subscribe" resp_params
+  m_is_subs <- forM m_is_subs_t $ \is_subs_t ->
+                 case toUpper is_subs_t of
+                   "Y" -> return True
+                   "N" -> return False
+                   _ -> do
+                     $logErrorS wxppLogSource $ "invalid value of 'is_subscribe': " <> is_subs_t
+                     throwM $ WxPayDiagError "invalid value of 'is_subscribe'"
 
-       open_id <- fmap WxppOpenID $ req_param "openid"
-       let m_is_subs_t = lookup "is_subscribe" resp_params
-       m_is_subs <- forM m_is_subs_t $ \is_subs_t ->
-                      case toUpper is_subs_t of
-                        "Y" -> return True
-                        "N" -> return False
-                        _ -> do
-                          $logErrorS wxppLogSource $ "invalid value of 'is_subscribe': " <> is_subs_t
-                          throwM $ WxPayDiagError "invalid value of 'is_subscribe'"
+  trade_type_t <- req_param "trade_type"
+  trade_type <- case parseMaybeSimpleEncoded trade_type_t of
+                   Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
+                   Just x  -> return x
 
-       trade_type_t <- req_param "trade_type"
-       trade_type <- case parseMaybeSimpleEncoded trade_type_t of
-                        Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
-                        Just x  -> return x
+  bank_type_t <- req_param "bank_type"
+  bank_type <- case parseBankCode bank_type_t of
+                 Nothing -> throwM $ WxPayDiagError $ "Unknown bank_type: " <> bank_type_t
+                 Just x  -> return x
 
-       bank_type_t <- req_param "bank_type"
-       bank_type <- case parseBankCode bank_type_t of
-                      Nothing -> throwM $ WxPayDiagError $ "Unknown bank_type: " <> bank_type_t
-                      Just x  -> return x
+  total_fee <- reqXmlFeeField resp_params "total_fee"
+  settlement_total_fee <- optXmlFeeField resp_params "settlement_total_fee"
+  cash_fee <- optXmlFeeField resp_params "cash_fee"
+  coupon_fee <- optXmlFeeField resp_params "coupon_fee"
+  time_end <- reqXmlTimeField resp_params wxUserPayParseTimeStr "time_end"
 
-       total_fee <- reqXmlFeeField resp_params "total_fee"
-       settlement_total_fee <- optXmlFeeField resp_params "settlement_total_fee"
-       cash_fee <- optXmlFeeField resp_params "cash_fee"
-       coupon_fee <- optXmlFeeField resp_params "coupon_fee"
-       time_end <- reqXmlTimeField resp_params wxUserPayParseTimeStr "time_end"
+  trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
+  out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
 
-       trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
-       out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
+  let m_attach = lookup "attach" resp_params
 
-       let m_attach = lookup "attach" resp_params
-
-       return $ Right $ WxUserPayStatInfo
-                          m_dev_info
-                          open_id
-                          m_is_subs
-                          trade_type
-                          bank_type
-                          total_fee
-                          settlement_total_fee
-                          cash_fee
-                          coupon_fee
-                          trans_id
-                          out_trade_no
-                          m_attach
-                          time_end
-     else do
-       -- failed
-       err_code <- fmap WxPayErrorCode $ req_param "err_code"
-       err_desc <- req_param "err_code_des"
-       return $ Left $ WxPayCallResultError err_code err_desc
+  return $ WxUserPayStatInfo
+                     m_dev_info
+                     open_id
+                     m_is_subs
+                     trade_type
+                     bank_type
+                     total_fee
+                     settlement_total_fee
+                     cash_fee
+                     coupon_fee
+                     trans_id
+                     out_trade_no
+                     m_attach
+                     time_end
 -- }}}1
 
 
@@ -447,6 +445,17 @@ wxPayCallInternal app_key url params = do
 
   r <- liftIO (WS.post sess url $ encodeUtf8 doc_txt)
   let lbs = r ^. responseBody
+
+  wxPayParseInputXmlLbs app_key lbs
+-- }}}1
+
+
+wxPayParseInputXmlLbs :: (MonadThrow m, MonadLogger m)
+                      => WxPayAppKey
+                      -> LB.ByteString
+                      -> m (Either WxPayCallResultError WxPayParams)
+wxPayParseInputXmlLbs app_key lbs = do
+-- {{{1
   case parseLBS def lbs of
       Left ex         -> do
         $logErrorS wxppLogSource $ "Failed to parse XML: " <> tshow ex
@@ -459,10 +468,7 @@ wxPayCallInternal app_key url params = do
             throwM $ WxPayDiagError err
 
           Right resp_params -> do
-            let req_param n = maybe
-                                  (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
-                                  return
-                                  (lookup n resp_params)
+            let req_param = reqXmlTextField resp_params
 
             ret_code <- req_param "return_code"
             unless (ret_code == "SUCCESS") $ do
