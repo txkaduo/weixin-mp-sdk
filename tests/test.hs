@@ -5,12 +5,18 @@ module Main where
 import ClassyPrelude
 import Crypto.Cipher                        (makeKey)
 import System.Exit
+import           Control.Monad.Logger
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import Data.Default                         (def)
 import Text.XML                             (renderText)
+import           Text.XML               (Element (..), Name (..),
+                                         Node (..), parseLBS)
+import           Text.XML.Cursor        (child, content, fromDocument, fromNode
+                                        , node, ($/), ($|), (&|)
+                                        )
 import qualified Data.Text.Lazy             as LT
 import qualified Data.Text                  as T
 import qualified Data.Aeson                 as A
@@ -214,12 +220,98 @@ testWxPayParseBankCode = do
 
   test_it "VISA_CREDIT" VISA_CREDIT
 
+testWxUserPayStateDoc1 :: IO ()
+testWxUserPayStateDoc1 = do
+  let doc = "<xml>\
+  \<appid><![CDATA[wx2421b1c4370ec43b]]></appid>\
+  \<attach><![CDATA[支付测试]]></attach>\
+  \<bank_type><![CDATA[CMB_DEBIT]]></bank_type>\
+  \<fee_type><![CDATA[CNY]]></fee_type>\
+  \<is_subscribe><![CDATA[Y]]></is_subscribe>\
+  \<mch_id><![CDATA[10000100]]></mch_id>\
+  \<nonce_str><![CDATA[5d2b6c2a8db53831f7eda20af46e531c]]></nonce_str>\
+  \<openid><![CDATA[oUpF8uMEb4qRXf22hE3X68TekukE]]></openid>\
+  \<out_trade_no><![CDATA[1409811653]]></out_trade_no>\
+  \<result_code><![CDATA[SUCCESS]]></result_code>\
+  \<return_code><![CDATA[SUCCESS]]></return_code>\
+  \<sign><![CDATA[B552ED6B279343CB493C5DD0D78AB241]]></sign>\
+  \<sub_mch_id><![CDATA[10000100]]></sub_mch_id>\
+  \<time_end><![CDATA[20140903131540]]></time_end>\
+  \<total_fee>1</total_fee>\
+  \<trade_type><![CDATA[JSAPI]]></trade_type>\
+  \<transaction_id><![CDATA[1004400740201409030005092168]]></transaction_id>\
+  \</xml>"
+
+  pay_stat <- testWxUserPayStateDocHelper doc
+  testEq (Just "支付测试") (wxUserPayStatAttach pay_stat)
+  testEq (Just True) (wxUserPayStatIsSubs pay_stat)
+
+testWxUserPayStateDoc2 :: IO ()
+testWxUserPayStateDoc2 = do
+  let doc = "<xml>\
+   \<return_code><![CDATA[SUCCESS]]></return_code>\
+   \<return_msg><![CDATA[OK]]></return_msg>\
+   \<appid><![CDATA[wx2421b1c4370ec43b]]></appid>\
+   \<mch_id><![CDATA[10000100]]></mch_id>\
+   \<device_info><![CDATA[1000]]></device_info>\
+   \<nonce_str><![CDATA[TN55wO9Pba5yENl8]]></nonce_str>\
+   \<sign><![CDATA[BDF0099C15FF7BC6B1585FBB110AB635]]></sign>\
+   \<result_code><![CDATA[SUCCESS]]></result_code>\
+   \<openid><![CDATA[oUpF8uN95-Ptaags6E_roPHg7AG0]]></openid>\
+   \<is_subscribe><![CDATA[Y]]></is_subscribe>\
+   \<trade_type><![CDATA[MICROPAY]]></trade_type>\
+   \<bank_type><![CDATA[CCB_DEBIT]]></bank_type>\
+   \<total_fee>1</total_fee>\
+   \<fee_type><![CDATA[CNY]]></fee_type>\
+   \<transaction_id><![CDATA[1008450740201411110005820873]]></transaction_id>\
+   \<out_trade_no><![CDATA[1415757673]]></out_trade_no>\
+   \<attach><![CDATA[订单额外描述]]></attach>\
+   \<time_end><![CDATA[20141111170043]]></time_end>\
+   \<trade_state><![CDATA[SUCCESS]]></trade_state>\
+   \</xml>"
+
+  pay_stat <- testWxUserPayStateDocHelper doc
+  testEq (Just "订单额外描述") (wxUserPayStatAttach pay_stat)
+  testEq (Just True) (wxUserPayStatIsSubs pay_stat)
+
+
+testWxUserPayStateDocHelper :: Text -> IO (WxUserPayStatInfo)
+testWxUserPayStateDocHelper doc_txt = do
+  case parseLBS def (fromStrict $ encodeUtf8 doc_txt) of
+      Left ex         -> do
+        putStrLn $ "Failed to parse XML: " <> tshow ex
+        exitFailure
+
+      Right doc  -> do
+        let cursor = fromDocument doc
+        let all_params = mapFromList $
+                          catMaybes $ map param_from_node $
+                            cursor $| child &| node
+
+        err_or_pay_stat <- runStderrLoggingT $ wxUserPayParseStateParams all_params
+        case err_or_pay_stat of
+          Left err -> do
+            putStrLn $ "wxUserPayParseStateParams failed: " <> tshow err
+            exitFailure
+
+          Right pay_stat -> return pay_stat
+
+  where
+    param_from_node n@(NodeElement ele) = do
+      v <- listToMaybe $ fromNode n $/ content
+      let name = nameLocalName (elementName ele)
+      return (name, v)
+
+    param_from_node _ = Nothing
+
 
 main :: IO ()
 main = do
     testWxPaySign
     testWxMmTransParseTime
     testWxPayParseBankCode
+    testWxUserPayStateDoc1
+    testWxUserPayStateDoc2
     testJsApiTicket
     testMsgToXml
     -- testLikeJava
@@ -233,3 +325,13 @@ main = do
                                                 "<h1>xxx</h1>"
                                                 Nothing
     showJson $ PropagateFilter Nothing
+
+    putStrLn "=========== ALL DONE ==============="
+
+
+testEq :: (Eq a, Show a) => a -> a -> IO ()
+testEq expected real_val = do
+  unless (expected == real_val) $ do
+    putStrLn $ tshow real_val <> " does not equal to expected: " <> tshow expected
+    exitFailure
+

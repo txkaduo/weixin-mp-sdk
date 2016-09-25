@@ -17,6 +17,7 @@ import           Text.Parsec.TX.Utils   (SimpleStringRep (..), deriveJsonS,
 import           Yesod.Helpers.Parsec   (derivePathPieceS)
 
 import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Pay.BankCode
 -- }}}1
 
 
@@ -47,6 +48,10 @@ newtype WxPayParamIpStr = WxPayParamIpStr { unWxPayParamIpStr :: Text }
 
 -- | 商户自定义的商品ID
 newtype WxPayProductId = WxPayProductId { unWxPayProductId :: Text }
+
+
+-- | 微信支付订单号
+newtype WxUserPayTransId = WxUserPayTransId { unWxUserPayTransId :: Text }
 
 
 -- | 微信企业支付所产生的订单号
@@ -280,12 +285,14 @@ data WxPayCommonParams = WxPayCommonParams
                           WxPayMchID
 
 -- | 用户支付状态
+-- 仅出现在查询接口的返回报文内
 data WxUserPayStatus = WxUserPaySuccess
                      | WxUserPayRefund
                      | WxUserPayNotPay
                      | WxUserPayClosed
                      | WxUserPayRevoked
                      | WxUserPayUserPaying
+                     | WxUserPayPayError
                      deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- | 企业支付转账状态
@@ -311,16 +318,25 @@ data WxPayMchTransInfo = WxPayMchTransInfo
 
 
 -- | 查询或支付成功通知接口中核心提供的数据
-{--
-data WxPayUserPayOkInfo = WxPayUserPayOkInfo
-  { wxPayUserPayDeviceInfo :: Maybe WxPayDeviceInfo
-  , wxPayUserPayOpenId :: WxppOpenID
-  , wxPayUserPayIsSubs :: Maybe Bool
+data WxUserPayStatInfo = WxUserPayStatInfo
+  { wxUserPayStatDeviceInfo         :: Maybe WxPayDeviceInfo
+  , wxUserPayStatOpenId             :: WxppOpenID
+  , wxUserPayStatIsSubs             :: Maybe Bool
   -- ^ 用户是否关注公众号
-  , wxPayUserPayTradeType :: WxPayTradeType
-  , 
+  , wxUserPayStatTradeType          :: WxPayTradeType
+  -- , wxUserPayStatStatus             :: WxUserPayStatus
+  , wxUserPayStatBankCode           :: BankCode
+  , wxUserPayStatTotalFee           :: WxPayMoneyAmount
+  , wxUserPayStatSettlementTotalFee :: Maybe WxPayMoneyAmount
+  , wxUserPayStatCashFee            :: Maybe WxPayMoneyAmount
+  -- ^ 现金支付金额：文档说是必须出现的字段，但在两个示例中都没出现这个字段
+  -- 估计这应该是可选的
+  , wxUserPayStatCouponFee          :: Maybe WxPayMoneyAmount
+  , wxUserPayStatTransId            :: WxUserPayTransId
+  , wxUserPayStatOutTradeNo         :: WxUserPayOutTradeNo
+  , wxUserPayStatAttach             :: Maybe Text
+  , wxUserPayStatTimeEnd            :: UTCTime
   }
---}
 
 
 -- vim: set foldmethod=marker:

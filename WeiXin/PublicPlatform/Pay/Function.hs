@@ -32,6 +32,7 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Pay.Types
+import WeiXin.PublicPlatform.Pay.BankCode
 -- }}}1
 
 
@@ -177,6 +178,53 @@ wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str b
 -- }}}1
 
 
+-- | 用户支付：查询接口
+wxUserPayQueryOrder :: WxppApiMonad env m
+                    => WxPayCommonParams
+                    -> Either WxUserPayTransId WxUserPayOutTradeNo
+                    -> m (Either WxPayCallResultError
+                                (WxUserPayStatInfo, (WxUserPayStatus, Maybe Text))
+                         )
+                    -- ^ 额外的信息包括 trade_state, trade_state_desc
+wxUserPayQueryOrder common_params trans_id_trade_no = do
+-- {{{1
+  url_conf <- asks getWxppUrlConfig
+  let url = wxppUrlConfUserPayApiBase url_conf <> "/orderquery"
+  let params :: WxPayParams
+      params = mempty &
+                (appEndo $ mconcat $
+                    [ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , Endo $ case trans_id_trade_no of
+                              Left trans_id -> insertMap "transaction_id" (unWxUserPayTransId trans_id)
+                              Right out_trade_no -> insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
+                    ])
+
+  runExceptT $ do
+    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+
+    pay_state <- ExceptT $ wxUserPayParseStateParams resp_params
+
+    trade_state_t <- reqXmlTextField resp_params "trade_state"
+    trade_state <- case trade_state_t of
+                    "SUCCESS"    -> return WxUserPaySuccess
+                    "REFUND"     -> return WxUserPayRefund
+                    "NOTPAY"     -> return WxUserPayNotPay
+                    "CLOSED"     -> return WxUserPayClosed
+                    "REVOKED"    -> return WxUserPayRevoked
+                    "USERPAYING" -> return WxUserPayUserPaying
+                    "PAYERROR"   -> return WxUserPayPayError
+                    _            -> do $logErrorS wxppLogSource $ "Invalid trade_state: " <> trade_state_t
+                                       throwM $ WxPayDiagError $ "Invalid trade_state: " <> trade_state_t
+
+    let trade_state_desc = lookup "trade_state_desc" resp_params
+
+    return (pay_state, (trade_state, trade_state_desc))
+    where
+      WxPayCommonParams app_id app_key mch_id = common_params
+-- }}}1
+
+
 -- | 微信企业支付
 -- CAUTION: 目前未实现双向数字证书认证
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
@@ -248,7 +296,6 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
 -- }}}1
 
 
-
 -- | 微信企业支付结果查询
 -- CAUTION: 目前未实现双向数字证书认证
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
@@ -312,6 +359,79 @@ wxPayMchTransferInfo common_params mch_trade_no = do
     WxPayCommonParams app_id app_key mch_id = common_params
 -- }}}1
 
+
+-- | 微信支付查询接口与主动通知时的报文的共同部分
+-- 查询接口与主动通知接口得到的报文有以下的区别
+-- * 通知接口多了: appid, mch_id
+-- * 查询接口多了: trade_state, trade_state_desc (似乎通知接口默认是成功的)
+wxUserPayParseStateParams :: (MonadThrow m, MonadLogger m)
+                          => WxPayParams
+                          -> m (Either WxPayCallResultError WxUserPayStatInfo)
+wxUserPayParseStateParams resp_params = do
+-- {{{1
+  let req_param = reqXmlTextField resp_params
+
+  ret_code <- req_param "return_code"
+  unless (ret_code == "SUCCESS") $ do
+    let m_err_msg = lookup "return_msg" resp_params
+    throwM $ WxPayCallReturnError m_err_msg
+
+  result_code <- req_param "result_code"
+  if result_code == "SUCCESS"
+     then do
+       let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
+
+       open_id <- fmap WxppOpenID $ req_param "openid"
+       let m_is_subs_t = lookup "is_subscribe" resp_params
+       m_is_subs <- forM m_is_subs_t $ \is_subs_t ->
+                      case toUpper is_subs_t of
+                        "Y" -> return True
+                        "N" -> return False
+                        _ -> do
+                          $logErrorS wxppLogSource $ "invalid value of 'is_subscribe': " <> is_subs_t
+                          throwM $ WxPayDiagError "invalid value of 'is_subscribe'"
+
+       trade_type_t <- req_param "trade_type"
+       trade_type <- case parseMaybeSimpleEncoded trade_type_t of
+                        Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
+                        Just x  -> return x
+
+       bank_type_t <- req_param "bank_type"
+       bank_type <- case parseBankCode bank_type_t of
+                      Nothing -> throwM $ WxPayDiagError $ "Unknown bank_type: " <> bank_type_t
+                      Just x  -> return x
+
+       total_fee <- reqXmlFeeField resp_params "total_fee"
+       settlement_total_fee <- optXmlFeeField resp_params "settlement_total_fee"
+       cash_fee <- optXmlFeeField resp_params "cash_fee"
+       coupon_fee <- optXmlFeeField resp_params "coupon_fee"
+       time_end <- reqXmlTimeField resp_params wxUserPayParseTimeStr "time_end"
+
+       trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
+       out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
+
+       let m_attach = lookup "attach" resp_params
+
+       return $ Right $ WxUserPayStatInfo
+                          m_dev_info
+                          open_id
+                          m_is_subs
+                          trade_type
+                          bank_type
+                          total_fee
+                          settlement_total_fee
+                          cash_fee
+                          coupon_fee
+                          trans_id
+                          out_trade_no
+                          m_attach
+                          time_end
+     else do
+       -- failed
+       err_code <- fmap WxPayErrorCode $ req_param "err_code"
+       err_desc <- req_param "err_code_des"
+       return $ Left $ WxPayCallResultError err_code err_desc
+-- }}}1
 
 
 wxPayCallInternal :: (WxppApiMonad env m)
@@ -404,22 +524,26 @@ reqXmlTextField vars n = maybe
 
 reqXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m WxPayMoneyAmount
 reqXmlFeeField vars n = do
+-- {{{1
   amount_t <- reqXmlTextField vars n
   fmap WxPayMoneyAmount $
     maybe
       (throwM $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
       return
       (readMay amount_t)
+-- }}}1
 
 
 optXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m (Maybe WxPayMoneyAmount)
 optXmlFeeField vars n = runMaybeT $ do
+-- {{{1
   amount_t <- MaybeT $ return $ lookup n vars
   fmap WxPayMoneyAmount $
     maybe
       (throwM $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
       return
       (readMay amount_t)
+-- }}}1
 
 
 reqXmlTimeField :: MonadThrow m
@@ -428,6 +552,7 @@ reqXmlTimeField :: MonadThrow m
                 -> Text
                 -> m UTCTime
 reqXmlTimeField vars parse_time n = do
+-- {{{1
   time_t <- reqXmlTextField vars n
   fmap (localTimeToUTC tz) $
     maybe
@@ -436,5 +561,6 @@ reqXmlTimeField vars parse_time n = do
       (parse_time $ unpack time_t)
   where
     tz = hoursToTimeZone 8
+-- }}}1
 
 -- vim: set foldmethod=marker:
