@@ -45,9 +45,17 @@ yesodHandleWxUserPayNotify app_key handle_notify = do
                    ]
 
         Right ((app_id, mch_id), pay_stat) -> do
-          handle_notify app_id mch_id pay_stat
-          return $ [ ("return_code", "SUCCESS")
-                   , ("return_msg", "OK")
-                   ]
+          err_or2 <- tryAny $ handle_notify app_id mch_id pay_stat
+          case err_or2 of
+            Left err -> do
+              $logErrorS wxppLogSource $ "Pay notification: failed to handle: " <> tshow err
+              return $ [ ("return_code", "FAIL")
+                       , ("return_msg", "internal error")
+                       ]
+
+            Right () -> do
+              return $ [ ("return_code", "SUCCESS")
+                       , ("return_msg", "OK")
+                       ]
 
   return $ repXml $ renderText def $ wxPayOutgoingXmlDocFromParams $ mapFromList out_params
