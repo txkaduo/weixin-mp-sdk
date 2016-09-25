@@ -21,6 +21,7 @@ yesodHandleWxUserPayNotify :: (MonadHandler m, MonadLogger m, MonadBaseControl I
                               )
                            -> m RepXml
 yesodHandleWxUserPayNotify app_key handle_notify = do
+-- {{{1
   lbs <- rawRequestBody $$ sinkLbs
   let parse_params = runExceptT $ do
         input_params <- ExceptT $ wxPayParseInputXmlLbs app_key lbs
@@ -59,3 +60,7 @@ yesodHandleWxUserPayNotify app_key handle_notify = do
                        ]
 
   return $ repXml $ renderText def $ wxPayOutgoingXmlDocFromParams $ mapFromList out_params
+-- }}}1
+
+
+-- vim: set foldmethod=marker:
