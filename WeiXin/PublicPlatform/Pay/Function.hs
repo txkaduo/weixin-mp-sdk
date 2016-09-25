@@ -124,20 +124,20 @@ wxPayParseIncomingXmlDoc app_key doc = do
 
 
 -- | 统一下单接口
-wxPayUserPayPrepay :: WxppApiMonad env m
-                   => WxPayCommonParams
-                   -> UrlText             -- ^ 通知地址
-                   -> WxPayMoneyAmount
-                   -> WxUserPayOutTradeNo     -- ^ 商户订单号
-                   -> WxPayTradeType      -- ^ 交易类型
-                   -> WxPayParamIpStr     -- ^ 终端IP
-                   -> WxPayParamBody
-                   -> [WxPayGoodsDetail]
-                   -> Maybe WxPayProductId
-                   -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
-                   -> Maybe Text          -- ^ 附加数据
-                   -> m (Either WxPayCallResultError WxPayPrepayOk)
-wxPayUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
+wxUserPayPrepay :: WxppApiMonad env m
+                => WxPayCommonParams
+                -> UrlText             -- ^ 通知地址
+                -> WxPayMoneyAmount
+                -> WxUserPayOutTradeNo     -- ^ 商户订单号
+                -> WxPayTradeType      -- ^ 交易类型
+                -> WxPayParamIpStr     -- ^ 终端IP
+                -> WxPayParamBody
+                -> [WxPayGoodsDetail]
+                -> Maybe WxPayProductId
+                -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
+                -> Maybe Text          -- ^ 附加数据
+                -> m (Either WxPayCallResultError WxPayPrepayOk)
+wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
 -- {{{1
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfUserPayApiBase url_conf <> "/unifiedorder"
@@ -376,8 +376,8 @@ wxPayMchTransParseTimeStr t =
 
 
 -- | 用户支付接口的时间格式的解释
-wxPayUserPayParseTimeStr :: String -> Maybe LocalTime
-wxPayUserPayParseTimeStr t =
+wxUserPayParseTimeStr :: String -> Maybe LocalTime
+wxUserPayParseTimeStr t =
 -- {{{1
   parseTimeM True locale fmt1 t
   where
@@ -386,8 +386,8 @@ wxPayUserPayParseTimeStr t =
 -- }}}1
 
 
-wxPayUserPayRenderTime :: FormatTime t => t -> String
-wxPayUserPayRenderTime = formatTime locale fmt1
+wxUserPayRenderTime :: FormatTime t => t -> String
+wxUserPayRenderTime = formatTime locale fmt1
 -- {{{1
   where
     fmt1   = "%Y%m%d%H%M%S"
