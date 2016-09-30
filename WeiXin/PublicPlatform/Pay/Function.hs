@@ -43,8 +43,8 @@ wxPaySign :: WxPayAppKey
           -- ^ not including: nonce_str, key
           -> Nonce
           -> WxPaySignature
-wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
 -- {{{1
+wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
   WxPaySignature $ toUpper $ fromString $
     C8.unpack $ B16.encode $ MD5.hash $ encodeUtf8 str_to_sign
   where
@@ -63,8 +63,8 @@ wxPayOutgoingXmlDoc :: WxPayAppKey
                     -- ^ not including: nonce_str, key
                     -> Nonce
                     -> Document
-wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
 -- {{{1
+wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
   wxPayOutgoingXmlDocFromParams $ params <> mapFromList [ param_nonce, param_sign ]
   where
     param_nonce  = ("nonce_str", raw_nonce)
@@ -77,8 +77,8 @@ wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
 wxPayOutgoingXmlDocFromParams :: WxPayParams
                               -- ^ INCLUDING: nonce_str, key
                               -> Document
-wxPayOutgoingXmlDocFromParams params =
 -- {{{1
+wxPayOutgoingXmlDocFromParams params =
   Document (Prologue [] Nothing []) root []
   where
     root        = Element "xml" mempty nodes
@@ -100,8 +100,8 @@ wxPayRenderOutgoingXmlDoc app_key params nonce =
 wxPayParseIncomingXmlDoc :: WxPayAppKey
                         -> Document
                         -> Either Text WxPayParams
-wxPayParseIncomingXmlDoc app_key doc = do
 -- {{{1
+wxPayParseIncomingXmlDoc app_key doc = do
   (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
   (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
   let params = params2
@@ -134,7 +134,6 @@ wxPayParseIncomingXmlDoc app_key doc = do
 -- }}}1
 
 
-
 -- | 统一下单接口
 wxUserPayPrepay :: WxppApiMonad env m
                 => WxPayCommonParams
@@ -149,8 +148,8 @@ wxUserPayPrepay :: WxppApiMonad env m
                 -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
                 -> Maybe Text          -- ^ 附加数据
                 -> m (Either WxPayCallResultError WxPayPrepayOk)
-wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
 -- {{{1
+wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfUserPayApiBase url_conf <> "/unifiedorder"
   let params :: WxPayParams
@@ -197,8 +196,8 @@ wxUserPayQueryOrder :: WxppApiMonad env m
                                 (WxUserPayStatInfo, (WxUserPayStatus, Maybe Text))
                          )
                     -- ^ 额外的信息包括 trade_state, trade_state_desc
-wxUserPayQueryOrder common_params trans_id_trade_no = do
 -- {{{1
+wxUserPayQueryOrder common_params trans_id_trade_no = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfUserPayApiBase url_conf <> "/orderquery"
   let params :: WxPayParams
@@ -241,8 +240,8 @@ wxUserPayCloseOrder :: WxppApiMonad env m
                     => WxPayCommonParams
                     -> WxUserPayOutTradeNo
                     -> m (Either WxPayCallResultError ())
-wxUserPayCloseOrder common_params out_trade_no = do
 -- {{{1
+wxUserPayCloseOrder common_params out_trade_no = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfUserPayApiBase url_conf <> "/closeorder"
   let params :: WxPayParams
@@ -276,8 +275,8 @@ wxPayMchTransfer :: (WxppApiMonad env m)
                  -> Text          -- ^ description
                  -> WxPayParamIpStr          -- ^ ip address
                  -> m (Either WxPayCallResultError WxPayTransOk)
-wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_amount desc ip_str = do
 -- {{{1
+wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_amount desc ip_str = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfMmPayApiBase url_conf <> "/promotion/transfers"
 
@@ -341,8 +340,8 @@ wxPayMchTransferInfo :: (WxppApiMonad env m)
                      => WxPayCommonParams
                      -> WxMchTransMchNo
                      -> m (Either WxPayCallResultError WxPayMchTransInfo)
-wxPayMchTransferInfo common_params mch_trade_no = do
 -- {{{1
+wxPayMchTransferInfo common_params mch_trade_no = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfMmPayApiBase url_conf <> "/gettransferinfo"
   let params :: WxPayParams
@@ -404,8 +403,8 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 wxUserPayParseStateParams :: (MonadThrow m, MonadLogger m)
                           => WxPayParams
                           -> m WxUserPayStatInfo
-wxUserPayParseStateParams resp_params = do
 -- {{{1
+wxUserPayParseStateParams resp_params = do
   let req_param = reqXmlTextField resp_params
 
   let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
@@ -463,8 +462,8 @@ wxPayCallInternal :: (WxppApiMonad env m)
                   -> String
                   -> WxPayParams
                   -> m (Either WxPayCallResultError WxPayParams)
-wxPayCallInternal app_key url params = do
 -- {{{1
+wxPayCallInternal app_key url params = do
   sess <- asks getWreqSession
   nonce <- wxppMakeNonce 32
   let doc_txt = wxPayRenderOutgoingXmlDoc app_key params nonce
@@ -480,8 +479,8 @@ wxPayParseInputXmlLbs :: (MonadThrow m, MonadLogger m)
                       => WxPayAppKey
                       -> LB.ByteString
                       -> m (Either WxPayCallResultError WxPayParams)
-wxPayParseInputXmlLbs app_key lbs = do
 -- {{{1
+wxPayParseInputXmlLbs app_key lbs = do
   case parseLBS def lbs of
       Left ex         -> do
         $logErrorS wxppLogSource $ "Failed to parse XML: " <> tshow ex
@@ -517,8 +516,8 @@ wxPayParseInputXmlLbs app_key lbs = do
 -- | 文档里的示示例, 时分秒的分隔符是全角的
 -- 这个函数能兼容全角和半角两种情况
 wxPayMchTransParseTimeStr :: String -> Maybe LocalTime
-wxPayMchTransParseTimeStr t =
 -- {{{1
+wxPayMchTransParseTimeStr t =
   parseTimeM True locale fmt1 t <|> parseTimeM True locale fmt2 t
   where
     fmt1   = "%Y-%m-%d %H:%M:%S"
@@ -529,8 +528,8 @@ wxPayMchTransParseTimeStr t =
 
 -- | 用户支付接口的时间格式的解释
 wxUserPayParseTimeStr :: String -> Maybe LocalTime
-wxUserPayParseTimeStr t =
 -- {{{1
+wxUserPayParseTimeStr t =
   parseTimeM True locale fmt1 t
   where
     fmt1   = "%Y%m%d%H%M%S"
@@ -539,8 +538,8 @@ wxUserPayParseTimeStr t =
 
 
 wxPayUserPayRenderTime :: FormatTime t => t -> String
-wxPayUserPayRenderTime = formatTime locale fmt1
 -- {{{1
+wxPayUserPayRenderTime = formatTime locale fmt1
   where
     fmt1   = "%Y%m%d%H%M%S"
     locale = defaultTimeLocale
@@ -555,8 +554,8 @@ reqXmlTextField vars n = maybe
 
 
 reqXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m WxPayMoneyAmount
-reqXmlFeeField vars n = do
 -- {{{1
+reqXmlFeeField vars n = do
   amount_t <- reqXmlTextField vars n
   fmap WxPayMoneyAmount $
     maybe
@@ -567,8 +566,8 @@ reqXmlFeeField vars n = do
 
 
 optXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m (Maybe WxPayMoneyAmount)
-optXmlFeeField vars n = runMaybeT $ do
 -- {{{1
+optXmlFeeField vars n = runMaybeT $ do
   amount_t <- MaybeT $ return $ lookup n vars
   fmap WxPayMoneyAmount $
     maybe
@@ -583,8 +582,8 @@ reqXmlTimeField :: MonadThrow m
                 -> (String -> Maybe LocalTime)
                 -> Text
                 -> m UTCTime
-reqXmlTimeField vars parse_time n = do
 -- {{{1
+reqXmlTimeField vars parse_time n = do
   time_t <- reqXmlTextField vars n
   fmap (localTimeToUTC tz) $
     maybe
