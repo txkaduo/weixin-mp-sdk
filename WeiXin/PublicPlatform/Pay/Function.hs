@@ -31,6 +31,7 @@ import           Text.Parsec.TX.Utils   (SimpleStringRep (..), parseMaybeSimpleE
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
+import WeiXin.PublicPlatform.Utils      (utcTimeToEpochInt)
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Pay.Types
 import WeiXin.PublicPlatform.Pay.BankCode
@@ -54,6 +55,28 @@ wxPaySignInternal (WxPayAppKey ak) params_all =
 -- }}}1
 
 
+-- | generate signature for JS API: chooseWXPay
+wxPayJsSign :: WxPayAppKey
+            -> WxppAppID
+            -> UTCTime
+            -> Nonce
+            -> WxUserPayPrepayId
+            -> WxPaySignature
+-- {{{1
+wxPayJsSign ak app_id t (Nonce nonce_str) prepay_id =
+  wxPaySignInternal ak params_all
+  where
+    pkg_str = "prepay_id=" <> unWxUserPayPrepayId prepay_id
+    params_all = [ ("appId", unWxppAppID app_id)
+                 , ("timeStamp", tshow (utcTimeToEpochInt t))
+                 , ("nonceStr", nonce_str)
+                 , ("package", pkg_str)
+                 , ("signType", "MD5")
+                 ]
+-- }}}1
+
+
+-- | generate signature for XML diagrams
 wxPayXmlSign :: WxPayAppKey
              -> WxPayParams
              -- ^ not including: nonce_str, key
