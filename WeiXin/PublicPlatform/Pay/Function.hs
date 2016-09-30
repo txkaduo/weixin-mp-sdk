@@ -38,22 +38,32 @@ import WeiXin.PublicPlatform.Pay.BankCode
 
 
 -- | 微信签名算法
-wxPaySign :: WxPayAppKey
-          -> WxPayParams
-          -- ^ not including: nonce_str, key
-          -> Nonce
-          -> WxPaySignature
+wxPaySignInternal :: WxPayAppKey
+                  -> [(Text, Text)]
+                  -> WxPaySignature
 -- {{{1
-wxPaySign (WxPayAppKey ak) params (Nonce nonce_str) =
+wxPaySignInternal (WxPayAppKey ak) params_all =
   WxPaySignature $ toUpper $ fromString $
     C8.unpack $ B16.encode $ MD5.hash $ encodeUtf8 str_to_sign
   where
-    params_all  = insertMap "nonce_str" nonce_str $ params
     mks k v     = mconcat [ k, "=", v ]
     str_to_sign = intercalate "&" $
                     fmap (uncurry mks) $
                       filter (not . null . snd) $
-                        (sortBy (comparing fst) (mapToList params_all)) <> [("key", ak)]
+                        (sortBy (comparing fst) params_all) <> [("key", ak)]
+-- }}}1
+
+
+wxPayXmlSign :: WxPayAppKey
+             -> WxPayParams
+             -- ^ not including: nonce_str, key
+             -> Nonce
+             -> WxPaySignature
+-- {{{1
+wxPayXmlSign ak params (Nonce nonce_str) =
+  wxPaySignInternal ak (mapToList params_all)
+  where
+    params_all  = insertMap "nonce_str" nonce_str $ params
 -- }}}1
 
 
@@ -68,7 +78,7 @@ wxPayOutgoingXmlDoc app_key params nonce@(Nonce raw_nonce) =
   wxPayOutgoingXmlDocFromParams $ params <> mapFromList [ param_nonce, param_sign ]
   where
     param_nonce  = ("nonce_str", raw_nonce)
-    sign        = wxPaySign app_key params nonce
+    sign        = wxPayXmlSign app_key params nonce
     param_sign   = ("sign", unWxPaySignature sign)
 -- }}}1
 
@@ -105,7 +115,7 @@ wxPayParseIncomingXmlDoc app_key doc = do
   (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
   (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
   let params = params2
-  let sign2 = wxPaySign app_key params nonce
+  let sign2 = wxPayXmlSign app_key params nonce
 
   unless (sign2 == sign) $ do
     Left $ "incorrect signature"
