@@ -6,7 +6,7 @@ import ClassyPrelude
 -- {{{1 imports
 import           Control.DeepSeq        (NFData)
 import           Data.Binary            (Binary)
-import           Data.Aeson             (ToJSON(..), object, (.=))
+import           Data.Aeson             (FromJSON(..), ToJSON(..), object, (.=))
 import           Database.Persist.Sql   (PersistField (..), PersistFieldSql (..))
 import           Text.Blaze.Html        (ToMarkup (..))
 import           Text.Shakespeare.I18N  (ToMessage (..))
@@ -17,6 +17,7 @@ import           Text.Parsec.TX.Utils   (SimpleStringRep (..), deriveJsonS,
 import           Yesod.Helpers.Parsec   (derivePathPieceS)
 
 import WeiXin.PublicPlatform.Types
+import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Pay.BankCode
 -- }}}1
 
@@ -74,11 +75,17 @@ newtype WxMchTransDetailNo = WxMchTransDetailNo { unWxMchTransDetailNo :: Text }
 
 
 newtype WxPayAppKey = WxPayAppKey { unWxPayAppKey :: Text }
+-- {{{1 instances
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , PersistFieldSql, PersistField
+           , ToJSON
            , NFData
            , ToMessage, ToMarkup)
 
+instance FromJSON WxPayAppKey where
+  parseJSON = fmap WxPayAppKey
+                . (parseJSON >=> nonEmptyJsonText "WxPayAppKey id cannot be empty text")
+-- }}}1
 
 newtype WxPaySignature = WxPaySignature { unWxPaySignature :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
@@ -88,10 +95,17 @@ newtype WxPaySignature = WxPaySignature { unWxPaySignature :: Text }
 
 -- | 微信支付商户号
 newtype WxPayMchID = WxPayMchID { unWxPayMchID :: Text }
+-- {{{1 instances
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , PersistFieldSql, PersistField
+           , ToJSON
            , NFData
            , ToMessage, ToMarkup)
+
+instance FromJSON WxPayMchID where
+  parseJSON = fmap WxPayMchID
+                . (parseJSON >=> nonEmptyJsonText "WxPayMchID id cannot be empty text")
+-- }}}1
 
 
 -- | 微信支付的设备号
@@ -294,6 +308,31 @@ data WxUserPayStatus = WxUserPaySuccess
                      | WxUserPayUserPaying
                      | WxUserPayPayError
                      deriving (Show, Eq, Ord, Enum, Bounded)
+
+-- {{{1 instances
+$(derivePersistFieldS "WxUserPayStatus")
+$(derivePathPieceS "WxUserPayStatus")
+$(deriveJsonS "WxUserPayStatus")
+
+instance SimpleStringRep WxUserPayStatus where
+  simpleEncode WxUserPaySuccess    = "success"
+  simpleEncode WxUserPayRefund     = "refund"
+  simpleEncode WxUserPayNotPay     = "not_pay"
+  simpleEncode WxUserPayClosed     = "closed"
+  simpleEncode WxUserPayRevoked    = "revoked"
+  simpleEncode WxUserPayUserPaying = "paying"
+  simpleEncode WxUserPayPayError   = "error"
+
+  simpleParser = makeSimpleParserByTable
+                  [ ("success", WxUserPaySuccess)
+                  , ("refund", WxUserPayRefund)
+                  , ("not_pay", WxUserPayNotPay)
+                  , ("closed", WxUserPayClosed)
+                  , ("revoked", WxUserPayRevoked)
+                  , ("paying", WxUserPayUserPaying)
+                  , ("error", WxUserPayPayError)
+                  ]
+-- }}}1
 
 -- | 企业支付转账状态
 data WxMmTransStatus = WxMmTransStatusSccess
