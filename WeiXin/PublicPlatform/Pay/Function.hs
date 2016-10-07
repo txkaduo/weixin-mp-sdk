@@ -54,6 +54,12 @@ wxPaySignInternal (WxPayAppKey ak) params_all =
                         (sortBy (comparing fst) params_all) <> [("key", ak)]
 -- }}}1
 
+data WxPayJsSign = WxPayJsSign
+  { wxPayJsSignSignature :: WxPaySignature
+  , wxPayJsSignTimeStamp :: Int64
+  , wxPayJsSignPackage   :: Text
+  , wxPayJsSignType      :: Text
+  }
 
 -- | generate signature for JS API: chooseWXPay
 wxPayJsSign :: WxPayAppKey
@@ -61,17 +67,23 @@ wxPayJsSign :: WxPayAppKey
             -> UTCTime
             -> Nonce
             -> WxUserPayPrepayId
-            -> WxPaySignature
+            -> WxPayJsSign
 -- {{{1
 wxPayJsSign ak app_id t (Nonce nonce_str) prepay_id =
-  wxPaySignInternal ak params_all
+  WxPayJsSign
+    (wxPaySignInternal ak params_all)
+    ts
+    pkg_str
+    sign_type
   where
+    sign_type = "MD5"
+    ts = utcTimeToEpochInt t
     pkg_str = "prepay_id=" <> unWxUserPayPrepayId prepay_id
     params_all = [ ("appId", unWxppAppID app_id)
-                 , ("timeStamp", tshow (utcTimeToEpochInt t))
+                 , ("timeStamp", tshow ts)
                  , ("nonceStr", nonce_str)
                  , ("package", pkg_str)
-                 , ("signType", "MD5")
+                 , ("signType", sign_type)
                  ]
 -- }}}1
 
