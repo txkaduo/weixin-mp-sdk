@@ -87,6 +87,7 @@ checkSignature :: (HasWxppToken a, RenderMessage site FormMessage)
                -> Text  -- ^ GET param name of signature
                -> Text  -- ^ signed message text
                -> HandlerT site (HandlerT master IO) ()
+-- {{{1
 checkSignature foundation sign_param msg = do
 
     let token = getWxppToken foundation
@@ -108,6 +109,7 @@ checkSignature foundation sign_param msg = do
                       invalidArgs $ return err
 
       Right _   -> return ()
+-- }}}1
 
 
 -- | 用于修改 HandlerT 里日志的实现
@@ -137,6 +139,7 @@ realHandlerMsg :: forall site master a.
                => a
                -> ProcAppIdInfo
                -> HandlerT site (HandlerT master IO) Text
+-- {{{1
 realHandlerMsg foundation app_info = do
     checkSignature foundation "signature" ""
     m_enc_type <- lookupGetParam "encrypt_type"
@@ -278,6 +281,7 @@ realHandlerMsg foundation app_info = do
 
         to_app_id = procAppIdInfoReceiverId app_info
         my_app_id = procAppIdInfoMyId app_info
+-- }}}1
 
 
 -- | 生成随机字串作为 oauth 的state参数之用
@@ -286,6 +290,7 @@ realHandlerMsg foundation app_info = do
 wxppOAuthMakeRandomState :: (MonadHandler m)
                          => WxppAppID
                          -> m Text
+-- {{{1
 wxppOAuthMakeRandomState app_id = do
     m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
     case m_oauth_random_st of
@@ -296,6 +301,7 @@ wxppOAuthMakeRandomState app_id = do
                                 fmap B.pack $ replicateM 8 randomIO
             setSession (sessionKeyWxppOAuthState app_id) random_state
             return random_state
+-- }}}1
 
 
 wxppOAuthLoginRedirectUrl :: (MonadHandler m)
@@ -307,6 +313,7 @@ wxppOAuthLoginRedirectUrl :: (MonadHandler m)
                           -> Text             -- ^ oauth's state param
                           -> UrlText          -- ^ return URL
                           -> m UrlText
+-- {{{1
 wxppOAuthLoginRedirectUrl url_render m_comp_app_id app_id scope user_st return_url = do
     random_state <- wxppOAuthMakeRandomState app_id
     let state = random_state <> ":" <> user_st
@@ -318,6 +325,7 @@ wxppOAuthLoginRedirectUrl url_render m_comp_app_id app_id scope user_st return_u
                         oauth_retrurn_url
                         state
     return auth_url
+-- }}}1
 
 
 sessionKeyWxppUser :: WxppAppID -> Text
@@ -334,6 +342,7 @@ sessionMarkWxppUser :: MonadHandler m
                     -> WxppOpenID
                     -> Maybe WxppUnionID
                     -> m ()
+-- {{{1
 sessionMarkWxppUser app_id open_id m_union_id = do
     setSession (sessionKeyWxppUser app_id) (unWxppOpenID open_id)
     -- XXX: union id 目前设在一个指定的键下面。
@@ -341,6 +350,7 @@ sessionMarkWxppUser app_id open_id m_union_id = do
     case fmap unWxppUnionID m_union_id of
         Just union_id | not (null union_id) -> setSession sessionKeyWxppUnionId union_id
         _                                   -> deleteSession sessionKeyWxppUnionId
+-- }}}1
 
 
 -- | 从 session 里找已登录的 WxppOpenID
@@ -359,6 +369,7 @@ sessionGetWxppUserU app_id = runMaybeT $ do
 
 
 getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
+-- {{{1
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
     return_url <- reqPathPieceParamPostGet "return"
@@ -426,6 +437,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
             -- 授权失败
             defaultLayoutSub $ do
                 $(widgetFileReload def "oauth/user_denied")
+-- }}}1
 
 
 -- | 比较通用的处理从 oauth 重定向回来时的Handler的逻辑
@@ -434,6 +446,7 @@ wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, RenderMessage (HandlerSite m) 
                               => SomeWxppApiBroker
                               -> WxppAppID
                               -> m (Maybe (WxppOpenID, OAuthTokenInfo))
+-- {{{1
 wxppHandlerOAuthReturnGetInfo broker app_id = do
   m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt textField "code"
   case m_code of
@@ -466,6 +479,7 @@ wxppHandlerOAuthReturnGetInfo broker app_id = do
       _ -> do
         $logError "should never reach here"
         return Nothing
+-- }}}1
 
 
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数
@@ -479,6 +493,7 @@ wxppOAuthHandler :: (MonadHandler m, WxppCacheTemp c)
                 -> OAuthScope
                 -> ( OAuthAccessTokenPkg -> m a )
                 -> m a
+-- {{{1
 wxppOAuthHandler cache render_url m_comp_app_id app_id scope f = do
     m_atk_p <- wxppOAuthHandlerGetAccessTokenPkg cache app_id scope
     case m_atk_p of
@@ -490,6 +505,7 @@ wxppOAuthHandler cache render_url m_comp_app_id app_id scope f = do
             wxppOAuthLoginRedirectUrl render_url m_comp_app_id app_id scope "" (UrlText url)
                 >>= redirect . unUrlText
         Just atk_p -> f atk_p
+-- }}}1
 
 
 wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, WxppCacheTemp c)
@@ -497,6 +513,7 @@ wxppOAuthHandlerGetAccessTokenPkg :: (MonadHandler m, WxppCacheTemp c)
                                     -> WxppAppID
                                     -> OAuthScope
                                     -> m (Maybe OAuthAccessTokenPkg)
+-- {{{1
 wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
     m_oauth_st <- sessionGetWxppUser app_id
     case m_oauth_st of
@@ -507,6 +524,7 @@ wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
             case m_atk_info of
                 Nothing         -> return Nothing
                 Just atk_info   -> return $ Just (packOAuthTokenInfo app_id open_id atk_info)
+-- }}}1
 
 -- | 演示/测试微信 oauth 授权的页面
 getOAuthTestR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
@@ -542,6 +560,7 @@ mimicServerBusy s = sendResponse $ toJSON $
 
 forwardWsResult :: (ToJSON a) =>
     String -> Either WxppWsCallError a -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+-- {{{1
 forwardWsResult op_name res = do
     case res of
         Left (WxppWsErrorApp err) -> do
@@ -554,6 +573,7 @@ forwardWsResult op_name res = do
 
         Right x -> do
             return $ toJSON x
+-- }}}1
 
 -- | 提供 access-token
 -- 为重用代码，错误报文格式与微信平台接口一样
@@ -568,6 +588,7 @@ getGetAccessTokenR = checkWaiReqThen $ \foundation -> do
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 Maybe WxppUnionID
 getGetUnionIDR :: WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+-- {{{1
 getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     let sm_mode = wxppSubMakeupUnionID $ wxppSubOptions foundation
@@ -580,11 +601,13 @@ getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
 
             (tryWxppWsResult $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id)
                 >>= forwardWsResult "wxppCacheLookupUserInfo"
+-- }}}1
 
 
 -- | 初始化 WxppUserCachedInfo 表的数据
 getInitCachedUsersR ::
     HandlerT MaybeWxppSub (HandlerT master IO) Value
+-- {{{1
 getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     atk <- getAccessTokenSubHandler' foundation
@@ -595,11 +618,13 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
                 return ()
 
     return $ toJSON ("run in background" :: Text)
+-- }}}1
 
 
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
 -- 逻辑返回值是 EndUserQueryResult
 getQueryUserInfoR :: WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+-- {{{1
 getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     atk <- getAccessTokenSubHandler' foundation
@@ -613,11 +638,14 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
       (flip runReaderT (wxppSubApiEnv foundation) $ wxppQueryEndUserInfo atk open_id)
       >>= return . fix_uid
       >>= forwardWsResult "wxppQueryEndUserInfo"
+-- }}}1
+
 
 -- | 模仿创建永久场景的二维码
 -- 行为接近微信平台的接口，区别是
 -- 输入仅仅是一个 WxppScene
 postCreateQrCodePersistR :: HandlerT MaybeWxppSub (HandlerT master IO) Value
+-- {{{1
 postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
     let api_env = wxppSubApiEnv foundation
     alreadyExpired
@@ -635,11 +663,13 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
             atk <- getAccessTokenSubHandler' foundation
             flip runReaderT api_env $ do
               liftM toJSON $ wxppQrCodeCreatePersist atk scene
+-- }}}1
 
 
 -- | 返回一个二维码图像
 -- 其内容是 WxppScene 用 JSON 格式表示之后的字节流
 getShowSimulatedQRCodeR :: HandlerT MaybeWxppSub (HandlerT master IO) TypedContent
+-- {{{1
 getShowSimulatedQRCodeR = do
     ticket_s <- lookupGetParam "ticket"
                 >>= maybe (httpErrorRetryWithValidParams ("missing ticket" :: Text)) return
@@ -659,6 +689,7 @@ getShowSimulatedQRCodeR = do
     let input = C8.unpack $ LB.toStrict $ A.encode scene
     bs <- encodeStringQRCodeJpeg 5 input
     return $ toTypedContent (typeSvg, toContent bs)
+-- }}}1
 
 
 -- | 返回与输入的 union id 匹配的所有 open id 及 相应的 app_id
@@ -680,6 +711,7 @@ getTpEventNoticeR = withSiteLogFuncInHandlerT $ do
   runInputGet $ ireq textField "echostr"
 
 postTpEventNoticeR :: Yesod master => HandlerT WxppTpSub (HandlerT master IO) Text
+-- {{{1
 postTpEventNoticeR = do
   foundation <- getYesod
   req <- waiRequest
@@ -729,6 +761,7 @@ postTpEventNoticeR = do
       parse_xml_lbs x  = case parseLBS def x of
                               Left ex     -> Left $ "Failed to parse XML: " <> show ex
                               Right xdoc  -> return xdoc
+-- }}}1
 
 
 -- | 第三方平台接收公众号消息与事件的端点入口
@@ -778,6 +811,7 @@ checkWaiReqThenNA f = do
 
 decodePostBodyAsYaml :: (FromJSON a) =>
     HandlerT MaybeWxppSub (HandlerT master IO) a
+-- {{{1
 decodePostBodyAsYaml = do
     body <- rawRequestBody $$ sinkLbs
     case decodeEither' (LB.toStrict body) of
@@ -788,6 +822,7 @@ decodePostBodyAsYaml = do
                 ("retry wtih valid request JSON body" :: Text)
 
         Right x -> return x
+-- }}}1
 
 
 getAccessTokenSubHandler' ::
@@ -807,6 +842,7 @@ fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
 initWxppUserDbCacheOfApp ::
     ( MonadIO m, MonadLogger m, MonadThrow m) =>
     WxppApiEnv -> AccessToken -> ReaderT WxppDbBackend m Int
+-- {{{1
 initWxppUserDbCacheOfApp api_env atk = do
     flip runReaderT api_env $ do
       wxppGetEndUserSource atk
@@ -838,6 +874,7 @@ initWxppUserDbCacheOfApp api_env atk = do
                 lift transactionSave
 
             yield ()
+-- }}}1
 
 
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
