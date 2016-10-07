@@ -8,6 +8,7 @@ module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
     ) where
 
+-- {{{1
 import ClassyPrelude
 import Yesod
 import qualified Data.ByteString            as B
@@ -36,6 +37,7 @@ import Yesod.Helpers.Handler                ( httpErrorRetryWithValidParams
                                             )
 import Yesod.Helpers.Types                  (B64UByteStringPathPiece(..))
 import Yesod.Helpers.Logger
+import Yesod.Helpers.Utils                  (urlUpdateQueryText)
 import Control.Monad.Logger
 
 import Network.Wai                          (lazyRequestBody)
@@ -68,6 +70,7 @@ import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.OAuth
 import WeiXin.PublicPlatform.ThirdParty
 import WeiXin.PublicPlatform.Utils
+-- }}}1
 
 
 withWxppSubHandler :: ( MonadHandler m, HandlerSite m ~ MaybeWxppSub)
@@ -836,3 +839,93 @@ initWxppUserDbCacheOfApp api_env atk = do
 
             yield ()
 
+
+-- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
+-- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
+--       不适用于第三方平台
+yesodMakeSureInWxLoggedIn :: ( MonadHandler m, Yesod (HandlerSite m)
+                             , RenderMessage (HandlerSite m) FormMessage
+                             , MonadLogger m, MonadCatch m
+                             , HasWxppUrlConfig e, HasWreqSession e
+                             )
+                          => e
+                          -> (WxppAppID -> m (Maybe WxppAppSecret))
+                          -> (UrlText -> m UrlText)
+                          -- ^ 修改微信返回地址
+                          -> WxppAppID
+                          -> m a
+                          -- ^ 确实不能取得 open id　时调用
+                          -> (WxppOpenID -> m a)
+                          -- ^ 取得 open_id 之后调用这个函数
+                          -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
+                          -> m a
+-- {{{1
+yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url app_id h_no_id h = do
+  m_open_id <- sessionGetWxppUser app_id
+  case m_open_id of
+    Just open_id -> h open_id
+    Nothing -> do
+      m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt hiddenField "code"
+      case m_code of
+        Just code | not (deniedOAuthCode code) -> do
+          err_or_open_id <- runExceptT $ do
+            m_state <- lift $ lookupGetParam "state"
+            m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
+            unless (m_expected_state == m_state) $ do
+              $logError $ "OAuth state check failed, got: " <> tshow m_state
+              throwError $ "unexpected state"
+
+            m_secret <- lift $ get_secret app_id
+            secret <- case m_secret of
+                        Nothing -> do
+                          $logError $ "cannot get app secret from cache server"
+                          throwError $ asString "no secret"
+                        Just x -> return x
+
+            err_or_atk_info <- tryWxppWsResult $ flip runReaderT wx_api_env $
+                                wxppOAuthGetAccessToken app_id secret code
+            oauth_atk_info <- case err_or_atk_info of
+                            Left err -> do
+                                $logError $
+                                    "wxppOAuthGetAccessToken failed: " <> tshow err
+                                throwError "wxppOAuthGetAccessToken failed"
+
+                            Right x -> return x
+
+            let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
+
+            oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo' oauth_atk_pkg
+            return $ oauthUserInfoOpenID oauth_user_info
+
+          case err_or_open_id of
+            Left _        -> throwM $ userError "微信接口错误，请稍后重试"
+            Right open_id -> h open_id
+
+        _ -> do
+          m_state <- lookupGetParam "state"
+          if isJust m_state
+             then do
+               -- 说明当前已经是从微信认证回来的回调
+               h_no_id
+
+             else do
+               let scope = AS_SnsApiBase
+               random_state <- wxppOAuthMakeRandomState app_id
+               current_url <- getCurrentUrl
+               let oauth_return_url    = UrlText $ fromMaybe current_url $ fmap pack $
+                                           urlUpdateQueryText
+                                               (filter (flip onotElem ["state", "code"] . fst))
+                                               (unpack current_url)
+               oauth_retrurn_url2  <- fix_return_url oauth_return_url
+               let oauth_url = wxppOAuthRequestAuthInsideWx
+                                   Nothing -- ^ not third-prty
+                                   app_id
+                                   scope
+                                   oauth_retrurn_url2
+                                   random_state
+
+               redirect oauth_url
+-- }}}1
+
+
+-- vim: set foldmethod=marker:
