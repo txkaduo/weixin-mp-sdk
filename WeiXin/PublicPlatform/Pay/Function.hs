@@ -54,11 +54,15 @@ wxPaySignInternal (WxPayAppKey ak) params_all =
                         (sortBy (comparing fst) params_all) <> [("key", ak)]
 -- }}}1
 
-data WxPayJsSign = WxPayJsSign
-  { wxPayJsSignSignature :: WxPaySignature
-  , wxPayJsSignTimeStamp :: Int64
-  , wxPayJsSignPackage   :: Text
-  , wxPayJsSignType      :: Text
+
+-- | 微信JSSDK chooseWXPay 或旧版接口 WeixinJSBridge的getBrandWCPayRequest所需的参数对象
+data WxPayJsArgs = WxPayJsArgs
+  { wxPayJsArgsSignature :: WxPaySignature
+  , wxPayJsArgsAppId     :: WxppAppID
+  , wxPayJsArgsNonce     :: Nonce
+  , wxPayJsArgsTimeStamp :: Int64
+  , wxPayJsArgsPackage   :: Text
+  , wxPayJsArgsType      :: Text
   }
 
 -- | generate signature for JS API: chooseWXPay
@@ -67,11 +71,13 @@ wxPayJsSign :: WxPayAppKey
             -> UTCTime
             -> Nonce
             -> WxUserPayPrepayId
-            -> WxPayJsSign
+            -> WxPayJsArgs
 -- {{{1
-wxPayJsSign ak app_id t (Nonce nonce_str) prepay_id =
-  WxPayJsSign
+wxPayJsSign ak app_id t nonce@(Nonce nonce_str) prepay_id =
+  WxPayJsArgs
     (wxPaySignInternal ak params_all)
+    app_id
+    nonce
     ts
     pkg_str
     sign_type
