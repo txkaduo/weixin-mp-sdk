@@ -14,7 +14,7 @@ import qualified Data.ByteString.Char8  as C8
 import qualified Data.ByteString.Lazy   as LB
 import           Data.Default           (def)
 import           Data.Monoid            (Endo (..))
-import           Data.Aeson             (object, (.=), encode)
+import           Data.Aeson             (object, (.=), encode, ToJSON(..))
 import qualified Data.Text.Lazy         as LT
 import           Data.Time              (LocalTime, hoursToTimeZone,
                                          localTimeToUTC, FormatTime)
@@ -57,13 +57,26 @@ wxPaySignInternal (WxPayAppKey ak) params_all =
 
 -- | 微信JSSDK chooseWXPay 或旧版接口 WeixinJSBridge的getBrandWCPayRequest所需的参数对象
 data WxPayJsArgs = WxPayJsArgs
+-- {{{1 fields and ops
   { wxPayJsArgsSignature :: WxPaySignature
   , wxPayJsArgsAppId     :: WxppAppID
   , wxPayJsArgsNonce     :: Nonce
   , wxPayJsArgsTimeStamp :: Int64
   , wxPayJsArgsPackage   :: Text
-  , wxPayJsArgsType      :: Text
+  , wxPayJsArgsSignType  :: Text
   }
+
+instance ToJSON WxPayJsArgs where
+  toJSON x = object [ "appId" .= wxPayJsArgsAppId x
+                    , "timeStamp" .= wxPayJsArgsTimeStamp x
+                    , "timestamp" .= wxPayJsArgsTimeStamp x
+                    -- duplicate to make it compatible with both chooseWXPay and getBrandWCPayRequest
+                    , "nonceStr" .= unNounce (wxPayJsArgsNonce x)
+                    , "package" .= wxPayJsArgsPackage x
+                    , "signType" .= wxPayJsArgsSignType x
+                    , "paySign" .= unWxPaySignature (wxPayJsArgsSignature x)
+                    ]
+-- }}}1
 
 -- | generate signature for JS API: chooseWXPay
 wxPayJsSign :: WxPayAppKey
