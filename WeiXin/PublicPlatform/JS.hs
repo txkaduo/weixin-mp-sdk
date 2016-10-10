@@ -78,12 +78,6 @@ wxppJsApiSignatureIO ticket url = liftIO $ do
 -- }}}1
 
 
--- | 因为目前没找到可能的方法在服务器端能确保取出当前页面的URL
--- yesod-helpers 的 getCurrentUrl 只是一个能回到相同的 route 的 url
--- (它依赖配置文件而变）
--- 目前的解释办法是：调用者（服务器端）提供一个它认为正确的url
--- js 里（客户端）判断当前页面与服务器预期的不一致的话，
--- 则重定向至服务器预期的地址上去
 wxppJsApiConfig :: MonadIO m
                 => WxppAppID
                 -> WxppJsTicket
@@ -93,25 +87,38 @@ wxppJsApiConfig :: MonadIO m
                 -> m (JavascriptUrl url)
 -- {{{1
 wxppJsApiConfig app_id ticket debug url api_list = do
-    config_obj <- wxppJsApiConfigJsVal app_id ticket debug url api_list
-    return $ [julius|
-        function get_hashless_url() {
-            var url = window.location.href;
-            var hash = window.location.hash;
-            var index_of_hash = url.lastIndexOf(hash);
-            if (index_of_hash > 0)
-            {
-                return url.substr(0, index_of_hash);
-            } else {
-                return url;
-            }
-        }
+  fmap (wxppJsApiConfigCode url) $ wxppJsApiConfigJsVal app_id ticket debug url api_list
+-- }}}1
 
-        if (#{toJSON $ unUrlText url} != get_hashless_url()) {
-            window.location = #{toJSON $ unUrlText url};
-        }
 
-        wx.config(#{toJSON config_obj});|]
+-- | 因为目前没找到可能的方法在服务器端能确保取出当前页面的URL
+-- yesod-helpers 的 getCurrentUrl 只是一个能回到相同的 route 的 url
+-- (它依赖配置文件而变）
+-- 目前的解释办法是：调用者（服务器端）提供一个它认为正确的url
+-- js 里（客户端）判断当前页面与服务器预期的不一致的话，
+-- 则重定向至服务器预期的地址上去
+wxppJsApiConfigCode :: UrlText -> Value -> JavascriptUrl url
+-- {{{1
+wxppJsApiConfigCode url config_obj =
+  [julius|
+    function get_hashless_url() {
+        var url = window.location.href;
+        var hash = window.location.hash;
+        var index_of_hash = url.lastIndexOf(hash);
+        if (index_of_hash > 0)
+        {
+            return url.substr(0, index_of_hash);
+        } else {
+            return url;
+        }
+    }
+
+    if (#{toJSON $ unUrlText url} != get_hashless_url()) {
+        window.location = #{toJSON $ unUrlText url};
+    }
+
+    wx.config(#{toJSON config_obj});
+  |]
 -- }}}1
 
 
