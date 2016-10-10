@@ -8,7 +8,7 @@ import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
-import Control.Lens
+import Control.Lens                         hiding ((.=))
 import Data.Aeson
 import Data.Time                            (NominalDiffTime, addUTCTime)
 import Data.Time.Clock.POSIX                (getPOSIXTime)
@@ -93,7 +93,7 @@ wxppJsApiConfig :: MonadIO m
                 -> m (JavascriptUrl url)
 -- {{{1
 wxppJsApiConfig app_id ticket debug url api_list = do
-    (sign, (ptime, Nonce nonce)) <- wxppJsApiSignatureIO ticket url
+    config_obj <- wxppJsApiConfigJsVal app_id ticket debug url api_list
     return $ [julius|
         function get_hashless_url() {
             var url = window.location.href;
@@ -111,13 +111,29 @@ wxppJsApiConfig app_id ticket debug url api_list = do
             window.location = #{toJSON $ unUrlText url};
         }
 
-        wx.config({ debug: #{toJSON debug}, // 开启调试模式,调用的所有api的返回值会在客户端alert出来，若要查看传入的参数，可以在pc端打开，参数信息会通过log打出，仅在pc端时才会打印。 
-            appId: #{toJSON app_id}, // 必填，公众号的唯一标识
-            timestamp: #{toJSON ptime}, // 必填，生成签名的时间戳
-            nonceStr: #{toJSON nonce}, // 必填，生成签名的随机串
-            signature: #{toJSON $ T.toLower $ fromString $ C8.unpack $ B16.encode sign},// 必填，签名，见附录1
-            jsApiList: #{toJSON api_list} // 必填，需要使用的JS接口列表，所有JS接口列表见附录2
-        });|]
+        wx.config(#{toJSON config_obj});|]
+-- }}}1
+
+
+-- | 返回一个可以用于 wx.config 的参数对象
+wxppJsApiConfigJsVal :: MonadIO m
+                     => WxppAppID
+                     -> WxppJsTicket
+                     -> Bool
+                     -> UrlText
+                     -> [Text]   -- ^ API list
+                     -> m Value
+-- {{{1
+wxppJsApiConfigJsVal app_id ticket debug url api_list = do
+  (sign, (ptime, Nonce nonce)) <- wxppJsApiSignatureIO ticket url
+  return $ object
+    [ "debug" .= debug --  开启调试模式,调用的所有api的返回值会在客户端alert出来，若要查看传入的参数，可以在pc端打开，参数信息会通过log打出，仅在pc端时才会打印。 
+    , "appId" .= app_id -- 必填，公众号的唯一标识
+    , "timestamp" .= ptime -- 必填，生成签名的时间戳
+    , "nonceStr" .= nonce -- 必填，生成签名的随机串
+    , "signature" .= T.toLower (fromString $ C8.unpack $ B16.encode sign) -- 必填，签名，见附录1
+    , "jsApiList" .= api_list --  必填，需要使用的JS接口列表，所有JS接口列表见附录2
+    ]
 -- }}}1
 
 
