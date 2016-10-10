@@ -1,5 +1,6 @@
 module WeiXin.PublicPlatform.JS where
 
+-- {{{1 imports
 import ClassyPrelude hiding (catch)
 import qualified Crypto.Hash.SHA1           as SHA1
 import qualified Data.ByteString.Char8      as C8
@@ -18,6 +19,7 @@ import Control.Monad.Reader                 (asks)
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Security
+-- }}}1
 
 
 data JsTicketResult = JsTicketResult
@@ -33,6 +35,7 @@ instance FromJSON JsTicketResult where
 wxppGetJsTicket :: (WxppApiMonad env m)
                 => AccessToken
                 -> m JsTicketResult
+-- {{{1
 wxppGetJsTicket (AccessToken atk _app_id) = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
     let url = wxppUrlConfSecureApiBase url_conf <> "/ticket/getticket"
@@ -40,6 +43,7 @@ wxppGetJsTicket (AccessToken atk _app_id) = do
                         & param "type" .~ [ "jsapi" ]
 
     liftM snd $ liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal2'
+-- }}}1
 
 
 wxppJsApiSignature :: WxppJsTicket
@@ -47,6 +51,7 @@ wxppJsApiSignature :: WxppJsTicket
                     -> Int64
                     -> Nonce         -- ^ random string
                     -> ByteString
+-- {{{1
 wxppJsApiSignature (WxppJsTicket ticket) (UrlText url) ptime (Nonce noncestr) =
     SHA1.hash $ encodeUtf8 s_input
     where
@@ -56,18 +61,21 @@ wxppJsApiSignature (WxppJsTicket ticket) (UrlText url) ptime (Nonce noncestr) =
                     , ("url", url)
                     ]
         s_input = intercalate "&" $ flip map vars $ \(k, v) -> k <> "=" <> v
+-- }}}1
 
 
 wxppJsApiSignatureIO :: MonadIO m
                         => WxppJsTicket
                         -> UrlText
                         -> m (ByteString, (Int64, Nonce))
+-- {{{1
 wxppJsApiSignatureIO ticket url = liftIO $ do
     nonce <- wxppMakeNonce 16   
     ptime <- getPOSIXTime
     let ptime' = round ptime
     let sign = wxppJsApiSignature ticket url ptime' nonce
     return (sign, (ptime', nonce))
+-- }}}1
 
 
 -- | 因为目前没找到可能的方法在服务器端能确保取出当前页面的URL
@@ -83,6 +91,7 @@ wxppJsApiConfig :: MonadIO m
                 -> UrlText
                 -> [Text]   -- ^ API list
                 -> m (JavascriptUrl url)
+-- {{{1
 wxppJsApiConfig app_id ticket debug url api_list = do
     (sign, (ptime, Nonce nonce)) <- wxppJsApiSignatureIO ticket url
     return $ [julius|
@@ -109,6 +118,7 @@ wxppJsApiConfig app_id ticket debug url api_list = do
             signature: #{toJSON $ T.toLower $ fromString $ C8.unpack $ B16.encode sign},// 必填，签名，见附录1
             jsApiList: #{toJSON api_list} // 必填，需要使用的JS接口列表，所有JS接口列表见附录2
         });|]
+-- }}}1
 
 
 wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad env m
@@ -117,6 +127,7 @@ wxppAcquireAndSaveJsApiTicket :: ( WxppApiMonad env m
                                 => c
                                 -> WxppAppID
                                 -> m ()
+-- {{{1
 wxppAcquireAndSaveJsApiTicket cache app_id = do
     now <- liftIO getCurrentTime
     m_atk_info <- wxppGetUsableAccessToken cache app_id
@@ -132,12 +143,14 @@ wxppAcquireAndSaveJsApiTicket cache app_id = do
             liftIO $ wxppCacheAddJsTicket cache app_id ticket expiry
             $logDebugS wxppLogSource $
                 "JS ticket refreshed, app_id=" <> unWxppAppID app_id
+-- }}}1
 
 
 wxppJsSDKUrl :: UrlText
 wxppJsSDKUrl = UrlText $ "http://res.wx.qq.com/open/js/jweixin-1.1.0.js"
 
 wxppJsApiListAll :: [Text]
+-- }}}1
 wxppJsApiListAll =
     [ "onMenuShareTimeline"
     , "onMenuShareAppMessage"
@@ -175,3 +188,7 @@ wxppJsApiListAll =
     , "chooseCard"
     , "openCard"
     ]
+-- }}}1
+
+
+-- vim: set foldmethod=marker:
