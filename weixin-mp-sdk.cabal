@@ -76,9 +76,11 @@ library
                        WeiXin.PublicPlatform.Pay.Yesod
                        WeiXin.PublicPlatform.Pay.BankCode
                        WeiXin.PublicPlatform.ThirdParty
+                       WeiXin.PublicPlatform.About
                        WeiXin.PublicPlatform
 
-  -- other-modules:       
+  other-modules:       Paths_weixin_mp_sdk
+
   default-extensions:  NoImplicitPrelude
                        DeriveDataTypeable
                        OverloadedStrings
