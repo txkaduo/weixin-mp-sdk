@@ -68,7 +68,7 @@ data WxPayJsArgs = WxPayJsArgs
 
 instance ToJSON WxPayJsArgs where
   toJSON x = object [ "appId" .= wxPayJsArgsAppId x
-                    , "timeStamp" .= wxPayJsArgsTimeStamp x
+                    , "timeStamp" .= tshow ( wxPayJsArgsTimeStamp x )
                     , "timestamp" .= wxPayJsArgsTimeStamp x
                     -- duplicate to make it compatible with both chooseWXPay and getBrandWCPayRequest
                     , "nonceStr" .= unNounce (wxPayJsArgsNonce x)
