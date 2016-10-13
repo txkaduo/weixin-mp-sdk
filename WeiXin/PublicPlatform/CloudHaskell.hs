@@ -26,28 +26,26 @@ data CloudBackendInfo w = CloudBackendInfo
 
 -- | A middleware to send event notifications of some types to the cloud (async)
 data TeeEventToCloud = TeeEventToCloud
-                          WxppAppID
                           (CloudBackendInfo WrapInMsgHandlerInput)
                           [Text]
                             -- ^ event names to forward (wxppEventTypeString)
                             -- if null, forward all.
 
 instance JsonConfigable TeeEventToCloud where
-    type JsonConfigableUnconfigData TeeEventToCloud =
-            (WxppAppID, CloudBackendInfo WrapInMsgHandlerInput)
+    type JsonConfigableUnconfigData TeeEventToCloud = CloudBackendInfo WrapInMsgHandlerInput
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
     -- 然后从 json 数据中反解出相应的值
     isNameOfInMsgHandler _ = (== "tee-to-cloud")
 
-    parseWithExtraData _ (x1, x2) o = TeeEventToCloud x1 x2
+    parseWithExtraData _ x o = TeeEventToCloud x
                                         <$> o .: "event-types"
 
 instance (MonadIO m, MonadCatch m, MonadLogger m) => IsWxppInMsgProcMiddleware m TeeEventToCloud where
     preProcInMsg
-      (TeeEventToCloud app_id (CloudBackendInfo new_local_node get_ports) evt_types)
-      _cache bs ime = do
+      (TeeEventToCloud (CloudBackendInfo new_local_node get_ports) evt_types)
+      _cache app_info bs ime = do
           case wxppInMessage ime of
             WxppInMsgEvent evt -> do
               when (null evt_types || wxppEventTypeString evt `elem` evt_types) $ do
@@ -75,12 +73,13 @@ instance (MonadIO m, MonadCatch m, MonadLogger m) => IsWxppInMsgProcMiddleware m
             _ -> return ()
 
           return $ Just (bs, ime)
+          where
+            app_id = procAppIdInfoReceiverId app_info
 
 
 -- | A message handler that send WxppInMsgEntity to peers and wait for responses
 data DelegateInMsgToCloud (m :: * -> *) =
                           DelegateInMsgToCloud
-                              WxppAppID
                               (CloudBackendInfo (WrapInMsgHandlerInput, SendPort WxppInMsgHandlerResult))
                               Int
                                 -- ^ timeout (ms) when selecting processes to handle
@@ -88,7 +87,7 @@ data DelegateInMsgToCloud (m :: * -> *) =
 
 instance JsonConfigable (DelegateInMsgToCloud m) where
     type JsonConfigableUnconfigData (DelegateInMsgToCloud m) =
-            (WxppAppID, CloudBackendInfo (WrapInMsgHandlerInput, SendPort WxppInMsgHandlerResult))
+            CloudBackendInfo (WrapInMsgHandlerInput, SendPort WxppInMsgHandlerResult)
 
     -- | 假定每个算法的配置段都有一个 name 的字段
     -- 根据这个方法选择出一个指定算法类型，
@@ -96,7 +95,7 @@ instance JsonConfigable (DelegateInMsgToCloud m) where
     isNameOfInMsgHandler _ = (== "deletgate-to-cloud")
 
     -- | timeout number is a float in seconds
-    parseWithExtraData _ (x1, x2) o = DelegateInMsgToCloud x1 x2
+    parseWithExtraData _ x1 o = DelegateInMsgToCloud x1
                                   <$> (fmap (round . (* 1000000)) $
                                           o .:? "timeout" .!= (3 :: Float)
                                           -- 选择 3 秒超时是因为微信5秒超时
@@ -108,8 +107,8 @@ type instance WxppInMsgProcessResult (DelegateInMsgToCloud m) = WxppInMsgHandler
 instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
   => IsWxppInMsgProcessor m (DelegateInMsgToCloud m) where
     processInMsg
-      (DelegateInMsgToCloud app_id (CloudBackendInfo new_local_node get_ports) t1)
-      _cache bs ime = runExceptT $ do
+      (DelegateInMsgToCloud (CloudBackendInfo new_local_node get_ports) t1)
+      _cache app_info bs ime = runExceptT $ do
             send_port_list <- liftIO get_ports
             when (null send_port_list) $ do
               let msg = "No SendPort available in cloud haskell"
@@ -176,6 +175,9 @@ instance (MonadIO m, MonadLogger m, MonadBaseControl IO m, MonadCatch m)
                   throwError msg
 
             get_answer `catchAny` handle_err
+
+          where
+            app_id = procAppIdInfoReceiverId app_info
 
 
 -- | Cloud message that wraps incoming message info
