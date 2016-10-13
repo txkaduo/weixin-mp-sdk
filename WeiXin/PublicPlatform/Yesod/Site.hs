@@ -404,15 +404,18 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
             now <- liftIO getCurrentTime
             let expiry  = addUTCTime (oauthAtkTTL atk_info) now
                 open_id = oauthAtkOpenID atk_info
-                m_union_id = oauthAtkUnionID atk_info
-                atk_p   = OAuthAccessTokenPkg
-                            (oauthAtkToken atk_info)
-                            (oauthAtkRefreshToken atk_info)
-                            (oauthAtkScopes atk_info)
-                            open_id
-                            app_id
+                scopes  = oauthAtkScopes atk_info
+                atk_p   = packOAuthTokenInfo app_id open_id
+                            (fromOAuthAccessTokenResult now atk_info)
 
             liftIO $ wxppCacheAddOAuthAccessToken cache atk_p expiry
+
+            m_union_id <- if member AS_SnsApiUserInfo scopes
+                             then do
+                                oauth_user_info <- flip runReaderT api_env $ wxppOAuthGetUserInfo' atk_p
+                                return $ oauthUserInfoUnionID oauth_user_info
+
+                             else return Nothing
 
             sessionMarkWxppUser app_id open_id m_union_id
 

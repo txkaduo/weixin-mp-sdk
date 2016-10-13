@@ -1616,7 +1616,6 @@ data OAuthAccessTokenResult = OAuthAccessTokenResult {
                                 , oauthAtkScopes        :: Set OAuthScope
                                 , oauthAtkRefreshToken  :: OAuthRefreshToken
                                 , oauthAtkOpenID        :: WxppOpenID
-                                , oauthAtkUnionID       :: Maybe WxppUnionID
                                 }
                                 deriving (Eq, Show)
 
@@ -1638,7 +1637,6 @@ instance FromJSON OAuthAccessTokenResult where
                         <*> (fmap Set.fromList $ o .: "scope" >>= parseTextByParsec p_scopes)
                         <*> o .: "refresh_token"
                         <*> o .: "openid"
-                        <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
                 where
                     p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
 
