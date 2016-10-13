@@ -889,23 +889,24 @@ yesodMakeSureInWxLoggedIn :: ( MonadHandler m, Yesod (HandlerSite m)
                           -> (WxppAppID -> m (Maybe WxppAppSecret))
                           -> (UrlText -> m UrlText)
                           -- ^ 修改微信返回地址
+                          -> OAuthScope
                           -> WxppAppID
                           -> m a
                           -- ^ 确实不能取得 open id　时调用
-                          -> (WxppOpenID -> m a)
+                          -> (WxppOpenID -> Maybe WxppUnionID -> m a)
                           -- ^ 取得 open_id 之后调用这个函数
                           -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
                           -> m a
 -- {{{1
-yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url app_id h_no_id h = do
-  m_open_id <- sessionGetWxppUser app_id
-  case m_open_id of
-    Just open_id -> h open_id
+yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url scope app_id h_no_id h = do
+  m_wx_id <- sessionGetWxppUserU app_id
+  case m_wx_id of
+    Just (open_id, m_union_id) -> h (getWxppOpenID open_id) m_union_id
     Nothing -> do
       m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt hiddenField "code"
       case m_code of
         Just code | not (deniedOAuthCode code) -> do
-          err_or_open_id <- runExceptT $ do
+          err_or_wx_id <- runExceptT $ do
             m_state <- lift $ lookupGetParam "state"
             m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
             unless (m_expected_state == m_state) $ do
@@ -929,14 +930,22 @@ yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url app_id h_no_id h 
 
                             Right x -> return x
 
-            let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
+            let open_id = oauthAtkOpenID oauth_atk_info
+                scopes = oauthAtkScopes oauth_atk_info
 
-            oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo' oauth_atk_pkg
-            return $ oauthUserInfoOpenID oauth_user_info
+            if member AS_SnsApiUserInfo scopes
+               then do
+                  let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
 
-          case err_or_open_id of
+                  oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo' oauth_atk_pkg
+                  return $ (open_id, oauthUserInfoUnionID oauth_user_info)
+
+               else do
+                  return $ (open_id, Nothing)
+
+          case err_or_wx_id of
             Left _        -> throwM $ userError "微信接口错误，请稍后重试"
-            Right open_id -> h open_id
+            Right (open_id, m_union_id) -> h open_id m_union_id
 
         _ -> do
           m_state <- lookupGetParam "state"
@@ -946,7 +955,6 @@ yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url app_id h_no_id h 
                h_no_id
 
              else do
-               let scope = AS_SnsApiBase
                random_state <- wxppOAuthMakeRandomState app_id
                current_url <- getCurrentUrl
                let oauth_return_url    = UrlText $ fromMaybe current_url $ fmap pack $
