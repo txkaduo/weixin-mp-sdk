@@ -410,7 +410,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
             liftIO $ wxppCacheAddOAuthAccessToken cache atk_p expiry
 
-            m_union_id <- if member AS_SnsApiUserInfo scopes
+            m_union_id <- if member AS_SnsApiUserInfo scopes || member AS_SnsApiLogin scopes
                              then do
                                 oauth_user_info <- flip runReaderT api_env $ wxppOAuthGetUserInfo' atk_p
                                 return $ oauthUserInfoUnionID oauth_user_info
