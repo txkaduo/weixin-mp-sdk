@@ -887,8 +887,10 @@ yesodMakeSureInWxLoggedIn :: ( MonadHandler m, Yesod (HandlerSite m)
                              , RenderMessage (HandlerSite m) FormMessage
                              , MonadLogger m, MonadCatch m
                              , HasWxppUrlConfig e, HasWreqSession e
+                             , WxppCacheTemp c
                              )
                           => e
+                          -> c
                           -> (WxppAppID -> m (Maybe WxppAppSecret))
                           -> (UrlText -> m UrlText)
                           -- ^ 修改微信返回地址
@@ -901,7 +903,7 @@ yesodMakeSureInWxLoggedIn :: ( MonadHandler m, Yesod (HandlerSite m)
                           -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
                           -> m a
 -- {{{1
-yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url scope app_id h_no_id h = do
+yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_id h_no_id h = do
   m_wx_id <- sessionGetWxppUserU app_id
   case m_wx_id of
     Just (open_id, m_union_id) -> h (getWxppOpenID open_id) m_union_id
@@ -939,8 +941,10 @@ yesodMakeSureInWxLoggedIn wx_api_env get_secret fix_return_url scope app_id h_no
             if member AS_SnsApiUserInfo scopes
                then do
                   let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
+                      lang = "zh_CN"
 
-                  oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo' oauth_atk_pkg
+                  oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo lang oauth_atk_pkg
+                  liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
                   return $ (open_id, oauthUserInfoUnionID oauth_user_info)
 
                else do
