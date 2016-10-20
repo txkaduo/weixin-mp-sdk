@@ -1755,6 +1755,36 @@ procAppIdInfoReceiverId :: ProcAppIdInfo -> WxppAppID
 procAppIdInfoReceiverId (ProcAppSingle x)       = x
 procAppIdInfoReceiverId (ProcAppThirdParty _ x) = x
 
+
+-- | WxppAppID 所对应的概念现在已包括
+-- 微信订阅号，服务号，WEB应用
+data WxAppKind = WxAppKindPublisher   -- ^ 订阅号
+               | WxAppKindServer      -- ^ 服务号
+               | WxAppKindWeb         -- ^ PC网页应用
+               | WxAppKindThirdParty  -- ^ 第三方平台
+               deriving (Show, Eq, Ord, Enum, Bounded, Generic)
+
+-- {{{1 instances
+instance NFData WxAppKind
+
+$(derivePersistFieldS "WxAppKind")
+$(derivePathPieceS "WxAppKind")
+$(deriveJsonS "WxAppKind")
+
+instance SimpleStringRep WxAppKind where
+  simpleEncode WxAppKindPublisher  = "publisher"
+  simpleEncode WxAppKindServer     = "server"
+  simpleEncode WxAppKindWeb        = "web"
+  simpleEncode WxAppKindThirdParty = "third-party"
+
+  simpleParser = makeSimpleParserByTable
+                    [ ("publisher", WxAppKindPublisher)
+                    , ("server", WxAppKindServer)
+                    , ("web", WxAppKindWeb)
+                    , ("third-party", WxAppKindThirdParty)
+                    ]
+-- }}}1
+
 --------------------------------------------------------------------------------
 
 wxppLogSource :: IsString a => a

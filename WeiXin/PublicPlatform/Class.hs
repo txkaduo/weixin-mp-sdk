@@ -201,14 +201,14 @@ instance HasAccessToken (IO (Maybe (AccessToken, UTCTime))) where
 -- | 微信用户的信息
 -- 有两种来源，一是从已关注用户信息中取，另一种是oauth接口取任意授权用户的信息
 data WxUserInfo = WxUserInfo
-  { wxUserInfoOpenID         :: WxppOpenID
-  , wxUserInfoNickname     :: Text
-  , wxUserInfoGender       :: Maybe Gender
-  , wxUserInfoCountry      :: Text
-  , wxUserInfoProvince     :: Text
-  , wxUserInfoCity         :: Text
-  , wxUserInfoHeadImgUrl   :: Maybe UrlText
-  , wxUserInfoUnionID      :: Maybe WxppUnionID
+  { wxUserInfoOpenID     :: WxppOpenID
+  , wxUserInfoNickname   :: Text
+  , wxUserInfoGender     :: Maybe Gender
+  , wxUserInfoCountry    :: Text
+  , wxUserInfoProvince   :: Text
+  , wxUserInfoCity       :: Text
+  , wxUserInfoHeadImgUrl :: Maybe UrlText
+  , wxUserInfoUnionID    :: Maybe WxppUnionID
   }
 
 instance ToJSON WxUserInfo where
