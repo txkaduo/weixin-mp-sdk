@@ -5,6 +5,7 @@ module WeiXin.PublicPlatform.Class
 
 import ClassyPrelude
 import Text.Shakespeare.I18N                (Lang)
+import Data.Aeson                           (ToJSON(..), object, (.=))
 import Data.Time                            (NominalDiffTime, diffUTCTime)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
@@ -195,6 +196,52 @@ instance HasAccessToken a => HasAccessToken (a, b) where
 
 instance HasAccessToken (IO (Maybe (AccessToken, UTCTime))) where
     wxppGetAccessToken = id
+
+
+-- | 微信用户的信息
+-- 有两种来源，一是从已关注用户信息中取，另一种是oauth接口取任意授权用户的信息
+data WxUserInfo = WxUserInfo
+  { wxUserInfoOpenID         :: WxppOpenID
+  , wxUserInfoNickname     :: Text
+  , wxUserInfoGender       :: Maybe Gender
+  , wxUserInfoCountry      :: Text
+  , wxUserInfoProvince     :: Text
+  , wxUserInfoCity         :: Text
+  , wxUserInfoHeadImgUrl   :: Maybe UrlText
+  , wxUserInfoUnionID      :: Maybe WxppUnionID
+  }
+
+instance ToJSON WxUserInfo where
+  toJSON x = object [ "open_id" .= wxUserInfoOpenID x
+                    , "nickname" .= wxUserInfoNickname x
+                    , "gender" .= genderToInt (wxUserInfoGender x)
+                    , "country" .= wxUserInfoCountry x
+                    , "province" .= wxUserInfoProvince x
+                    , "city" .= wxUserInfoCity x
+                    , "head_img_url" .= wxUserInfoHeadImgUrl x
+                    , "union_id" .= wxUserInfoUnionID x
+                    ]
+
+class MayHaveWxUserInfo a where
+  mayGetWxUserInfo :: a -> Maybe WxUserInfo
+
+instance MayHaveWxUserInfo OAuthGetUserInfoResult where
+  mayGetWxUserInfo x = Just $ WxUserInfo
+                        (oauthUserInfoOpenID x)
+                        (oauthUserInfoNickname x)
+                        (oauthUserInfoGender x)
+                        (oauthUserInfoCountry x)
+                        (oauthUserInfoProvince x)
+                        (oauthUserInfoCity x)
+                        (oauthUserInfoHeadImgUrl x)
+                        (oauthUserInfoUnionID x)
+
+instance MayHaveWxUserInfo EndUserQueryResult where
+  mayGetWxUserInfo (EndUserQueryResultNotSubscribed {}) = Nothing
+  mayGetWxUserInfo
+    (EndUserQueryResult open_id nickname m_gender _ city province country head_img_url _stime m_union_id)
+    = Just $ WxUserInfo open_id nickname m_gender country province city head_img_url m_union_id
+
 
 
 wxppGetUsableAccessToken :: (MonadIO m, WxppCacheTokenReader c) =>
