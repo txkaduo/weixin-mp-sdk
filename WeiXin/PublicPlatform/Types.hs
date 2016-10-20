@@ -8,6 +8,7 @@ module WeiXin.PublicPlatform.Types
     , UrlText(..)
     ) where
 
+-- {{{1
 import ClassyPrelude hiding (try, optional)
 import Control.DeepSeq                      (NFData)
 import Data.SafeCopy
@@ -54,6 +55,7 @@ import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 
 import WeiXin.PublicPlatform.Utils
+-- }}}1
 
 
 class ToEnumEither a where
@@ -74,6 +76,7 @@ data WxppUrlConfig = WxppUrlConfig
   }
   deriving (Show)
 
+-- {{{1 instances for WxppUrlConfig
 instance Default WxppUrlConfig where
   def = WxppUrlConfig
     { wxppUrlConfSecureApiBase    = "https://api.weixin.qq.com/cgi-bin"
@@ -104,6 +107,7 @@ instance FromJSON WxppUrlConfig where
         upd_wxppUrlConfFileApiBase x c   = c { wxppUrlConfFileApiBase = x }
         upd_wxppUrlConfUserPayApiBase x c = c { wxppUrlConfUserPayApiBase = x }
         upd_wxppUrlConfMmPayApiBase x c  = c { wxppUrlConfMmPayApiBase = x }
+-- }}}1
 
 
 -- | 微信用户名
@@ -305,6 +309,7 @@ data WxppScene =    WxppSceneInt WxppIntSceneID
                     | WxppSceneStr WxppStrSceneID
                     deriving (Show, Eq, Ord, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData WxppScene
 instance Binary WxppScene
 
@@ -321,28 +326,6 @@ instance FromJSON WxppScene where
                 when ( T.length t < 1 || T.length t > 64) $ do
                     fail $ "invalid scene id str length"
                 return $ WxppSceneStr $ WxppStrSceneID t
-
-
--- | 创建二维码接口的返回报文
-data WxppMakeSceneResult = WxppMakeSceneResult
-                                QRTicket
-                                (Maybe NominalDiffTime)
-                                UrlText
-
-instance FromJSON WxppMakeSceneResult where
-    parseJSON = withObject "WxppMakeSceneResult" $ \obj -> do
-                    WxppMakeSceneResult
-                        <$> ( obj .: "ticket" )
-                        <*> ( fmap (fromIntegral :: Int -> NominalDiffTime) <$> obj .:? "expire_seconds")
-                        <*> ( UrlText <$> obj .: "url" )
-
-instance ToJSON WxppMakeSceneResult where
-    toJSON (WxppMakeSceneResult ticket m_ttl url) =
-        object  $ catMaybes $
-                [ Just $ "ticket" .= ticket
-                , flip fmap m_ttl $ \ttl -> "expire_seconds" .= (round ttl :: Int)
-                , Just $ "url" .= unUrlText url
-                ]
 
 -- | 此实例实现对应于 WxppScene 在 XML 的编码方式
 -- qrscene 前缀见“接收事件推送”一文
@@ -364,25 +347,39 @@ instance SimpleStringRep WxppScene where
             parse_as_str = do
                 _ <- optional $ string "qrscene_"
                 WxppSceneStr . WxppStrSceneID . fromString <$> many1 anyChar
+-- }}}1
+
+
+-- | 创建二维码接口的返回报文
+data WxppMakeSceneResult = WxppMakeSceneResult
+                                QRTicket
+                                (Maybe NominalDiffTime)
+                                UrlText
+
+-- {{{1 instances
+instance FromJSON WxppMakeSceneResult where
+    parseJSON = withObject "WxppMakeSceneResult" $ \obj -> do
+                    WxppMakeSceneResult
+                        <$> ( obj .: "ticket" )
+                        <*> ( fmap (fromIntegral :: Int -> NominalDiffTime) <$> obj .:? "expire_seconds")
+                        <*> ( UrlText <$> obj .: "url" )
+
+instance ToJSON WxppMakeSceneResult where
+    toJSON (WxppMakeSceneResult ticket m_ttl url) =
+        object  $ catMaybes $
+                [ Just $ "ticket" .= ticket
+                , flip fmap m_ttl $ \ttl -> "expire_seconds" .= (round ttl :: Int)
+                , Just $ "url" .= unUrlText url
+                ]
+-- }}}1
 
 
 newtype QRTicket = QRTicket { unQRTicket :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
                              , NFData
+                             , PersistField, PersistFieldSql
+                             , ToJSON, FromJSON
                              , ToMessage, ToMarkup)
-
-instance ToJSON QRTicket where
-    toJSON = toJSON . unQRTicket
-
-instance FromJSON QRTicket where
-    parseJSON = fmap QRTicket . parseJSON
-
-instance PersistField QRTicket where
-    toPersistValue      = toPersistValue . unQRTicket
-    fromPersistValue    = fmap QRTicket . fromPersistValue
-
-instance PersistFieldSql QRTicket where
-    sqlType _ = SqlString
 
 
 newtype Token = Token { unToken :: Text }
@@ -397,6 +394,8 @@ instance FromJSON Token where
 
 newtype AesKey = AesKey { unAesKey :: Key AES }
   deriving (Eq)
+
+-- {{{1 instances and functions
 instance Show AesKey where
     show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
 
@@ -439,6 +438,8 @@ parseAesKeyFromTextMaybe t =
 
 instance FromJSON AesKey where
     parseJSON = withText "AesKey" parseAesKeyFromText
+-- }}}1
+
 
 newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
   deriving (Show, Eq, NFData)
@@ -446,11 +447,16 @@ newtype TimeStampS = TimeStampS { unTimeStampS :: Text }
 newtype Nonce = Nonce { unNounce :: Text }
   deriving (Show, Eq, ToMessage, NFData, ToMarkup)
 
+
 newtype WxppAppID = WxppAppID { unWxppAppID :: Text }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
                              , ToHttpApiData, FromHttpApiData
                              , NFData
+                             , PersistField, PersistFieldSql
+                             , ToJSON
                              , ToMessage, ToMarkup)
+
+-- {{{1 instances and functions
 
 -- | Test if a text can be a app id
 -- undocumented rules, just wild guess
@@ -462,13 +468,6 @@ instance SafeCopy WxppAppID where
     putCopy (WxppAppID x)   = contain $ safePut x
     errorTypeName _         = "WxppAppID"
 
-instance PersistField WxppAppID where
-    toPersistValue      = toPersistValue . unWxppAppID
-    fromPersistValue    = fmap WxppAppID . fromPersistValue
-
-instance PersistFieldSql WxppAppID where
-    sqlType _ = SqlString
-
 instance PathPiece WxppAppID where
     toPathPiece (WxppAppID x)   = toPathPiece x
     fromPathPiece t             =   let t' = T.strip t
@@ -477,8 +476,6 @@ instance PathPiece WxppAppID where
                                       if T.null t'
                                         then Nothing
                                         else WxppAppID <$> fromPathPiece t'
-
-instance ToJSON WxppAppID where toJSON = toJSON . unWxppAppID
 
 instance FromJSON WxppAppID where
   parseJSON = fmap WxppAppID
@@ -489,12 +486,14 @@ instance FromJSON WxppAppID where
 -- 但不清楚具体使用场景，不知道以下的定义是否合适
 instance Read WxppAppID where
     readsPrec d s = map (WxppAppID *** id) $ readsPrec d s
+-- }}}1
 
 
 -- | app id 及对应的 open id
 data WxppAppOpenID = WxppAppOpenID WxppAppID WxppOpenID
   deriving (Show, Read, Eq, Ord, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData WxppAppOpenID
 
 $(deriveSafeCopy 0 'base ''WxppAppOpenID)
@@ -520,6 +519,7 @@ instance PathPiece WxppAppOpenID where
     return $ WxppAppOpenID app_id open_id
     where
       (app_id_t, other_t) = T.breakOn "@" t
+-- }}}1
 
 
 -- | 为保证 access_token 的值与它生成属的 app 一致
@@ -530,6 +530,7 @@ data AccessToken = AccessToken {
                     }
                     deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData AccessToken
 
 $(deriveSafeCopy 0 'base ''AccessToken)
@@ -543,6 +544,7 @@ instance FromJSON AccessToken where
     parseJSON = withObject "AccessToken" $ \obj -> do
                     AccessToken <$> (obj .: "data")
                                 <*> (obj .: "app_id")
+-- }}}1
 
 
 -- | 等待额外的值以完整地构造 AccessToken
@@ -574,7 +576,7 @@ data WxppAppConf = WxppAppConf
   }
   deriving (Show, Eq)
 
-
+-- {{{1 instances
 instance FromJSON WxppAppConf where
     parseJSON = withObject "WxppAppConf" $ \obj -> do
                     app_id <- fmap WxppAppID $ obj .: "app-id"
@@ -591,6 +593,7 @@ instance FromJSON WxppAppConf where
                     return $ WxppAppConf app_id secret app_token
                                 ak1
                                 backup_aks
+-- }}}1
 
 
 data WxppAppConfig = WxppAppConfig
@@ -622,6 +625,7 @@ data GroupSendStatus =    GroupSendSuccess
                         | GroupSendError Int
                         deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData GroupSendStatus
 instance Binary GroupSendStatus
 
@@ -643,6 +647,7 @@ instance SimpleStringRep GroupSendStatus where
                 code <- simpleParser
                 _ <- string ")"
                 return  $ GroupSendError code
+-- }}}1
 
 
 -- | 事件推送的各种值
@@ -664,6 +669,7 @@ data WxppEvent = WxppEvtSubscribe
                     -- ^ status, total, filter count, sent count, error count
                 deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData WxppEvent
 instance Binary WxppEvent
 
@@ -772,6 +778,7 @@ instance FromJSON WxppEvent where
 
 
           _ -> fail $ "unknown type: " ++ typ
+-- }}}1
 
 
 -- | 收到的各种消息: 包括普通消息和事件推送
@@ -792,6 +799,7 @@ data WxppInMsg =  WxppInMsgText Text
                 | WxppInMsgEvent WxppEvent
                 deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances and functions
 instance NFData WxppInMsg
 instance Binary WxppInMsg
 
@@ -880,6 +888,7 @@ instance FromJSON WxppInMsg where
         "event" -> WxppInMsgEvent <$> obj .: "event"
 
         _ -> fail $ "unknown type: " ++ typ
+-- }}}1
 
 
 data WxppInMsgEntity = WxppInMsgEntity
@@ -893,6 +902,7 @@ data WxppInMsgEntity = WxppInMsgEntity
                         }
                         deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances and functions
 instance NFData WxppInMsgEntity
 instance Binary WxppInMsgEntity
 
@@ -920,6 +930,7 @@ instance FromJSON WxppInMsgEntity where
                       (obj .: "created_time")
                       (obj .:? "msg_id")
                       (obj .: "msg")
+-- }}}1
 
 
 -- | 图文信息
@@ -931,6 +942,7 @@ data WxppArticle = WxppArticle {
                     }
                     deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData WxppArticle
 instance Binary WxppArticle
 $(deriveLift ''WxppArticle)
@@ -952,6 +964,8 @@ instance FromJSON WxppArticle where
                 pic_url <- fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "pic-url"
                 url <- fmap UrlText <$> join . fmap nullToNothing <$> obj .:? "url"
                 return $ WxppArticle title desc pic_url url
+-- }}}1
+
 
 -- | 外发的信息
 -- XXX: 虽然文档没有明确说明，media_id是否可以是永久素材的ID，
@@ -972,6 +986,7 @@ data WxppOutMsg = WxppOutMsgText Text
                     -- ^ 把信息转发至客服
                 deriving (Show, Eq, Typeable, Generic)
 
+-- {{{1 instances and functions
 instance NFData WxppOutMsg
 instance Binary WxppOutMsg
 $(deriveLift ''WxppOutMsg)
@@ -1034,6 +1049,7 @@ instance FromJSON WxppOutMsg where
           "transfer-cs" -> return WxppOutMsgTransferToCustomerService
 
           _   -> fail $ "unknown type: " ++ typ
+-- }}}1
 
 
 type WxppMediaIdOrPath = Either WxppMediaID FilePath
@@ -1065,6 +1081,7 @@ parseMediaIDOrPathOpt :: Text -> Object -> Parser (Maybe WxppMediaIdOrPath)
 parseMediaIDOrPathOpt key_prefix o = (fmap (Left . WxppMediaID) <$> o .:? (key_prefix <> "media_id"))
                             ClassyPrelude.<|> (fmap Right <$> o .:? (key_prefix <> "path"))
 
+-- {{{1 instances for WxppOutMsgL
 instance FromJSON WxppOutMsgL where
     parseJSON = withObject "WxppOutMsgL" $ \obj -> do
                     type_s <- obj .:? "type" .!= "text"
@@ -1101,6 +1118,7 @@ instance FromJSON WxppOutMsgL where
 
           parse_article (A.String t)  = parse_article_obj $ HM.fromList [ "file" .= t ]
           parse_article v             = withObject "WxppArticleLoader" parse_article_obj v
+-- }}}1
 
 
 -- | 永久图文素材结构中的一个文章
@@ -1115,6 +1133,7 @@ data WxppDurableArticle = WxppDurableArticle {
                             }
                             deriving (Eq, Ord, Show, Generic)
 
+-- {{{1 instances
 instance NFData WxppDurableArticle
 $(deriveSafeCopy 0 'base ''WxppDurableArticle)
 
@@ -1135,6 +1154,7 @@ instance FromJSON WxppDurableArticle where
 
 instance ToJSON WxppDurableArticle where
     toJSON = object . wppDurableArticleToJsonPairs
+-- }}}1
 
 
 wppDurableArticleToJsonPairs :: WxppDurableArticle -> [Pair]
@@ -1191,6 +1211,8 @@ instance SimpleStringRep WxppMediaType where
                     , ("video", WxppMediaTypeVideo)
                     , ("thumb", WxppMediaTypeThumb)
                     ]
+-- }}}1
+
 
 data WxppOutMsgEntity = WxppOutMsgEntity
                         {
@@ -1228,6 +1250,7 @@ data MenuItemData = MenuItemDataClick Text
                         -- ^ key
                     deriving (Show, Eq, Generic)
 
+-- {{{1 instances and functions
 instance NFData MenuItemData
 
 menuItemDataToJsonPairs :: MenuItemData -> [Pair]
@@ -1277,6 +1300,7 @@ menuItemDataFromJsonObj obj = do
         "pic_weixin"        -> fmap MenuItemDataPicWeiXin $ obj .: "key"
         "location_select"   -> fmap MenuItemDataLocationSelect $ obj .: "key"
         _                   -> fail $ "unknown/unsupported menu type: " <> typ
+-- }}}1
 
 
 -- | 菜单项，及其子菜单
@@ -1286,6 +1310,7 @@ data MenuItem = MenuItem {
                 }
                 deriving (Show, Eq)
 
+-- {{{1 instances
 instance ToJSON MenuItem where
     toJSON mi = object $
                     [ "name" .= menuItemName mi ]
@@ -1304,22 +1329,19 @@ instance FromJSON MenuItem where
                         Just (subs@(_:_))   -> return $ Right subs
                         _                   -> fmap Left $ menuItemDataFromJsonObj obj
                     return $ MenuItem name dat_or_subs
+-- }}}1
 
 
 newtype SimpleLocaleName = SimpleLocaleName { unSimpleLocaleName :: Text }
-  deriving (Show, Eq, Ord, Generic, NFData)
+  deriving (Show, Eq, Ord, Generic, NFData
+           , PersistField, PersistFieldSql
+           )
 
 instance SafeCopy SimpleLocaleName where
     getCopy                         = contain $ SimpleLocaleName <$> safeGet
     putCopy (SimpleLocaleName x)    = contain $ safePut x
     errorTypeName _                 = "SimpleLocaleName"
 
-instance PersistField SimpleLocaleName where
-    toPersistValue      = toPersistValue . unSimpleLocaleName
-    fromPersistValue    = fmap SimpleLocaleName . fromPersistValue
-
-instance PersistFieldSql SimpleLocaleName where
-    sqlType _ = SqlString
 
 type NickName = Text
 type CityName = Text
@@ -1448,6 +1470,7 @@ data UploadResult = UploadResult {
                         }
                         deriving (Show, Typeable, Generic)
 
+-- {{{1 instances
 instance NFData UploadResult
 
 deriveSafeCopy 0 'base ''UploadResult
@@ -1464,6 +1487,7 @@ instance FromJSON UploadResult where
         media_id <- WxppBriefMediaID <$> obj .: "media_id"
         t <- epochIntToUtcTime <$> obj .: "created_at"
         return $ UploadResult typ media_id t
+-- }}}1
 
 
 -- | 转发各种消息或消息的部分时，所附带的额外信息
@@ -1472,6 +1496,7 @@ data WxppForwardedEnv = WxppForwardedEnv {
                             , wxppFwdAccessToken    :: AccessToken
                         }
 
+-- {{{1 instances
 instance ToJSON WxppForwardedEnv where
     toJSON x = object
                 [ "access_token"    .= wxppFwdAccessToken x
@@ -1482,6 +1507,8 @@ instance FromJSON WxppForwardedEnv where
     parseJSON = withObject "WxppForwardedEnv" $ \obj -> do
                     WxppForwardedEnv    <$> ( obj .: "user_info" )
                                         <*> ( obj .: "access_token" )
+-- }}}1
+
 
 data OAuthScope = AS_SnsApiBase
                 | AS_SnsApiUserInfo
@@ -1489,6 +1516,7 @@ data OAuthScope = AS_SnsApiBase
                 | AS_Unknown Text
                 deriving (Show, Eq, Ord, Generic)
 
+-- {{{1 instances
 instance NFData OAuthScope
 $(derivePersistFieldS "OAuthScope")
 $(derivePathPieceS "OAuthScope")
@@ -1512,49 +1540,37 @@ instance SimpleStringRep OAuthScope where
 
             parse_unknown = fmap (AS_Unknown . fromString) $
                                 many1 $ satisfy $ not . isSpace
+-- }}}1
 
 
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
-  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData)
-
-instance PathPiece OAuthCode where
-    fromPathPiece = fmap OAuthCode . fromPathPiece
-    toPathPiece = toPathPiece . unOAuthCode
-
-instance ToJSON OAuthCode where toJSON = toJSON . unOAuthCode
+  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
+           , PathPiece, ToJSON
+           )
 
 
 newtype OAuthAccessToken = OAuthAccessToken { unOAuthAccessToken :: Text }
-  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData)
+  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
+           , FromJSON, PathPiece
+           )
 
 instance SafeCopy OAuthAccessToken where
     getCopy                      = contain $ OAuthAccessToken <$> safeGet
     putCopy (OAuthAccessToken x) = contain $ safePut x
     errorTypeName _              = "OAuthAccessToken"
 
-instance PathPiece OAuthAccessToken where
-    fromPathPiece = fmap OAuthAccessToken . fromPathPiece
-    toPathPiece = toPathPiece . unOAuthAccessToken
-
-instance FromJSON OAuthAccessToken where
-    parseJSON = fmap OAuthAccessToken . parseJSON
 
 
 newtype OAuthRefreshToken = OAuthRefreshToken { unOAuthRefreshToken :: Text }
-  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData)
+  deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
+           , FromJSON, ToJSON, PathPiece
+           )
 
 instance SafeCopy OAuthRefreshToken where
     getCopy                       = contain $ OAuthRefreshToken <$> safeGet
     putCopy (OAuthRefreshToken x) = contain $ safePut x
     errorTypeName _               = "OAuthRefreshToken"
 
-instance PathPiece OAuthRefreshToken where
-    fromPathPiece = fmap OAuthRefreshToken . fromPathPiece
-    toPathPiece = toPathPiece . unOAuthRefreshToken
-
-instance FromJSON OAuthRefreshToken where parseJSON = fmap OAuthRefreshToken . parseJSON
-
-instance ToJSON OAuthRefreshToken where toJSON = toJSON . unOAuthRefreshToken
 
 -- | access token 通常要与 open id 一起使用，并且有对应关系，因此打包在一起
 data OAuthAccessTokenPkg = OAuthAccessTokenPkg {
@@ -1619,6 +1635,7 @@ data OAuthAccessTokenResult = OAuthAccessTokenResult {
                                 }
                                 deriving (Eq, Show)
 
+-- {{{1 instances
 instance HasOAuthAccessTokenPkg (WxppAppID, OAuthAccessTokenResult) where
   getOAuthAccessTokenPkg (app_id, x) =
       OAuthAccessTokenPkg
@@ -1639,6 +1656,7 @@ instance FromJSON OAuthAccessTokenResult where
                         <*> o .: "openid"
                 where
                     p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
+-- }}}1
 
 
 data OAuthRefreshAccessTokenResult = OAuthRefreshAccessTokenResult {
@@ -1650,6 +1668,7 @@ data OAuthRefreshAccessTokenResult = OAuthRefreshAccessTokenResult {
                                         }
                                         deriving (Eq, Show)
 
+-- {{{1 instances
 instance FromJSON OAuthRefreshAccessTokenResult where
     parseJSON = withObject "OAuthRefreshAccessTokenResult" $ \o -> do
                     OAuthRefreshAccessTokenResult
@@ -1660,6 +1679,8 @@ instance FromJSON OAuthRefreshAccessTokenResult where
                         <*> o .: "openid"
                 where
                     p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
+-- }}}1
+
 
 data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
                                 oauthUserInfoOpenID         :: WxppOpenID
@@ -1673,6 +1694,7 @@ data OAuthGetUserInfoResult = OAuthGetUserInfoResult {
                                 , oauthUserInfoUnionID      :: Maybe WxppUnionID
                                 }
                                 deriving (Eq, Show, Typeable)
+-- {{{1
 $(deriveSafeCopy 0 'base ''OAuthGetUserInfoResult)
 
 instance FromJSON OAuthGetUserInfoResult where
@@ -1687,27 +1709,20 @@ instance FromJSON OAuthGetUserInfoResult where
                         <*> (fmap UrlText . join . fmap nullToNothing <$> o .:? "headimgurl")
                         <*> o .: "privilege"
                         <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
+-- }}}1
+
 
 newtype WxppJsTicket = WxppJsTicket { unWxppJsTicket :: Text }
-  deriving (Show, Read, Eq, Ord, Typeable, NFData)
+  deriving (Show, Read, Eq, Ord, Typeable, NFData
+           , PersistField, PersistFieldSql
+           , FromJSON, ToJSON
+           )
 
+-- {{{1
 instance SafeCopy WxppJsTicket where
     getCopy                  = contain $ WxppJsTicket <$> safeGet
     putCopy (WxppJsTicket x) = contain $ safePut x
     errorTypeName _          = "WxppJsTicket"
-
-instance PersistField WxppJsTicket where
-    toPersistValue      = toPersistValue . unWxppJsTicket
-    fromPersistValue    = fmap WxppJsTicket . fromPersistValue
-
-instance PersistFieldSql WxppJsTicket where
-    sqlType _ = SqlString
-
-instance ToJSON WxppJsTicket where
-    toJSON = toJSON . unWxppJsTicket
-
-instance FromJSON WxppJsTicket where
-    parseJSON = fmap WxppJsTicket . parseJSON
 
 instance PathPiece WxppJsTicket where
     toPathPiece (WxppJsTicket x)  = toPathPiece x
@@ -1715,6 +1730,7 @@ instance PathPiece WxppJsTicket where
                                     in if T.null t'
                                           then Nothing
                                           else WxppJsTicket <$> fromPathPiece t'
+-- }}}1
 
 
 -- | 程序内部因公众号的变化而产生的事件
@@ -1747,3 +1763,6 @@ wxppLogSource = "WXPP"
 -- | 上传得到的 media id 只能用一段时间
 usableUploadResult :: UTCTime -> NominalDiffTime -> UploadResult -> Bool
 usableUploadResult now dt ur = addUTCTime dt (urCreateTime ur) > now
+
+
+-- vim: set foldmethod=marker:
