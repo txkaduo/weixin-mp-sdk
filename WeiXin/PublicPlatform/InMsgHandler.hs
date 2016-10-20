@@ -31,8 +31,7 @@ import System.Directory                     (canonicalizePath)
 import System.FilePath                      (splitDirectories)
 
 import Yesod.Helpers.Aeson                  (parseArray)
-import Yesod.Helpers.Parsec                 (CharParser)
-import Text.Parsec                          (parse)
+import Text.Parsec                          (parse, ParsecT, Stream)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -488,7 +487,7 @@ class MenuItemEventKey a where
     menuItemEventKeyIdent   :: Proxy a -> Text
 
     -- | parse the event key string
-    menuItemEventKeyParser  :: CharParser a
+    menuItemEventKeyParser  :: Stream s m Char => ParsecT s u m a
 
 
 class MenuItemEventKey a => MenuItemEventKeyHandle m a where

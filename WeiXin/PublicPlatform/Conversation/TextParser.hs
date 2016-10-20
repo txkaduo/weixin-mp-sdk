@@ -11,19 +11,19 @@ import Yesod.Helpers.Parsec
 import Yesod.Helpers.Utils                  (toHalfWidthDigit)
 
 
-parseTextWholeLine :: IsString s => CharParser s
+parseTextWholeLine :: (IsString a, Stream s m Char) => ParsecT s u m a
 parseTextWholeLine = fmap fromString $ manyTill anyChar $ try eof <|> try (eol *> return ())
 
-parseTextWholeLineStripped :: CharParser Text
+parseTextWholeLineStripped :: Stream s m Char => ParsecT s u m Text
 parseTextWholeLineStripped = liftM T.strip parseTextWholeLine
 
-parseTextWholeLineStrippedNonempty :: CharParser Text
+parseTextWholeLineStrippedNonempty :: Stream s m Char => ParsecT s u m Text
 parseTextWholeLineStrippedNonempty = do
     s <- parseTextWholeLineStripped
     guard $ not $ T.null s
     return s
 
-parseTextBool :: CharParser Bool
+parseTextBool :: Stream s m Char => ParsecT s u m Bool
 parseTextBool = do
     spaces
     name <- T.toLower . T.strip . fromString <$> many1 anyChar
@@ -35,7 +35,7 @@ parseTextBool = do
                 else mzero
 
 
-generalParseConfirm :: CharParser Bool
+generalParseConfirm :: Stream s m Char => ParsecT s u m Bool
 generalParseConfirm = do
     spaces
     name <- T.toLower . T.strip . fromString <$> many1 anyChar
@@ -46,7 +46,7 @@ generalParseConfirm = do
                 then return False
                 else mzero
 
-generalParseSave :: CharParser Bool
+generalParseSave :: Stream s m Char => ParsecT s u m Bool
 generalParseSave = do
     spaces
     name <- T.toLower . T.strip . fromString <$> many1 anyChar
@@ -58,7 +58,7 @@ generalParseSave = do
                 else mzero
 
 
-parsePossibleFullWithDecimalNumber :: (Read a) => CharParser a
+parsePossibleFullWithDecimalNumber :: (Stream s m Char, Read a) => ParsecT s u m a
 parsePossibleFullWithDecimalNumber = do
     t <- many1 $ satisfy $ ((== DecimalNumber) . generalCategory)
     let t' = map toHalfWidthDigit t
