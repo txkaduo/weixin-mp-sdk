@@ -1785,6 +1785,20 @@ instance SimpleStringRep WxAppKind where
                     ]
 -- }}}1
 
+-- | 哪种app可以做oauth接口调用
+-- 注意: 第三方平台只是代替另一个app操作，自身不算可以做oauth
+wxAppKindCanOAuth :: WxAppKind -> Bool
+wxAppKindCanOAuth WxAppKindServer = True
+wxAppKindCanOAuth WxAppKindWeb    = True
+wxAppKindCanOAuth _               = False
+
+-- | 哪种app可以关注
+wxAppKindCanSubscribe :: WxAppKind -> Bool
+wxAppKindCanSubscribe WxAppKindPublisher = True
+wxAppKindCanSubscribe WxAppKindServer    = True
+wxAppKindCanSubscribe _                  = False
+
+
 --------------------------------------------------------------------------------
 
 wxppLogSource :: IsString a => a
