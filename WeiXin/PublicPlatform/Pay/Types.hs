@@ -49,10 +49,12 @@ newtype WxPayParamIpStr = WxPayParamIpStr { unWxPayParamIpStr :: Text }
 
 -- | 商户自定义的商品ID
 newtype WxPayProductId = WxPayProductId { unWxPayProductId :: Text }
+  deriving (Show, Eq, Ord)
 
 
 -- | 微信支付订单号
 newtype WxUserPayTransId = WxUserPayTransId { unWxUserPayTransId :: Text }
+  deriving (Show, Eq, Ord)
 
 
 -- | 微信企业支付所产生的订单号
