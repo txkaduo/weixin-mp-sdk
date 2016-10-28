@@ -43,6 +43,14 @@ class HaveWxUserPayOutTradeNo a where
   getWxUserPayOutTradeNo :: a -> WxUserPayOutTradeNo
 
 
+-- | 微信支付：商户订单号
+newtype WxUserPayOutRefundNo = WxUserPayOutRefundNo { unWxUserPayOutRefundNo :: Text }
+  deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
+           , PersistFieldSql, PersistField
+           , NFData
+           , ToMessage, ToMarkup)
+
+
 -- | 多个接口要求输入一个ip参数
 newtype WxPayParamIpStr = WxPayParamIpStr { unWxPayParamIpStr :: Text }
 
@@ -54,6 +62,11 @@ newtype WxPayProductId = WxPayProductId { unWxPayProductId :: Text }
 
 -- | 微信支付订单号
 newtype WxUserPayTransId = WxUserPayTransId { unWxUserPayTransId :: Text }
+  deriving (Show, Eq, Ord)
+
+
+-- | 用户支付: 退款单号
+newtype WxUserPayRefundId = WxUserPayRefundId { unWxUserPayRefundId :: Text }
   deriving (Show, Eq, Ord)
 
 
@@ -169,6 +182,7 @@ data WxPayGoodsDetail = WxPayGoodsDetail
   }
   deriving (Show)
 
+-- {{{1
 instance ToJSON WxPayGoodsDetail where
   toJSON x = object
               [ "goods_id" .= wxPayGoodsIdStr x
@@ -176,6 +190,7 @@ instance ToJSON WxPayGoodsDetail where
               , "goods_num" .= wxPayGoodsNum x
               , "price" .= unWxPayMoneyAmount (wxPayGoodsUnitPrice x)
               ]
+-- }}}1
 
 
 -- | 交易类型
@@ -205,6 +220,12 @@ instance SimpleStringRep WxPayTradeType where
                     , ("MICROPAY", WxPayTradeMicroPay)
                     ]
 -- }}}1
+
+
+-- | 代金券类型
+data WxPayCouponType = WxPayCouponCash
+                     | WxPayCouponNonCash
+                     deriving (Show, Eq, Ord, Enum, Bounded)
 
 
 -- | 微信支付接口的结果代码
@@ -377,6 +398,73 @@ data WxUserPayStatInfo = WxUserPayStatInfo
   , wxUserPayStatOutTradeNo         :: WxUserPayOutTradeNo
   , wxUserPayStatAttach             :: Maybe Text
   , wxUserPayStatTimeEnd            :: UTCTime
+  }
+
+
+data WxPayRefundChannel = WxPayRefundOriginal
+                        | WxPayRefundBalance
+                        deriving (Show, Eq, Ord, Enum, Bounded)
+
+
+data WxPayRefundStatus = WxPayRefundSuccess
+                       | WxPayRefundFail
+                       | WxPayRefundProcessing
+                       | WxPayRefundChange
+                       deriving (Show, Eq, Ord, Enum, Bounded)
+
+
+data WxPayRefundAccount = WxPayRefundAccountUnsettledFunds
+                        | WxPayRefundAccountRechargeFunds
+                       deriving (Show, Eq, Ord, Enum, Bounded)
+
+
+-- | 申请退款成功产生的返回
+-- 查询退款接口也会提供这部分信息
+data WxUserPayRefundReqResult = WxUserPayRefundReqResult
+  { wxUserPayRefundReqReDeviceInfo          :: Maybe WxPayDeviceInfo
+  , wxUserPayRefundReqReTransId             :: WxUserPayTransId
+  , wxUserPayRefundReqReOutTradeNo          :: WxUserPayOutTradeNo
+  , wxUserPayRefundReqReRefundId            :: WxUserPayRefundId
+  , wxUserPayRefundReqReOutRefundNo         :: WxUserPayOutRefundNo
+  , wxUserPayRefundReqReTotalFee            :: WxPayMoneyAmount
+  , wxUserPayRefundReqReRefundFee           :: WxPayMoneyAmount
+  , wxUserPayRefundReqReSettlementRefundFee :: Maybe WxPayMoneyAmount
+  , wxUserPayRefundReqReCashFee             :: WxPayMoneyAmount
+  , wxUserPayRefundReqReCashRefundFee       :: Maybe WxPayMoneyAmount
+  , wxUserPayRefundReqReChannel             :: Maybe WxPayRefundChannel
+  }
+
+
+-- | 退款查询接口的返回内容
+data WxUserPayRefundQueryResult = WxUserPayRefundQueryResult
+  { wxUserPayRefundQueryReDeviceInfo         :: Maybe WxPayDeviceInfo
+  , wxUserPayRefundQueryReTransId            :: WxUserPayTransId
+  , wxUserPayRefundQueryReOutTradeNo         :: WxUserPayOutTradeNo
+  , wxUserPayRefundQueryReTotalFee           :: WxPayMoneyAmount
+  , wxUserPayRefundQueryReSettlementTotalFee :: Maybe WxPayMoneyAmount
+  , wxUserPayRefundQueryReCashFee            :: WxPayMoneyAmount
+  , wxUserPayRefundQueryReRefundAccount      :: Maybe WxPayRefundAccount
+  , wxUserPayRefundQueryReItems              :: [WxUserPayRefundQueryItem]
+  }
+
+
+data WxUserPayRefundQueryItem = WxUserPayRefundQueryItem
+  { wxUserPayRefundQueryItemOutRefundNo         :: WxUserPayOutRefundNo
+  , wxUserPayRefundQueryItemRefundId            :: WxUserPayRefundId
+  , wxUserPayRefundQueryItemStatus              :: WxPayRefundStatus
+  , wxUserPayRefundQueryItemRefundChannel       :: Maybe WxPayRefundChannel
+  , wxUserPayRefundQueryItemRefundFee           :: WxPayMoneyAmount
+  , wxUserPayRefundQueryItemSettlementRefundFee :: Maybe WxPayMoneyAmount
+  , wxUserPayRefundQueryItemRecvAccount         :: Text
+  , wxUserPayRefundQueryItemCouponType          :: Maybe WxPayCouponType
+  , wxUserPayRefundQueryItemCouponRefunds       :: [WxPayRefundQueryCouponRefundItem]
+  }
+
+
+data WxPayRefundQueryCouponRefundItem = WxPayRefundQueryCouponRefundItem
+  { wxPayRefundQueryCouponRefundItemBatchId   :: Text
+  , wxPayRefundQueryCouponRefundItemRefundId  :: Text
+  , wxPayRefundQueryCouponRefundItemRefundFee :: WxPayMoneyAmount
   }
 
 

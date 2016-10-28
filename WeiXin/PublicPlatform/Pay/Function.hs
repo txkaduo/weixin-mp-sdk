@@ -28,6 +28,7 @@ import           Text.XML.Cursor        (child, content, fromDocument, fromNode
                                         )
 
 import           Text.Parsec.TX.Utils   (SimpleStringRep (..), parseMaybeSimpleEncoded)
+import           Yesod.Helpers.Utils    (nullToNothing)
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
@@ -325,6 +326,87 @@ wxUserPayCloseOrder common_params out_trade_no = do
 -- }}}1
 
 
+-- | 用户支付：申请退款
+-- CAUTION: 目前未实现双向数字证书认证
+--          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
+--          我们这里只发起普通的http/https请求
+wxUserPayRefund :: WxppApiMonad env m
+                => WxPayCommonParams
+                -> Text   -- ^ 操作员帐号
+                -> Either WxUserPayTransId WxUserPayOutTradeNo
+                -> WxUserPayOutRefundNo
+                -> WxPayMoneyAmount
+                -> WxPayMoneyAmount
+                -> m (Either WxPayCallResultError WxUserPayRefundReqResult)
+-- {{{1
+wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee refund_fee = do
+  url_conf <- asks getWxppUrlConfig
+  let url = wxppUrlConfUserPayApiSecBase url_conf <> "/refund"
+  let params :: WxPayParams
+      params = mempty &
+                (appEndo $ mconcat $
+                    [ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , Endo $ case trans_id_trade_no of
+                              Left trans_id -> insertMap "transaction_id" (unWxUserPayTransId trans_id)
+                              Right out_trade_no -> insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
+                    , Endo $ insertMap "out_refund_no" (unWxUserPayOutRefundNo refund_no)
+                    , Endo $ insertMap "total_fee" (tshow $ unWxPayMoneyAmount total_fee)
+                    , Endo $ insertMap "refund_fee" (tshow $ unWxPayMoneyAmount refund_fee)
+                    , Endo $ insertMap "op_user_id" op_user_id
+                    ])
+
+  runExceptT $ do
+    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+    wxUserPayParseRefundReqParams resp_params
+
+  where
+    WxPayCommonParams app_id app_key mch_id = common_params
+-- }}}1
+
+
+-- | 查询退款时，可用这几种方式指定查询的订单
+data RefundQueryOrderId = RefundQueryOrderByTransId WxUserPayTransId
+                        | RefundQueryOrderByOutTradeNo WxUserPayOutTradeNo
+                        | RefundQueryOrderByOutRefundNo WxUserPayOutRefundNo
+                        | RefundQueryOrderByRefundId WxUserPayRefundId
+
+-- | 用户支付：查询退款
+wxUserPayRefundQuery :: WxppApiMonad env m
+                     => WxPayCommonParams
+                     -> Maybe WxPayDeviceInfo
+                     -> RefundQueryOrderId
+                     -> m (Either WxPayCallResultError WxUserPayRefundQueryResult)
+-- {{{1
+wxUserPayRefundQuery common_params m_dev_info query_order_id = do
+  url_conf <- asks getWxppUrlConfig
+  let url = wxppUrlConfUserPayApiBase url_conf <> "/refundquery"
+  let params :: WxPayParams
+      params = mempty &
+                (appEndo $ mconcat $ catMaybes
+                    [ Just $ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Just $ Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , flip fmap m_dev_info $ \dev -> Endo $ insertMap "device_info" (unWxPayDeviceInfo dev)
+
+                    , Just $ Endo $ case query_order_id of
+                              RefundQueryOrderByTransId trans_id ->
+                                insertMap "transaction_id" (unWxUserPayTransId trans_id)
+                              RefundQueryOrderByOutTradeNo out_trade_no ->
+                                insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
+                              RefundQueryOrderByOutRefundNo out_refund_no ->
+                                insertMap "out_refund_no" (unWxUserPayOutRefundNo out_refund_no)
+                              RefundQueryOrderByRefundId refund_id ->
+                                insertMap "refund_id" (unWxUserPayRefundId refund_id)
+                    ])
+  runExceptT $ do
+    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+    wxUserPayParseRefundQueryResult resp_params
+
+  where
+    WxPayCommonParams app_id app_key mch_id = common_params
+-- }}}1
+
+
 -- | 微信企业支付
 -- CAUTION: 目前未实现双向数字证书认证
 --          实用上的解决方法是使用反向代理(例如HAProxy)提供双向证书认证,
@@ -518,6 +600,186 @@ wxUserPayParseStateParams resp_params = do
                      out_trade_no
                      m_attach
                      time_end
+-- }}}1
+
+
+wxUserPayParseRefundReqParams :: (MonadThrow m, MonadLogger m)
+                              => WxPayParams
+                              -> m WxUserPayRefundReqResult
+-- {{{1
+wxUserPayParseRefundReqParams resp_params = do
+  let req_param = reqXmlTextField resp_params
+
+  let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
+
+  trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
+  out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
+  refund_id <- fmap WxUserPayRefundId $ req_param "refund_id"
+  out_refund_no <- fmap WxUserPayOutRefundNo $ req_param "out_refund_no"
+
+  total_fee <- reqXmlFeeField resp_params "total_fee"
+  refund_fee <- reqXmlFeeField resp_params "refund_fee"
+  settlement_refund_fee <- optXmlFeeField resp_params "settlement_refund_fee"
+  cash_fee <- reqXmlFeeField resp_params "cash_fee"
+  cash_refund_fee <- optXmlFeeField resp_params "cash_refund_fee"
+
+  channel <- mapM wxUserPayParseRefundChannelText $
+                join $ fmap nullToNothing $ lookup "refund_channel" resp_params
+
+  return $ WxUserPayRefundReqResult
+                    m_dev_info
+                    trans_id
+                    out_trade_no
+                    refund_id
+                    out_refund_no
+                    total_fee
+                    refund_fee
+                    settlement_refund_fee
+                    cash_fee
+                    cash_refund_fee
+                    channel
+-- }}}1
+
+
+wxUserPayParseRefundChannelText :: (MonadThrow m, MonadLogger m)
+                                => Text
+                                -> m WxPayRefundChannel
+-- {{{1
+wxUserPayParseRefundChannelText x = do
+  case x of
+    "ORIGINAL" -> return WxPayRefundOriginal
+    "BALANCE"  -> return WxPayRefundBalance
+    _          -> throwM $ WxPayDiagError $ "Unknown refund_channel: " <> x
+-- }}}1
+
+
+wxUserPayParseCouponTypeText :: (MonadThrow m, MonadLogger m)
+                             => Text
+                             -> m WxPayCouponType
+-- {{{1
+wxUserPayParseCouponTypeText x = do
+  case x of
+    "CASH"    -> return WxPayCouponCash
+    "NO_CASH" -> return $ WxPayCouponNonCash
+    _         -> throwM $ WxPayDiagError $ "Unknown coupon_type: " <> x
+-- }}}1
+
+
+wxUserPayParseRefundAccount :: (MonadThrow m, MonadLogger m)
+                            => Text
+                            -> m WxPayRefundAccount
+-- {{{1
+wxUserPayParseRefundAccount x = do
+  case x of
+    "REFUND_SOURCE_RECHARGE_FUNDS"  -> return WxPayRefundAccountRechargeFunds
+    "REFUND_SOURCE_UNSETTLED_FUNDS" -> return WxPayRefundAccountUnsettledFunds
+    _         -> throwM $ WxPayDiagError $ "Unknown refund_account: " <> x
+-- }}}1
+
+
+wxUserPayParseRefundQueryItem :: (MonadThrow m, MonadLogger m)
+                              => Int
+                              -> WxPayParams
+                              -> m WxUserPayRefundQueryItem
+-- {{{1
+wxUserPayParseRefundQueryItem n resp_params = do
+  out_refund_no <- fmap WxUserPayOutRefundNo $ req_param $ "out_refund_no" <> suffix
+  refund_id <- fmap WxUserPayRefundId $ req_param $ "refund_id" <> suffix
+
+  status <- case join $ fmap nullToNothing $ lookup ("refund_status" <> suffix) resp_params of
+              Nothing           -> throwM $ WxPayDiagError $ "missing " <> ("refund_status" <> suffix)
+              Just "SUCCESS"    -> return WxPayRefundSuccess
+              Just "FAIL"       -> return WxPayRefundFail
+              Just "PROCESSING" -> return WxPayRefundProcessing
+              Just "CHANGE"     -> return WxPayRefundChange
+              Just x            -> throwM $ WxPayDiagError $ "Unknown refound_status: " <> x
+
+  channel <- mapM wxUserPayParseRefundChannelText $
+                join $ fmap nullToNothing $ lookup ("refund_channel" <> suffix) resp_params
+
+  refund_fee <- reqXmlFeeField resp_params $ "refund_fee" <> suffix
+  settlement_refund_fee <- optXmlFeeField resp_params $ "settlement_refund_fee" <> suffix
+  recv_account <- req_param $ "refund_recv_account" <> suffix
+
+  coupon_type <- mapM wxUserPayParseCouponTypeText $
+                    join $ fmap nullToNothing $ lookup ("refund_channel" <> suffix) resp_params
+
+  let coupon_refound_count = join $ fmap readMay $ lookup ("coupon_refund_count" <> suffix) resp_params
+
+  items <- case coupon_refound_count of
+            Just m | m > 0 -> mapM (\x -> wxUserPayParseRefundQueryCouponItem n x resp_params) [0 .. m-1]
+            _              -> return []
+
+  return $ WxUserPayRefundQueryItem
+            out_refund_no
+            refund_id
+            status
+            channel
+            refund_fee
+            settlement_refund_fee
+            recv_account
+            coupon_type
+            items
+  where
+    req_param = reqXmlTextField resp_params
+    suffix = "_" <> tshow n
+-- }}}1
+
+
+wxUserPayParseRefundQueryCouponItem :: (MonadThrow m, MonadLogger m)
+                                    => Int
+                                    -> Int
+                                    -> WxPayParams
+                                    -> m WxPayRefundQueryCouponRefundItem
+-- {{{1
+wxUserPayParseRefundQueryCouponItem n m resp_params = do
+  batch_id <- req_param $ "coupon_refund_batch_id" <> suffix
+  refund_id <- req_param $ "coupon_refund_id" <> suffix
+  fee <- reqXmlFeeField resp_params $ "coupon_refund_fee" <> suffix
+  return $ WxPayRefundQueryCouponRefundItem batch_id refund_id fee
+  where
+    req_param = reqXmlTextField resp_params
+    suffix = "_" <> tshow n <> "_" <> tshow m
+-- }}}1
+
+
+wxUserPayParseRefundQueryResult :: (MonadThrow m, MonadLogger m)
+                                => WxPayParams
+                                -> m WxUserPayRefundQueryResult
+-- {{{1
+wxUserPayParseRefundQueryResult resp_params = do
+  let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
+
+  trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
+  out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
+
+  total_fee <- reqXmlFeeField resp_params "total_fee"
+  settlement_total_fee <- optXmlFeeField resp_params "settlement_total_fee"
+  cash_fee <- reqXmlFeeField resp_params "cash_fee"
+
+  refund_account <- mapM wxUserPayParseRefundAccount $ lookup "refund_account" resp_params
+
+  refund_count_t <- req_param "refund_count"
+  let refund_count = readMay refund_count_t
+  items <- case refund_count of
+             Nothing -> do
+               throwM $ WxPayDiagError $ "Invalid refund_count: " <> refund_count_t
+
+             Just n | n > 0 -> mapM (\x -> wxUserPayParseRefundQueryItem x resp_params) [0 .. n-1]
+
+             _              -> return []
+
+  return $ WxUserPayRefundQueryResult
+            m_dev_info
+            trans_id
+            out_trade_no
+            total_fee
+            settlement_total_fee
+            cash_fee
+            refund_account
+            items
+  where
+    req_param = reqXmlTextField resp_params
 -- }}}1
 
 

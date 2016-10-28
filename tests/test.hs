@@ -278,7 +278,10 @@ testWxUserPayStateDoc2 = do
 
 
 testWxUserPayStateDocHelper :: Text -> IO (WxUserPayStatInfo)
-testWxUserPayStateDocHelper doc_txt = do
+testWxUserPayStateDocHelper = testWxUserParseXmlDocHelper wxUserPayParseStateParams
+
+testWxUserParseXmlDocHelper :: (WxPayParams -> LoggingT IO a) -> Text -> IO (a)
+testWxUserParseXmlDocHelper f doc_txt = do
   case parseLBS def (fromStrict $ encodeUtf8 doc_txt) of
       Left ex         -> do
         putStrLn $ "Failed to parse XML: " <> tshow ex
@@ -290,7 +293,7 @@ testWxUserPayStateDocHelper doc_txt = do
                           catMaybes $ map param_from_node $
                             cursor $| child &| node
 
-        runStderrLoggingT $ wxUserPayParseStateParams all_params
+        runStderrLoggingT $ f all_params
 
   where
     param_from_node n@(NodeElement ele) = do
@@ -301,6 +304,76 @@ testWxUserPayStateDocHelper doc_txt = do
     param_from_node _ = Nothing
 
 
+testWxUserPayRefundReqDoc :: IO ()
+testWxUserPayRefundReqDoc = do
+  -- 这个例子本是从文档原文拷贝下来，但少了 total_fee, cash_fee 字段，与其文字说明不符
+  let doc = "<xml>\
+   \<return_code><![CDATA[SUCCESS]]></return_code>\
+   \<return_msg><![CDATA[OK]]></return_msg>\
+   \<appid><![CDATA[wx2421b1c4370ec43b]]></appid>\
+   \<mch_id><![CDATA[10000100]]></mch_id>\
+   \<nonce_str><![CDATA[NfsMFbUFpdbEhPXP]]></nonce_str>\
+   \<sign><![CDATA[B7274EB9F8925EB93100DD2085FA56C0]]></sign>\
+   \<result_code><![CDATA[SUCCESS]]></result_code>\
+   \<transaction_id><![CDATA[1008450740201411110005820873]]></transaction_id>\
+   \<out_trade_no><![CDATA[1415757673]]></out_trade_no>\
+   \<out_refund_no><![CDATA[1415701182]]></out_refund_no>\
+   \<refund_id><![CDATA[2008450740201411110000174436]]></refund_id>\
+   \<refund_channel><![CDATA[]]></refund_channel>\
+   \<refund_fee>1</refund_fee>\
+   \<total_fee>2</total_fee>\
+   \<cash_fee>2</cash_fee>\
+   \</xml>"
+
+  refund_req <- testWxUserParseXmlDocHelper wxUserPayParseRefundReqParams doc
+  testEq (WxPayMoneyAmount 1) (wxUserPayRefundReqReRefundFee refund_req)
+  testEq (WxPayMoneyAmount 2) (wxUserPayRefundReqReTotalFee refund_req)
+  testEq (WxPayMoneyAmount 2) (wxUserPayRefundReqReCashFee refund_req)
+  testEq (WxUserPayRefundId "2008450740201411110000174436") (wxUserPayRefundReqReRefundId refund_req)
+  testEq (WxUserPayOutRefundNo "1415701182") (wxUserPayRefundReqReOutRefundNo refund_req)
+  testEq (WxUserPayOutTradeNo "1415757673") (wxUserPayRefundReqReOutTradeNo refund_req)
+  testEq Nothing (wxUserPayRefundReqReChannel refund_req)
+
+
+testWxUserPayRefundQueryDoc :: IO ()
+testWxUserPayRefundQueryDoc = do
+  -- 这个例子本是从文档原文拷贝下来，但少了 total_fee, cash_fee, refund_recv_account_$n 字段，与其文字说明不符
+  let doc = "<xml>\
+   \<appid><![CDATA[wx2421b1c4370ec43b]]></appid>\
+   \<mch_id><![CDATA[10000100]]></mch_id>\
+   \<nonce_str><![CDATA[TeqClE3i0mvn3DrK]]></nonce_str>\
+   \<out_refund_no_0><![CDATA[1415701182]]></out_refund_no_0>\
+   \<out_trade_no><![CDATA[1415757673]]></out_trade_no>\
+   \<refund_count>1</refund_count>\
+   \<refund_fee_0>1</refund_fee_0>\
+   \<refund_id_0><![CDATA[2008450740201411110000174436]]></refund_id_0>\
+   \<refund_status_0><![CDATA[PROCESSING]]></refund_status_0>\
+   \<result_code><![CDATA[SUCCESS]]></result_code>\
+   \<return_code><![CDATA[SUCCESS]]></return_code>\
+   \<return_msg><![CDATA[OK]]></return_msg>\
+   \<sign><![CDATA[1F2841558E233C33ABA71A961D27561C]]></sign>\
+   \<transaction_id><![CDATA[1008450740201411110005820873]]></transaction_id>\
+   \<total_fee>2</total_fee>\
+   \<cash_fee>2</cash_fee>\
+   \<refund_recv_account_0>支付用户零钱</refund_recv_account_0>\
+   \</xml>"
+
+  refund_query <- testWxUserParseXmlDocHelper wxUserPayParseRefundQueryResult doc
+  testEq (WxUserPayTransId "1008450740201411110005820873") (wxUserPayRefundQueryReTransId refund_query)
+  testEq (WxUserPayOutTradeNo "1415757673") (wxUserPayRefundQueryReOutTradeNo refund_query)
+
+  case wxUserPayRefundQueryReItems refund_query of
+    [item] -> do
+      testEq (WxUserPayRefundId "2008450740201411110000174436") (wxUserPayRefundQueryItemRefundId item)
+      testEq (WxUserPayOutRefundNo "1415701182") (wxUserPayRefundQueryItemOutRefundNo item)
+      testEq WxPayRefundProcessing (wxUserPayRefundQueryItemStatus item)
+      testEq (WxPayMoneyAmount 1) (wxUserPayRefundQueryItemRefundFee item)
+
+    xs -> do
+      putStrLn $ "Wrong wxUserPayRefundQueryReItems numbers: length=" <> tshow (length xs)
+      exitFailure
+
+
 main :: IO ()
 main = do
     testWxPaySign
@@ -308,6 +381,8 @@ main = do
     testWxPayParseBankCode
     testWxUserPayStateDoc1
     testWxUserPayStateDoc2
+    testWxUserPayRefundReqDoc
+    testWxUserPayRefundQueryDoc
     testJsApiTicket
     testMsgToXml
     -- testLikeJava
