@@ -71,6 +71,9 @@ data WxppUrlConfig = WxppUrlConfig
   , wxppUrlConfFileApiBase      :: String
   , wxppUrlConfUserPayApiBase   :: String
   -- ^ 用户付款接口的接口基地址
+  , wxppUrlConfUserPayApiSecBase :: String
+  -- ^ 用户付款接口的中要双向证书的接口基地址
+  -- 目前就只有申请退款的接口在这个目录下
   , wxppUrlConfMmPayApiBase     :: String
   -- ^ 企业付款接口的接口基地址
   }
@@ -84,6 +87,7 @@ instance Default WxppUrlConfig where
     , wxppUrlConfSnsApiBase       = "https://api.weixin.qq.com/sns"
     , wxppUrlConfFileApiBase      = "https://file.api.weixin.qq.com/cgi-bin"
     , wxppUrlConfUserPayApiBase   = "https://api.mch.weixin.qq.com/pay"
+    , wxppUrlConfUserPayApiSecBase = "https://api.mch.weixin.qq.com/secapi/pay"
     , wxppUrlConfMmPayApiBase     = "https://api.mch.weixin.qq.com/mmpaymkttransfers"
     }
 
@@ -96,6 +100,7 @@ instance FromJSON WxppUrlConfig where
       , o .:? "sns-base"        >>= return . maybe mempty (Endo . upd_wxppUrlConfSnsApiBase) . chk_empty
       , o .:? "file-base"       >>= return . maybe mempty (Endo . upd_wxppUrlConfFileApiBase) . chk_empty
       , o .:? "user-pay-base"   >>= return . maybe mempty (Endo . upd_wxppUrlConfUserPayApiBase) . chk_empty
+      , o .:? "user-pay-sec-base" >>= return . maybe mempty (Endo . upd_wxppUrlConfUserPayApiSecBase) . chk_empty
       , o .:? "mm-pay-base"     >>= return . maybe mempty (Endo . upd_wxppUrlConfMmPayApiBase) . chk_empty
       ]
     where
@@ -106,6 +111,7 @@ instance FromJSON WxppUrlConfig where
         upd_wxppUrlConfSnsApiBase x c    = c { wxppUrlConfSnsApiBase = x }
         upd_wxppUrlConfFileApiBase x c   = c { wxppUrlConfFileApiBase = x }
         upd_wxppUrlConfUserPayApiBase x c = c { wxppUrlConfUserPayApiBase = x }
+        upd_wxppUrlConfUserPayApiSecBase x c = c { wxppUrlConfUserPayApiSecBase = x }
         upd_wxppUrlConfMmPayApiBase x c  = c { wxppUrlConfMmPayApiBase = x }
 -- }}}1
 
