@@ -108,8 +108,9 @@ testMsgToXml = do
                         WxppOutMsgText "中文\n<xml>"
 
 
-testCharParser :: (Eq a, Show a) =>
-    CharParser a -> Text -> a -> IO ()
+testCharParser :: (Eq a, Show a)
+               => ParsecT String () Identity a
+               -> Text -> a -> IO ()
 testCharParser p input expected = do
     case parse p "" (T.unpack input) of
         Left err -> do
