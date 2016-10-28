@@ -155,7 +155,8 @@ testJsApiTicket = do
 testWxPaySign :: IO ()
 testWxPaySign = do
   let app_key = WxPayAppKey "192006250b4c09247ec02edce69f6a2d"
-      nonce = Nonce "ibuaiVcKdpRxkhJA"
+      raw_nonce = "ibuaiVcKdpRxkhJA"
+      nonce = Nonce raw_nonce
       params = mapFromList
                 [ ("appid", "wxd930ea5d5a258f4f")
                 , ("mch_id", "10000100")
@@ -163,7 +164,7 @@ testWxPaySign = do
                 , ("body", "test")
                 ]
 
-  let sign = wxPaySign app_key params nonce
+  let sign = wxPaySignInternal app_key $ mapToList $ insertMap "nonce_str" raw_nonce params
 
   if sign /= WxPaySignature "9A0A8659F005D6984697E2CA0A9CF3B7"
         then do
