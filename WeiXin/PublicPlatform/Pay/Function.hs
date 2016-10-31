@@ -212,7 +212,9 @@ wxUserPayPrepay :: WxppApiMonad env m
                 -> Maybe WxPayProductId
                 -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
                 -> Maybe Text          -- ^ 附加数据
-                -> m (Either WxPayCallError WxPayPrepayOk)
+                -> m ( (Either WxPayCallError WxPayPrepayOk)
+                     , (LB.ByteString, LB.ByteString)
+                     )
 -- {{{1
 wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
   url_conf <- asks getWxppUrlConfig
@@ -234,8 +236,7 @@ wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str b
                     , fmap (Endo . insertMap "openid" . unWxppOpenID) m_open_id
                     ])
 
-  runExceptT $ do
-    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
     let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     prepay_id <- fmap WxUserPayPrepayId $ req_param "prepay_id"
@@ -258,8 +259,9 @@ wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str b
 wxUserPayQueryOrder :: WxppApiMonad env m
                     => WxPayCommonParams
                     -> Either WxUserPayTransId WxUserPayOutTradeNo
-                    -> m (Either WxPayCallError
+                    -> m ( Either WxPayCallError
                                 (WxUserPayStatInfo, (WxUserPayStatus, Maybe Text))
+                           , (LB.ByteString, LB.ByteString)
                          )
                     -- ^ 额外的信息包括 trade_state, trade_state_desc
 -- {{{1
@@ -276,9 +278,7 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
                               Right out_trade_no -> insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
                     ])
 
-  runExceptT $ do
-    resp_params <- ExceptT $ wxPayCallInternal app_key url params
-
+  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
     pay_state <- withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseStateParams resp_params
 
     trade_state_t <- withExceptT WxPayCallErrorDiag $ ExceptT $ reqXmlTextField resp_params "trade_state"
@@ -306,7 +306,9 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
 wxUserPayCloseOrder :: WxppApiMonad env m
                     => WxPayCommonParams
                     -> WxUserPayOutTradeNo
-                    -> m (Either WxPayCallError ())
+                    -> m ( Either WxPayCallError ()
+                         , (LB.ByteString, LB.ByteString)
+                         )
 -- {{{1
 wxUserPayCloseOrder common_params out_trade_no = do
   url_conf <- asks getWxppUrlConfig
@@ -319,8 +321,7 @@ wxUserPayCloseOrder common_params out_trade_no = do
                     , Endo $ insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
                     ])
 
-  runExceptT $ do
-    _resp_params <- ExceptT $ wxPayCallInternal app_key url params
+  wxPayCallInternalHelper app_key url params $ \_resp_params -> runExceptT $ do
     return ()
 
   where
@@ -339,7 +340,9 @@ wxUserPayRefund :: WxppApiMonad env m
                 -> WxUserPayOutRefundNo
                 -> WxPayMoneyAmount
                 -> WxPayMoneyAmount
-                -> m (Either WxPayCallError WxUserPayRefundReqResult)
+                -> m ( Either WxPayCallError WxUserPayRefundReqResult
+                     , (LB.ByteString, LB.ByteString)
+                     )
 -- {{{1
 wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee refund_fee = do
   url_conf <- asks getWxppUrlConfig
@@ -358,8 +361,7 @@ wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee r
                     , Endo $ insertMap "op_user_id" op_user_id
                     ])
 
-  runExceptT $ do
-    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
     withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseRefundReqParams resp_params
 
   where
@@ -378,7 +380,9 @@ wxUserPayRefundQuery :: WxppApiMonad env m
                      => WxPayCommonParams
                      -> Maybe WxPayDeviceInfo
                      -> RefundQueryOrderId
-                     -> m (Either WxPayCallError WxUserPayRefundQueryResult)
+                     -> m ( Either WxPayCallError WxUserPayRefundQueryResult
+                          , (LB.ByteString, LB.ByteString)
+                          )
 -- {{{1
 wxUserPayRefundQuery common_params m_dev_info query_order_id = do
   url_conf <- asks getWxppUrlConfig
@@ -400,8 +404,7 @@ wxUserPayRefundQuery common_params m_dev_info query_order_id = do
                               RefundQueryOrderByRefundId refund_id ->
                                 insertMap "refund_id" (unWxUserPayRefundId refund_id)
                     ])
-  runExceptT $ do
-    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
     withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseRefundQueryResult resp_params
 
   where
@@ -422,7 +425,9 @@ wxPayMchTransfer :: (WxppApiMonad env m)
                  -> WxPayMoneyAmount
                  -> Text          -- ^ description
                  -> WxPayParamIpStr          -- ^ ip address
-                 -> m (Either WxPayCallError WxPayTransOk)
+                 -> m ( Either WxPayCallError WxPayTransOk
+                      , (LB.ByteString, LB.ByteString)
+                      )
 -- {{{1
 wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_amount desc ip_str = do
   url_conf <- asks getWxppUrlConfig
@@ -460,8 +465,7 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
                     ])
 
 
-  runExceptT $ do
-    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
     let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
@@ -487,7 +491,9 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
 wxPayMchTransferInfo :: (WxppApiMonad env m)
                      => WxPayCommonParams
                      -> WxMchTransMchNo
-                     -> m (Either WxPayCallError WxPayMchTransInfo)
+                     -> m ( Either WxPayCallError WxPayMchTransInfo
+                          , (LB.ByteString, LB.ByteString)
+                          )
 -- {{{1
 wxPayMchTransferInfo common_params mch_trade_no = do
   url_conf <- asks getWxppUrlConfig
@@ -500,8 +506,7 @@ wxPayMchTransferInfo common_params mch_trade_no = do
                     , Just $ Endo $ insertMap "partner_trade_no" (unWxMchTransMchNo mch_trade_no)
                     ])
 
-  runExceptT $ do
-    resp_params <- ExceptT $ wxPayCallInternal app_key url params
+  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
     let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
@@ -793,17 +798,41 @@ wxPayCallInternal :: (WxppApiMonad env m)
                   => WxPayAppKey
                   -> String
                   -> WxPayParams
-                  -> m (Either WxPayCallError WxPayParams)
+                  -> m ( Either WxPayCallError WxPayParams
+                       , (LB.ByteString, LB.ByteString)
+                       )
+                  -- ^ 同时提供调用请求所用的报文及收到的报文的原始内容，以便分析问题
 -- {{{1
 wxPayCallInternal app_key url params = do
   sess <- asks getWreqSession
   nonce <- wxppMakeNonce 32
   let doc_txt = wxPayRenderOutgoingXmlDoc app_key params nonce
+      req_lbs = encodeUtf8 doc_txt
 
-  r <- liftIO (WS.post sess url $ encodeUtf8 doc_txt)
-  let lbs = r ^. responseBody
+  r <- liftIO (WS.post sess url req_lbs)
+  let resp_lbs = r ^. responseBody
 
-  wxPayParseInputXmlLbs app_key lbs
+  fmap (, (req_lbs, resp_lbs)) $ wxPayParseInputXmlLbs app_key resp_lbs
+-- }}}1
+
+
+wxPayCallInternalHelper :: (WxppApiMonad env m)
+                        => WxPayAppKey
+                        -> String
+                        -> WxPayParams
+                        -> (WxPayParams -> m (Either WxPayCallError a))
+                        -> m ( Either WxPayCallError a
+                             , (LB.ByteString, LB.ByteString)
+                             )
+                        -- ^ 同时提供调用请求所用的报文及收到的报文的原始内容，以便分析问题
+-- {{{1
+wxPayCallInternalHelper app_key url params f = do
+  (err_or_x, io_lbs) <- wxPayCallInternal app_key url params
+
+  fmap (,(io_lbs)) $ case err_or_x of
+                       Left err -> return $ Left err
+                       Right x -> f x
+
 -- }}}1
 
 
