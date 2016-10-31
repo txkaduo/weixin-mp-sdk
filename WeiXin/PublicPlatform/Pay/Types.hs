@@ -276,6 +276,7 @@ data WxPayCallReturnError = WxPayCallReturnError
 instance Exception WxPayCallReturnError
 
 
+-- | 报文解释错误
 data WxPayDiagError = WxPayDiagError Text
                       deriving (Show)
 
@@ -287,6 +288,16 @@ data WxPayCallResultError = WxPayCallResultError
                               WxPayErrorCode
                               Text
                             deriving (Show)
+
+
+-- | 微信支付接口调用的各种出错情况
+-- 未包括网络IO等的底层错误
+data WxPayCallError = WxPayCallErrorResult WxPayCallResultError
+                    | WxPayCallErrorReturn WxPayCallReturnError
+                    | WxPayCallErrorDiag WxPayDiagError
+                    | WxPayCallErrorXml SomeException
+                    deriving (Show)
+
 
 
 -- | 统一下单接口成功时的返回报文

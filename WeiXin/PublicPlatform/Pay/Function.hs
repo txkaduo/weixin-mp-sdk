@@ -212,7 +212,7 @@ wxUserPayPrepay :: WxppApiMonad env m
                 -> Maybe WxPayProductId
                 -> Maybe WxppOpenID    -- ^ required, if trade_type == JSAPI
                 -> Maybe Text          -- ^ 附加数据
-                -> m (Either WxPayCallResultError WxPayPrepayOk)
+                -> m (Either WxPayCallError WxPayPrepayOk)
 -- {{{1
 wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str body details m_prod_id m_open_id m_attach = do
   url_conf <- asks getWxppUrlConfig
@@ -236,12 +236,13 @@ wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str b
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    let req_param = reqXmlTextField resp_params
+    let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     prepay_id <- fmap WxUserPayPrepayId $ req_param "prepay_id"
     trade_type_t <- req_param "trade_type"
     r_trade_type <- case parseMaybeSimpleEncoded trade_type_t of
-                    Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
+                    Nothing -> throwError $ WxPayCallErrorDiag $ WxPayDiagError $
+                                    "Unknown trade_type: " <> trade_type_t
                     Just x  -> return x
 
     let m_code_url = fmap UrlText $ lookup "code_url" resp_params
@@ -257,7 +258,7 @@ wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str b
 wxUserPayQueryOrder :: WxppApiMonad env m
                     => WxPayCommonParams
                     -> Either WxUserPayTransId WxUserPayOutTradeNo
-                    -> m (Either WxPayCallResultError
+                    -> m (Either WxPayCallError
                                 (WxUserPayStatInfo, (WxUserPayStatus, Maybe Text))
                          )
                     -- ^ 额外的信息包括 trade_state, trade_state_desc
@@ -278,9 +279,9 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
 
-    pay_state <- wxUserPayParseStateParams resp_params
+    pay_state <- withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseStateParams resp_params
 
-    trade_state_t <- reqXmlTextField resp_params "trade_state"
+    trade_state_t <- withExceptT WxPayCallErrorDiag $ ExceptT $ reqXmlTextField resp_params "trade_state"
     trade_state <- case trade_state_t of
                     "SUCCESS"    -> return WxUserPaySuccess
                     "REFUND"     -> return WxUserPayRefund
@@ -290,7 +291,8 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
                     "USERPAYING" -> return WxUserPayUserPaying
                     "PAYERROR"   -> return WxUserPayPayError
                     _            -> do $logErrorS wxppLogSource $ "Invalid trade_state: " <> trade_state_t
-                                       throwM $ WxPayDiagError $ "Invalid trade_state: " <> trade_state_t
+                                       throwError $ WxPayCallErrorDiag $ WxPayDiagError $
+                                         "Invalid trade_state: " <> trade_state_t
 
     let trade_state_desc = lookup "trade_state_desc" resp_params
 
@@ -304,7 +306,7 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
 wxUserPayCloseOrder :: WxppApiMonad env m
                     => WxPayCommonParams
                     -> WxUserPayOutTradeNo
-                    -> m (Either WxPayCallResultError ())
+                    -> m (Either WxPayCallError ())
 -- {{{1
 wxUserPayCloseOrder common_params out_trade_no = do
   url_conf <- asks getWxppUrlConfig
@@ -337,7 +339,7 @@ wxUserPayRefund :: WxppApiMonad env m
                 -> WxUserPayOutRefundNo
                 -> WxPayMoneyAmount
                 -> WxPayMoneyAmount
-                -> m (Either WxPayCallResultError WxUserPayRefundReqResult)
+                -> m (Either WxPayCallError WxUserPayRefundReqResult)
 -- {{{1
 wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee refund_fee = do
   url_conf <- asks getWxppUrlConfig
@@ -358,7 +360,7 @@ wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee r
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    wxUserPayParseRefundReqParams resp_params
+    withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseRefundReqParams resp_params
 
   where
     WxPayCommonParams app_id app_key mch_id = common_params
@@ -376,7 +378,7 @@ wxUserPayRefundQuery :: WxppApiMonad env m
                      => WxPayCommonParams
                      -> Maybe WxPayDeviceInfo
                      -> RefundQueryOrderId
-                     -> m (Either WxPayCallResultError WxUserPayRefundQueryResult)
+                     -> m (Either WxPayCallError WxUserPayRefundQueryResult)
 -- {{{1
 wxUserPayRefundQuery common_params m_dev_info query_order_id = do
   url_conf <- asks getWxppUrlConfig
@@ -400,7 +402,7 @@ wxUserPayRefundQuery common_params m_dev_info query_order_id = do
                     ])
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    wxUserPayParseRefundQueryResult resp_params
+    withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseRefundQueryResult resp_params
 
   where
     WxPayCommonParams app_id app_key mch_id = common_params
@@ -420,7 +422,7 @@ wxPayMchTransfer :: (WxppApiMonad env m)
                  -> WxPayMoneyAmount
                  -> Text          -- ^ description
                  -> WxPayParamIpStr          -- ^ ip address
-                 -> m (Either WxPayCallResultError WxPayTransOk)
+                 -> m (Either WxPayCallError WxPayTransOk)
 -- {{{1
 wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_amount desc ip_str = do
   url_conf <- asks getWxppUrlConfig
@@ -460,16 +462,16 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    let req_param = reqXmlTextField resp_params
+    let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
     unless (mch_out_trade_no == mch_trade_no) $ do
-      throwM $ WxPayDiagError $
+      throwError $ WxPayCallErrorDiag $ WxPayDiagError $
                 "Unexpected response data: partner_trade_no is not the same as input: "
                 <> tshow mch_out_trade_no
 
     wx_trade_no <- fmap WxMchTransWxNo $ req_param "payment_no"
-    pay_time <- reqXmlTimeField resp_params wxPayMchTransParseTimeStr "payment_time"
+    pay_time <- withExceptT WxPayCallErrorDiag $ ExceptT $ reqXmlTimeField resp_params wxPayMchTransParseTimeStr "payment_time"
 
     return $ WxPayTransOk mch_out_trade_no wx_trade_no pay_time
 
@@ -485,7 +487,7 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
 wxPayMchTransferInfo :: (WxppApiMonad env m)
                      => WxPayCommonParams
                      -> WxMchTransMchNo
-                     -> m (Either WxPayCallResultError WxPayMchTransInfo)
+                     -> m (Either WxPayCallError WxPayMchTransInfo)
 -- {{{1
 wxPayMchTransferInfo common_params mch_trade_no = do
   url_conf <- asks getWxppUrlConfig
@@ -500,11 +502,11 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 
   runExceptT $ do
     resp_params <- ExceptT $ wxPayCallInternal app_key url params
-    let req_param = reqXmlTextField resp_params
+    let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
     unless (mch_out_trade_no == mch_trade_no) $ do
-      throwM $ WxPayDiagError $
+      throwError $ WxPayCallErrorDiag $ WxPayDiagError $
                 "Unexpected response data: partner_trade_no is not the same as input: "
                 <> tshow mch_out_trade_no
 
@@ -516,14 +518,15 @@ wxPayMchTransferInfo common_params mch_trade_no = do
                 "SUCCESS"     -> return WxMmTransStatusSccess
                 "PROCESSING"  -> return WxMmTransStatusProcessing
                 "FAILED"      -> WxMmTransStatusFailed <$> req_param "reason"
-                _             -> throwM $ WxPayDiagError $ "status is recognized: " <> st
+                _             -> throwError $ WxPayCallErrorDiag $ WxPayDiagError $
+                                  "status is recognized: " <> st
 
     open_id <- WxppOpenID <$> req_param "openid"
     let m_recv_name = lookup "transfer_name" resp_params
 
-    amount <- reqXmlFeeField resp_params "payment_amount"
+    amount <- to_call_err $ reqXmlFeeField resp_params "payment_amount"
 
-    trans_time <- reqXmlTimeField resp_params wxPayMchTransParseTimeStr "transfer_time"
+    trans_time <- to_call_err $ reqXmlTimeField resp_params wxPayMchTransParseTimeStr "transfer_time"
 
     desc <- req_param "desc"
 
@@ -539,6 +542,7 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 
   where
     WxPayCommonParams app_id app_key mch_id = common_params
+    to_call_err = withExceptT WxPayCallErrorDiag . ExceptT
 -- }}}1
 
 
@@ -546,13 +550,11 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 -- 查询接口与主动通知接口得到的报文有以下的区别
 -- * 通知接口多了: appid, mch_id
 -- * 查询接口多了: trade_state, trade_state_desc (似乎通知接口默认是成功的)
-wxUserPayParseStateParams :: (MonadThrow m, MonadLogger m)
+wxUserPayParseStateParams :: (MonadLogger m)
                           => WxPayParams
-                          -> m WxUserPayStatInfo
+                          -> m (Either WxPayDiagError WxUserPayStatInfo)
 -- {{{1
-wxUserPayParseStateParams resp_params = do
-  let req_param = reqXmlTextField resp_params
-
+wxUserPayParseStateParams resp_params = runExceptT $ do
   let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
 
   open_id <- fmap WxppOpenID $ req_param "openid"
@@ -563,23 +565,23 @@ wxUserPayParseStateParams resp_params = do
                    "N" -> return False
                    _ -> do
                      $logErrorS wxppLogSource $ "invalid value of 'is_subscribe': " <> is_subs_t
-                     throwM $ WxPayDiagError "invalid value of 'is_subscribe'"
+                     throwError $ WxPayDiagError "invalid value of 'is_subscribe'"
 
   trade_type_t <- req_param "trade_type"
   trade_type <- case parseMaybeSimpleEncoded trade_type_t of
-                   Nothing -> throwM $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
+                   Nothing -> throwError $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
                    Just x  -> return x
 
   bank_type_t <- req_param "bank_type"
   bank_type <- case parseBankCode bank_type_t of
-                 Nothing -> throwM $ WxPayDiagError $ "Unknown bank_type: " <> bank_type_t
+                 Nothing -> throwError $ WxPayDiagError $ "Unknown bank_type: " <> bank_type_t
                  Just x  -> return x
 
-  total_fee <- reqXmlFeeField resp_params "total_fee"
-  settlement_total_fee <- optXmlFeeField resp_params "settlement_total_fee"
-  cash_fee <- optXmlFeeField resp_params "cash_fee"
-  coupon_fee <- optXmlFeeField resp_params "coupon_fee"
-  time_end <- reqXmlTimeField resp_params wxUserPayParseTimeStr "time_end"
+  total_fee <- ExceptT $ reqXmlFeeField resp_params "total_fee"
+  settlement_total_fee <- ExceptT $ optXmlFeeField resp_params "settlement_total_fee"
+  cash_fee <- ExceptT $ optXmlFeeField resp_params "cash_fee"
+  coupon_fee <- ExceptT $ optXmlFeeField resp_params "coupon_fee"
+  time_end <- ExceptT $ reqXmlTimeField resp_params wxUserPayParseTimeStr "time_end"
 
   trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
   out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
@@ -600,16 +602,17 @@ wxUserPayParseStateParams resp_params = do
                      out_trade_no
                      m_attach
                      time_end
+
+  where
+    req_param = ExceptT . reqXmlTextField resp_params
 -- }}}1
 
 
-wxUserPayParseRefundReqParams :: (MonadThrow m, MonadLogger m)
+wxUserPayParseRefundReqParams :: (MonadLogger m)
                               => WxPayParams
-                              -> m WxUserPayRefundReqResult
+                              -> m (Either WxPayDiagError WxUserPayRefundReqResult)
 -- {{{1
-wxUserPayParseRefundReqParams resp_params = do
-  let req_param = reqXmlTextField resp_params
-
+wxUserPayParseRefundReqParams resp_params = runExceptT $ do
   let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
 
   trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
@@ -617,13 +620,13 @@ wxUserPayParseRefundReqParams resp_params = do
   refund_id <- fmap WxUserPayRefundId $ req_param "refund_id"
   out_refund_no <- fmap WxUserPayOutRefundNo $ req_param "out_refund_no"
 
-  total_fee <- reqXmlFeeField resp_params "total_fee"
-  refund_fee <- reqXmlFeeField resp_params "refund_fee"
-  settlement_refund_fee <- optXmlFeeField resp_params "settlement_refund_fee"
-  cash_fee <- reqXmlFeeField resp_params "cash_fee"
-  cash_refund_fee <- optXmlFeeField resp_params "cash_refund_fee"
+  total_fee <- ExceptT $ reqXmlFeeField resp_params "total_fee"
+  refund_fee <- ExceptT $ reqXmlFeeField resp_params "refund_fee"
+  settlement_refund_fee <- ExceptT $ optXmlFeeField resp_params "settlement_refund_fee"
+  cash_fee <- ExceptT $ reqXmlFeeField resp_params "cash_fee"
+  cash_refund_fee <- ExceptT $ optXmlFeeField resp_params "cash_refund_fee"
 
-  channel <- mapM wxUserPayParseRefundChannelText $
+  channel <- mapM (ExceptT . wxUserPayParseRefundChannelText) $
                 join $ fmap nullToNothing $ lookup "refund_channel" resp_params
 
   return $ WxUserPayRefundReqResult
@@ -638,77 +641,80 @@ wxUserPayParseRefundReqParams resp_params = do
                     cash_fee
                     cash_refund_fee
                     channel
+
+  where
+    req_param = ExceptT . reqXmlTextField resp_params
 -- }}}1
 
 
-wxUserPayParseRefundChannelText :: (MonadThrow m, MonadLogger m)
+wxUserPayParseRefundChannelText :: (MonadLogger m)
                                 => Text
-                                -> m WxPayRefundChannel
+                                -> m (Either WxPayDiagError WxPayRefundChannel)
 -- {{{1
-wxUserPayParseRefundChannelText x = do
+wxUserPayParseRefundChannelText x = runExceptT $ do
   case x of
     "ORIGINAL" -> return WxPayRefundOriginal
     "BALANCE"  -> return WxPayRefundBalance
-    _          -> throwM $ WxPayDiagError $ "Unknown refund_channel: " <> x
+    _          -> throwError $ WxPayDiagError $ "Unknown refund_channel: " <> x
 -- }}}1
 
 
-wxUserPayParseCouponTypeText :: (MonadThrow m, MonadLogger m)
+wxUserPayParseCouponTypeText :: (MonadLogger m)
                              => Text
-                             -> m WxPayCouponType
+                             -> m (Either WxPayDiagError WxPayCouponType)
 -- {{{1
-wxUserPayParseCouponTypeText x = do
+wxUserPayParseCouponTypeText x = runExceptT $ do
   case x of
     "CASH"    -> return WxPayCouponCash
-    "NO_CASH" -> return $ WxPayCouponNonCash
-    _         -> throwM $ WxPayDiagError $ "Unknown coupon_type: " <> x
+    "NO_CASH" -> return WxPayCouponNonCash
+    _         -> throwError $ WxPayDiagError $ "Unknown coupon_type: " <> x
 -- }}}1
 
 
-wxUserPayParseRefundAccount :: (MonadThrow m, MonadLogger m)
+wxUserPayParseRefundAccount :: (MonadLogger m)
                             => Text
-                            -> m WxPayRefundAccount
+                            -> m (Either WxPayDiagError WxPayRefundAccount)
 -- {{{1
-wxUserPayParseRefundAccount x = do
+wxUserPayParseRefundAccount x = runExceptT $ do
   case x of
     "REFUND_SOURCE_RECHARGE_FUNDS"  -> return WxPayRefundAccountRechargeFunds
     "REFUND_SOURCE_UNSETTLED_FUNDS" -> return WxPayRefundAccountUnsettledFunds
-    _         -> throwM $ WxPayDiagError $ "Unknown refund_account: " <> x
+    _                               -> throwError $ WxPayDiagError $ "Unknown refund_account: " <> x
 -- }}}1
 
 
-wxUserPayParseRefundQueryItem :: (MonadThrow m, MonadLogger m)
+wxUserPayParseRefundQueryItem :: (MonadLogger m)
                               => Int
                               -> WxPayParams
-                              -> m WxUserPayRefundQueryItem
+                              -> m (Either WxPayDiagError WxUserPayRefundQueryItem)
 -- {{{1
-wxUserPayParseRefundQueryItem n resp_params = do
+wxUserPayParseRefundQueryItem n resp_params = runExceptT $ do
   out_refund_no <- fmap WxUserPayOutRefundNo $ req_param $ "out_refund_no" <> suffix
   refund_id <- fmap WxUserPayRefundId $ req_param $ "refund_id" <> suffix
 
   status <- case join $ fmap nullToNothing $ lookup ("refund_status" <> suffix) resp_params of
-              Nothing           -> throwM $ WxPayDiagError $ "missing " <> ("refund_status" <> suffix)
+              Nothing           -> throwError $ WxPayDiagError $ "missing " <> ("refund_status" <> suffix)
               Just "SUCCESS"    -> return WxPayRefundSuccess
               Just "FAIL"       -> return WxPayRefundFail
               Just "PROCESSING" -> return WxPayRefundProcessing
               Just "CHANGE"     -> return WxPayRefundChange
-              Just x            -> throwM $ WxPayDiagError $ "Unknown refound_status: " <> x
+              Just x            -> throwError $ WxPayDiagError $ "Unknown refound_status: " <> x
 
-  channel <- mapM wxUserPayParseRefundChannelText $
+  channel <- mapM (ExceptT . wxUserPayParseRefundChannelText) $
                 join $ fmap nullToNothing $ lookup ("refund_channel" <> suffix) resp_params
 
-  refund_fee <- reqXmlFeeField resp_params $ "refund_fee" <> suffix
-  settlement_refund_fee <- optXmlFeeField resp_params $ "settlement_refund_fee" <> suffix
+  refund_fee <- ExceptT $ reqXmlFeeField resp_params $ "refund_fee" <> suffix
+  settlement_refund_fee <- ExceptT $ optXmlFeeField resp_params $ "settlement_refund_fee" <> suffix
   recv_account <- req_param $ "refund_recv_account" <> suffix
 
-  coupon_type <- mapM wxUserPayParseCouponTypeText $
+  coupon_type <- mapM (ExceptT . wxUserPayParseCouponTypeText) $
                     join $ fmap nullToNothing $ lookup ("refund_channel" <> suffix) resp_params
 
   let coupon_refound_count = join $ fmap readMay $ lookup ("coupon_refund_count" <> suffix) resp_params
 
   items <- case coupon_refound_count of
-            Just m | m > 0 -> mapM (\x -> wxUserPayParseRefundQueryCouponItem n x resp_params) [0 .. m-1]
-            _              -> return []
+             Just m | m > 0 -> mapM (\x -> ExceptT $ wxUserPayParseRefundQueryCouponItem n x resp_params) [0 .. m-1]
+             _              -> return []
 
   return $ WxUserPayRefundQueryItem
             out_refund_no
@@ -721,51 +727,51 @@ wxUserPayParseRefundQueryItem n resp_params = do
             coupon_type
             items
   where
-    req_param = reqXmlTextField resp_params
+    req_param = ExceptT . reqXmlTextField resp_params
     suffix = "_" <> tshow n
 -- }}}1
 
 
-wxUserPayParseRefundQueryCouponItem :: (MonadThrow m, MonadLogger m)
+wxUserPayParseRefundQueryCouponItem :: (MonadLogger m)
                                     => Int
                                     -> Int
                                     -> WxPayParams
-                                    -> m WxPayRefundQueryCouponRefundItem
+                                    -> m (Either WxPayDiagError WxPayRefundQueryCouponRefundItem)
 -- {{{1
-wxUserPayParseRefundQueryCouponItem n m resp_params = do
+wxUserPayParseRefundQueryCouponItem n m resp_params = runExceptT $ do
   batch_id <- req_param $ "coupon_refund_batch_id" <> suffix
   refund_id <- req_param $ "coupon_refund_id" <> suffix
-  fee <- reqXmlFeeField resp_params $ "coupon_refund_fee" <> suffix
+  fee <- ExceptT $ reqXmlFeeField resp_params $ "coupon_refund_fee" <> suffix
   return $ WxPayRefundQueryCouponRefundItem batch_id refund_id fee
   where
-    req_param = reqXmlTextField resp_params
+    req_param = ExceptT . reqXmlTextField resp_params
     suffix = "_" <> tshow n <> "_" <> tshow m
 -- }}}1
 
 
-wxUserPayParseRefundQueryResult :: (MonadThrow m, MonadLogger m)
+wxUserPayParseRefundQueryResult :: (MonadLogger m)
                                 => WxPayParams
-                                -> m WxUserPayRefundQueryResult
+                                -> m (Either WxPayDiagError WxUserPayRefundQueryResult)
 -- {{{1
-wxUserPayParseRefundQueryResult resp_params = do
+wxUserPayParseRefundQueryResult resp_params = runExceptT $ do
   let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
 
   trans_id <- fmap WxUserPayTransId $ req_param "transaction_id"
   out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
 
-  total_fee <- reqXmlFeeField resp_params "total_fee"
-  settlement_total_fee <- optXmlFeeField resp_params "settlement_total_fee"
-  cash_fee <- reqXmlFeeField resp_params "cash_fee"
+  total_fee <- ExceptT $ reqXmlFeeField resp_params "total_fee"
+  settlement_total_fee <- ExceptT $ optXmlFeeField resp_params "settlement_total_fee"
+  cash_fee <- ExceptT $ reqXmlFeeField resp_params "cash_fee"
 
-  refund_account <- mapM wxUserPayParseRefundAccount $ lookup "refund_account" resp_params
+  refund_account <- mapM (ExceptT . wxUserPayParseRefundAccount) $ lookup "refund_account" resp_params
 
   refund_count_t <- req_param "refund_count"
   let refund_count = readMay refund_count_t
   items <- case refund_count of
              Nothing -> do
-               throwM $ WxPayDiagError $ "Invalid refund_count: " <> refund_count_t
+               throwError $ WxPayDiagError $ "Invalid refund_count: " <> refund_count_t
 
-             Just n | n > 0 -> mapM (\x -> wxUserPayParseRefundQueryItem x resp_params) [0 .. n-1]
+             Just n | n > 0 -> mapM (\x -> ExceptT $ wxUserPayParseRefundQueryItem x resp_params) [0 .. n-1]
 
              _              -> return []
 
@@ -779,7 +785,7 @@ wxUserPayParseRefundQueryResult resp_params = do
             refund_account
             items
   where
-    req_param = reqXmlTextField resp_params
+    req_param = ExceptT . reqXmlTextField resp_params
 -- }}}1
 
 
@@ -787,7 +793,7 @@ wxPayCallInternal :: (WxppApiMonad env m)
                   => WxPayAppKey
                   -> String
                   -> WxPayParams
-                  -> m (Either WxPayCallResultError WxPayParams)
+                  -> m (Either WxPayCallError WxPayParams)
 -- {{{1
 wxPayCallInternal app_key url params = do
   sess <- asks getWreqSession
@@ -801,41 +807,41 @@ wxPayCallInternal app_key url params = do
 -- }}}1
 
 
-wxPayParseInputXmlLbs :: (MonadThrow m, MonadLogger m)
+wxPayParseInputXmlLbs :: (MonadLogger m)
                       => WxPayAppKey
                       -> LB.ByteString
-                      -> m (Either WxPayCallResultError WxPayParams)
+                      -> m (Either WxPayCallError WxPayParams)
 -- {{{1
-wxPayParseInputXmlLbs app_key lbs = do
+wxPayParseInputXmlLbs app_key lbs = runExceptT $ do
   case parseLBS def lbs of
       Left ex         -> do
         $logErrorS wxppLogSource $ "Failed to parse XML: " <> tshow ex
-        throwM ex
+        throwError $ WxPayCallErrorXml ex
 
       Right resp_doc  -> do
         case wxPayParseIncomingXmlDoc app_key resp_doc of
           Left err -> do
             $logErrorS wxppLogSource $ "Invalid response XML: " <> err
-            throwM $ WxPayDiagError err
+            throwError $ WxPayCallErrorDiag $ WxPayDiagError err
 
           Right resp_params -> do
-            let req_param = reqXmlTextField resp_params
+            let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
             ret_code <- req_param "return_code"
             unless (ret_code == "SUCCESS") $ do
               let m_err_msg = lookup "return_msg" resp_params
-              throwM $ WxPayCallReturnError m_err_msg
+              throwError $ WxPayCallErrorReturn $ WxPayCallReturnError m_err_msg
 
             result_code <- req_param "result_code"
             if result_code == "SUCCESS"
                then do
-                 return $ Right resp_params
+                 return resp_params
 
                else do
                  -- failed
                  err_code <- fmap WxPayErrorCode $ req_param "err_code"
                  err_desc <- req_param "err_code_des"
-                 return $ Left $ WxPayCallResultError err_code err_desc
+                 throwError $ WxPayCallErrorResult $ WxPayCallResultError err_code err_desc
 -- }}}1
 
 
@@ -872,48 +878,49 @@ wxPayUserPayRenderTime = formatTime locale fmt1
 -- }}}1
 
 
-reqXmlTextField :: MonadThrow m => WxPayParams -> Text -> m Text
-reqXmlTextField vars n = maybe
-                        (throwM $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
+reqXmlTextField :: Monad m => WxPayParams -> Text -> m (Either WxPayDiagError Text)
+reqXmlTextField vars n = runExceptT $
+                      maybe
+                        (throwError $ WxPayDiagError $ "Invalid response XML: Element '" <> n <> "' not found")
                         return
                         (lookup n vars)
 
 
-reqXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m WxPayMoneyAmount
+reqXmlFeeField :: Monad m => WxPayParams -> Text -> m (Either WxPayDiagError WxPayMoneyAmount)
 -- {{{1
-reqXmlFeeField vars n = do
-  amount_t <- reqXmlTextField vars n
+reqXmlFeeField vars n = runExceptT $ do
+  amount_t <- ExceptT $ reqXmlTextField vars n
   fmap WxPayMoneyAmount $
     maybe
-      (throwM $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
+      (throwError $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
       return
       (readMay amount_t)
 -- }}}1
 
 
-optXmlFeeField :: MonadThrow m => WxPayParams -> Text -> m (Maybe WxPayMoneyAmount)
+optXmlFeeField :: Monad m => WxPayParams -> Text -> m (Either WxPayDiagError (Maybe WxPayMoneyAmount))
 -- {{{1
-optXmlFeeField vars n = runMaybeT $ do
+optXmlFeeField vars n = runExceptT $ runMaybeT $ do
   amount_t <- MaybeT $ return $ lookup n vars
   fmap WxPayMoneyAmount $
     maybe
-      (throwM $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
+      (throwError $ WxPayDiagError $ n <> "is not an integer: " <> amount_t)
       return
       (readMay amount_t)
 -- }}}1
 
 
-reqXmlTimeField :: MonadThrow m
+reqXmlTimeField :: Monad m
                 => WxPayParams
                 -> (String -> Maybe LocalTime)
                 -> Text
-                -> m UTCTime
+                -> m (Either WxPayDiagError UTCTime)
 -- {{{1
-reqXmlTimeField vars parse_time n = do
-  time_t <- reqXmlTextField vars n
+reqXmlTimeField vars parse_time n = runExceptT $ do
+  time_t <- ExceptT $ reqXmlTextField vars n
   fmap (localTimeToUTC tz) $
     maybe
-      (throwM $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> time_t)
+      (throwError $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> time_t)
       return
       (parse_time $ unpack time_t)
   where

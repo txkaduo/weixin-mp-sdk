@@ -26,39 +26,60 @@ yesodHandleWxUserPayNotify app_key handle_notify = do
   lbs <- rawRequestBody $$ sinkLbs
   let parse_params = runExceptT $ do
         input_params <- ExceptT $ wxPayParseInputXmlLbs app_key lbs
-        app_id <- fmap WxppAppID $ reqXmlTextField input_params "appid"
-        mch_id <- fmap WxPayMchID $ reqXmlTextField input_params "mch_id"
-        fmap ((app_id, mch_id),) $ wxUserPayParseStateParams input_params
 
-  err_or <- try parse_params
+        app_id <- fmap WxppAppID $
+                    withExceptT WxPayCallErrorDiag $ ExceptT $
+                      reqXmlTextField input_params "appid"
+
+        mch_id <- fmap WxPayMchID $
+                    withExceptT WxPayCallErrorDiag $ ExceptT $
+                      reqXmlTextField input_params "mch_id"
+
+        fmap ((app_id, mch_id),) $
+                withExceptT WxPayCallErrorDiag $ ExceptT $
+                    wxUserPayParseStateParams input_params
+
+  err_or <- parse_params
   out_params <- case err_or of
-    Left (WxPayDiagError err) -> do
+    Left (WxPayCallErrorDiag (WxPayDiagError err)) -> do
       $logErrorS wxppLogSource $ "Pay notification: failed to parse: " <> err
       return $ [ ("return_code", "FAIL")
                , ("return_msg", err)
                ]
 
-    Right err_or_pay_stat -> do
-      case err_or_pay_stat of
+    Left (WxPayCallErrorXml ex) -> do
+      let err = tshow ex
+      $logErrorS wxppLogSource $ "Pay notification: failed to parse XML: " <> err
+      return $ [ ("return_code", "FAIL")
+               , ("return_msg", err)
+               ]
+
+    Left (WxPayCallErrorResult err) -> do
+      $logErrorS wxppLogSource $ "Pay notification: got result error: " <> tshow err
+      return $ [ ("return_code", "FAIL")
+               , ("return_msg", "caller error")
+               ]
+
+    Left ex -> do
+      let err = tshow ex
+      $logErrorS wxppLogSource $ "Pay notification, exception: " <> err
+      return $ [ ("return_code", "FAIL")
+               , ("return_msg", err)
+               ]
+
+    Right ((app_id, mch_id), pay_stat) -> do
+      err_or2 <- tryAny $ handle_notify app_id mch_id pay_stat
+      case err_or2 of
         Left err -> do
-          $logErrorS wxppLogSource $ "Pay notification: got result error: " <> tshow err
+          $logErrorS wxppLogSource $ "Pay notification: failed to handle: " <> tshow err
           return $ [ ("return_code", "FAIL")
-                   , ("return_msg", "caller error")
+                   , ("return_msg", "internal error")
                    ]
 
-        Right ((app_id, mch_id), pay_stat) -> do
-          err_or2 <- tryAny $ handle_notify app_id mch_id pay_stat
-          case err_or2 of
-            Left err -> do
-              $logErrorS wxppLogSource $ "Pay notification: failed to handle: " <> tshow err
-              return $ [ ("return_code", "FAIL")
-                       , ("return_msg", "internal error")
-                       ]
-
-            Right () -> do
-              return $ [ ("return_code", "SUCCESS")
-                       , ("return_msg", "OK")
-                       ]
+        Right () -> do
+          return $ [ ("return_code", "SUCCESS")
+                   , ("return_msg", "OK")
+                   ]
 
   return $ repXml $ renderText def $ wxPayOutgoingXmlDocFromParams $ mapFromList out_params
 -- }}}1

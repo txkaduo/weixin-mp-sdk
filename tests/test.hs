@@ -280,7 +280,9 @@ testWxUserPayStateDoc2 = do
 testWxUserPayStateDocHelper :: Text -> IO (WxUserPayStatInfo)
 testWxUserPayStateDocHelper = testWxUserParseXmlDocHelper wxUserPayParseStateParams
 
-testWxUserParseXmlDocHelper :: (WxPayParams -> LoggingT IO a) -> Text -> IO (a)
+testWxUserParseXmlDocHelper :: (WxPayParams -> LoggingT IO (Either WxPayDiagError a))
+                            -> Text
+                            -> IO (a)
 testWxUserParseXmlDocHelper f doc_txt = do
   case parseLBS def (fromStrict $ encodeUtf8 doc_txt) of
       Left ex         -> do
@@ -293,7 +295,13 @@ testWxUserParseXmlDocHelper f doc_txt = do
                           catMaybes $ map param_from_node $
                             cursor $| child &| node
 
-        runStderrLoggingT $ f all_params
+        err_or <- runStderrLoggingT $ f all_params
+        case err_or of
+          Left err -> do
+            putStrLn $ "Xml doc error: " <> tshow err
+            exitFailure
+
+          Right x -> return x
 
   where
     param_from_node n@(NodeElement ele) = do
