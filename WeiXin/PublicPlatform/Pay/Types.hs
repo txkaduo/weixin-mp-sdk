@@ -62,12 +62,16 @@ newtype WxPayProductId = WxPayProductId { unWxPayProductId :: Text }
 
 -- | 微信支付订单号
 newtype WxUserPayTransId = WxUserPayTransId { unWxUserPayTransId :: Text }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord
+           , PersistFieldSql, PersistField
+           )
 
 
 -- | 用户支付: 退款单号
 newtype WxUserPayRefundId = WxUserPayRefundId { unWxUserPayRefundId :: Text }
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord
+           , PersistFieldSql, PersistField
+           )
 
 
 -- | 微信企业支付所产生的订单号
