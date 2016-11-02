@@ -1139,7 +1139,7 @@ data WxppDurableArticle = WxppDurableArticle {
                             }
                             deriving (Eq, Ord, Show, Generic)
 
--- {{{1 instances
+-- {{{1 instances for WxppDurableArticle
 instance NFData WxppDurableArticle
 $(deriveSafeCopy 0 'base ''WxppDurableArticle)
 
@@ -1196,6 +1196,7 @@ data WxppMediaType = WxppMediaTypeImage
                     | WxppMediaTypeThumb
                     deriving (Show, Eq, Ord, Enum, Bounded, Generic)
 
+-- {{{1 instances
 instance NFData WxppMediaType
 deriveSafeCopy 0 'base ''WxppMediaType
 
