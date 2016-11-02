@@ -427,6 +427,24 @@ data WxPayRefundStatus = WxPayRefundSuccess
                        | WxPayRefundChange
                        deriving (Show, Eq, Ord, Enum, Bounded)
 
+-- {{{1 instances
+$(derivePersistFieldS "WxPayRefundStatus")
+$(derivePathPieceS "WxPayRefundStatus")
+$(deriveJsonS "WxPayRefundStatus")
+
+instance SimpleStringRep WxPayRefundStatus where
+  simpleEncode WxPayRefundSuccess    = "success"
+  simpleEncode WxPayRefundFail       = "fail"
+  simpleEncode WxPayRefundProcessing = "processing"
+  simpleEncode WxPayRefundChange     = "change"
+
+  simpleParser = makeSimpleParserByTable
+                    [ ("success", WxPayRefundSuccess)
+                    , ("fail", WxPayRefundFail)
+                    , ("processing", WxPayRefundProcessing)
+                    , ("change", WxPayRefundChange)
+                    ]
+-- }}}1
 
 data WxPayRefundAccount = WxPayRefundAccountUnsettledFunds
                         | WxPayRefundAccountRechargeFunds
