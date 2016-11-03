@@ -404,10 +404,23 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
             now <- liftIO getCurrentTime
             let expiry  = addUTCTime (oauthAtkTTL atk_info) now
                 open_id = oauthAtkOpenID atk_info
-                m_union_id = oauthAtkUnionID atk_info
                 scopes  = oauthAtkScopes atk_info
-                atk_p   = packOAuthTokenInfo app_id open_id
-                            (fromOAuthAccessTokenResult now atk_info)
+                atk_p = getOAuthAccessTokenPkg (app_id, atk_info)
+
+            let get_union_id1 = MaybeT $ return $ oauthAtkUnionID atk_info
+                get_union_id2 = do
+                  guard $ any oauthScopeCanGetUserInfo scopes
+
+                  err_or_oauth_user_info <- tryWxppWsResult $ flip runReaderT api_env $ wxppOAuthGetUserInfo' atk_p
+                  case err_or_oauth_user_info of
+                    Left err -> do $logErrorS wxppLogSource $ "wxppOAuthGetUserInfo' failed: " <> tshow err
+                                   mzero
+
+                    Right oauth_user_info -> do
+                      liftIO $ wxppCacheAddSnsUserInfo cache app_id "zh_CN" oauth_user_info
+                      MaybeT $ return $ oauthUserInfoUnionID oauth_user_info
+
+            m_union_id <- runMaybeT $ get_union_id1 <|> get_union_id2
 
             liftIO $ wxppCacheAddOAuthAccessToken cache atk_p expiry
 
