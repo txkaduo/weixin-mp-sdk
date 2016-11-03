@@ -1521,6 +1521,7 @@ data OAuthScope = AS_SnsApiBase
                 | AS_SnsApiUserInfo
                 | AS_SnsApiLogin
                 | AS_Unknown Text
+                -- 注意：值的顺序尽量以从低到高排列，以便其它代码自动选择一个合适的值
                 deriving (Show, Eq, Ord, Generic)
 
 -- {{{1 instances
@@ -1555,6 +1556,14 @@ oauthScopeCanGetUserInfo :: OAuthScope -> Bool
 oauthScopeCanGetUserInfo AS_SnsApiUserInfo = True
 oauthScopeCanGetUserInfo AS_SnsApiLogin    = True
 oauthScopeCanGetUserInfo _                 = False
+
+
+-- | 有些 scope 使用时，在 OAuthAccessTokenResult 自带unionid 字段
+oauthScopeAccessTokenWithUnionID :: OAuthScope -> Bool
+oauthScopeAccessTokenWithUnionID AS_SnsApiUserInfo = True
+oauthScopeAccessTokenWithUnionID AS_SnsApiLogin    = True
+oauthScopeAccessTokenWithUnionID _                 = False
+
 
 -- | 如果是未知的 scope 则得到Just
 oauthScopeIsUnknown :: OAuthScope -> Maybe Text
