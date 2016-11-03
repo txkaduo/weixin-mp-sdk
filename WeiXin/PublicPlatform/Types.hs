@@ -1556,6 +1556,11 @@ oauthScopeCanGetUserInfo AS_SnsApiUserInfo = True
 oauthScopeCanGetUserInfo AS_SnsApiLogin    = True
 oauthScopeCanGetUserInfo _                 = False
 
+-- | 如果是未知的 scope 则得到Just
+oauthScopeIsUnknown :: OAuthScope -> Maybe Text
+oauthScopeIsUnknown (AS_Unknown t) = Just t
+oauthScopeIsUnknown _              = Nothing
+
 
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
   deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
