@@ -1551,34 +1551,6 @@ instance SimpleStringRep OAuthScope where
 -- }}}1
 
 
--- | 某个 scope 是否有权限获取用户基本信息
-oauthScopeCanGetUserInfo :: OAuthScope -> Bool
-oauthScopeCanGetUserInfo AS_SnsApiUserInfo = True
-oauthScopeCanGetUserInfo AS_SnsApiLogin    = True
-oauthScopeCanGetUserInfo _                 = False
-
-
--- | 有些 scope 使用时，在 OAuthAccessTokenResult 自带unionid 字段
-oauthScopeAccessTokenWithUnionID :: OAuthScope -> Bool
-oauthScopeAccessTokenWithUnionID AS_SnsApiUserInfo = True
-oauthScopeAccessTokenWithUnionID AS_SnsApiLogin    = True
-oauthScopeAccessTokenWithUnionID _                 = False
-
-
--- | 能取得 union id 的最低 OAuthScope 要求．
--- 仅对于微信内使用有意义，因为微信外只有一个 AS_SnsApiLogin 可用
--- 这个函数存在是因为文档对于这个问题前后有变化，担心以后也可能变化
--- 不想其它代码写死这部分逻辑
-oauthScopeMinForUnionID :: OAuthScope
-oauthScopeMinForUnionID = AS_SnsApiUserInfo
-
-
--- | 如果是未知的 scope 则得到Just
-oauthScopeIsUnknown :: OAuthScope -> Maybe Text
-oauthScopeIsUnknown (AS_Unknown t) = Just t
-oauthScopeIsUnknown _              = Nothing
-
-
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
   deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
            , PathPiece, ToJSON
