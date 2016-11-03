@@ -1565,6 +1565,14 @@ oauthScopeAccessTokenWithUnionID AS_SnsApiLogin    = True
 oauthScopeAccessTokenWithUnionID _                 = False
 
 
+-- | 能取得 union id 的最低 OAuthScope 要求．
+-- 仅对于微信内使用有意义，因为微信外只有一个 AS_SnsApiLogin 可用
+-- 这个函数存在是因为文档对于这个问题前后有变化，担心以后也可能变化
+-- 不想其它代码写死这部分逻辑
+oauthScopeMinForUnionID :: OAuthScope
+oauthScopeMinForUnionID = AS_SnsApiUserInfo
+
+
 -- | 如果是未知的 scope 则得到Just
 oauthScopeIsUnknown :: OAuthScope -> Maybe Text
 oauthScopeIsUnknown (AS_Unknown t) = Just t
