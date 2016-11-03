@@ -1550,6 +1550,13 @@ instance SimpleStringRep OAuthScope where
 -- }}}1
 
 
+-- | 某个 scope 是否有权限获取用户基本信息
+oauthScopeCanGetUserInfo :: OAuthScope -> Bool
+oauthScopeCanGetUserInfo AS_SnsApiUserInfo = True
+oauthScopeCanGetUserInfo AS_SnsApiLogin    = True
+oauthScopeCanGetUserInfo _                 = False
+
+
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
   deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
            , PathPiece, ToJSON
