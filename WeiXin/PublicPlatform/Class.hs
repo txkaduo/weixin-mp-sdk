@@ -225,8 +225,14 @@ instance ToJSON WxUserInfo where
 class MayHaveWxUserInfo a where
   mayGetWxUserInfo :: a -> Maybe WxUserInfo
 
+class MayHaveWxUserInfo a => HasWxUserInfo a where
+  getWxUserInfo :: a -> WxUserInfo
+
 instance MayHaveWxUserInfo OAuthGetUserInfoResult where
-  mayGetWxUserInfo x = Just $ WxUserInfo
+  mayGetWxUserInfo = Just . getWxUserInfo
+
+instance HasWxUserInfo OAuthGetUserInfoResult where
+  getWxUserInfo x = WxUserInfo
                         (oauthUserInfoOpenID x)
                         (oauthUserInfoNickname x)
                         (oauthUserInfoGender x)
