@@ -446,6 +446,13 @@ instance PersistFieldSql TpAppType where
   sqlType _ = sqlType (Proxy :: Proxy Int8)
 -- }}}1
 
+
+tpAppTypeToKind :: TpAppType -> WxAppKind
+tpAppTypeToKind TpAppPublisher        = WxAppKindPublisher
+tpAppTypeToKind TpAppPublisherFromOld = WxAppKindPublisher
+tpAppTypeToKind TpAppServer           = WxAppKindServer
+
+
 -- | 授权方认证类型
 -- 从取值看，似乎每个值应该是互斥的
 -- 但逻辑上又好似未能完全涵盖全部情况
