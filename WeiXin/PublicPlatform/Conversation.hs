@@ -439,10 +439,11 @@ instance ToJSON (SomeWxppTalkState r m) where
     toJSON (SomeWxppTalkState x) = toJSON x
 
 
-wxTalkGetAccessToken :: (MonadIO m, HasAccessToken r, HasWxppAppID r) =>
-    r -> m (Either String AccessToken)
+wxTalkGetAccessToken :: (MonadIO m, HasAccessTokenIO r, HasWxppAppID r)
+                     => r
+                     -> m (Either String AccessToken)
 wxTalkGetAccessToken env = runExceptT $ do
-    (liftIO $ wxppGetAccessToken env)
+    (liftIO $ wxppGetAccessTokenIO env)
         >>= maybe
                 (throwError $ "no access token for app: " <> T.unpack (unWxppAppID app_id))
                 (return . fst)

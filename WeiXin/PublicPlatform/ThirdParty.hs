@@ -372,7 +372,9 @@ data WxppTpAuthorizerTokens = WxppTpAuthorizerTokens
                                     UTCTime
 
 instance HasAccessToken WxppTpAuthorizerTokens where
-  wxppGetAccessToken (WxppTpAuthorizerTokens atk _ expiry) = return $ Just (atk, expiry)
+  wxppGetAccessToken (WxppTpAuthorizerTokens atk _ expiry) = (atk, expiry)
+
+instance HasAccessTokenIO WxppTpAuthorizerTokens
 
 
 class HasWxppTpAuthorizerTokens a where

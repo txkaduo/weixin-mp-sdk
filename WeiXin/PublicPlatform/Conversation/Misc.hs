@@ -30,8 +30,8 @@ instance HasWxppUrlConfig CommonTalkEnv where
 instance HasWreqSession CommonTalkEnv where
     getWreqSession (CommonTalkEnv x _ _ _) = getWreqSession x
 
-instance HasAccessToken CommonTalkEnv where
-    wxppGetAccessToken (CommonTalkEnv _ cache app_id _ ) =
+instance HasAccessTokenIO CommonTalkEnv where
+    wxppGetAccessTokenIO (CommonTalkEnv _ cache app_id _ ) =
         wxppCacheGetAccessToken cache app_id
 
 instance HasWxppAppID CommonTalkEnv where

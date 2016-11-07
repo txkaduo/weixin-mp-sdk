@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures #-}
 module WeiXin.PublicPlatform.Class
     ( module WeiXin.PublicPlatform.Class
     , module WeiXin.PublicPlatform.Types
@@ -188,14 +189,24 @@ instance HasWxppApiBroker SomeWxppApiBroker where
   getWxppApiBroker = id
 
 
-class HasAccessToken a where
-    wxppGetAccessToken :: a -> IO (Maybe (AccessToken, UTCTime))
+class HasAccessTokenIO a where
+    wxppGetAccessTokenIO :: a -> IO (Maybe (AccessToken, UTCTime))
+    default wxppGetAccessTokenIO :: HasAccessToken a => a -> IO (Maybe (AccessToken, UTCTime))
+    wxppGetAccessTokenIO = return . Just . wxppGetAccessToken
 
-instance HasAccessToken a => HasAccessToken (a, b) where
-    wxppGetAccessToken = wxppGetAccessToken . fst
+class HasAccessTokenIO a => HasAccessToken a where
+    wxppGetAccessToken :: a -> (AccessToken, UTCTime)
 
-instance HasAccessToken (IO (Maybe (AccessToken, UTCTime))) where
-    wxppGetAccessToken = id
+instance HasAccessToken (AccessToken, UTCTime) where
+  wxppGetAccessToken = id
+
+instance WxppCacheTokenReader a => HasAccessTokenIO (a, WxppAppID) where
+  wxppGetAccessTokenIO = uncurry wxppCacheGetAccessToken
+
+instance HasAccessTokenIO (AccessToken, UTCTime)
+
+instance HasAccessTokenIO (IO (Maybe (AccessToken, UTCTime))) where
+    wxppGetAccessTokenIO = id
 
 
 -- | 微信用户的信息
