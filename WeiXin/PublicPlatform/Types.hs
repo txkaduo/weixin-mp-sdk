@@ -145,47 +145,35 @@ newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
 newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
                         deriving (Show, Eq, Ord, Typeable, Generic, Binary
                                  , NFData
+                                 , PersistField, PersistFieldSql
+                                 , ToJSON
                                  , ToMessage, ToMarkup)
 
+-- {{{1 instance
 instance SafeCopy WxppBriefMediaID where
     getCopy                         = contain $ WxppBriefMediaID <$> safeGet
     putCopy (WxppBriefMediaID x)    = contain $ safePut x
     errorTypeName _                 = "WxppBriefMediaID"
 
-instance PersistField WxppBriefMediaID where
-    toPersistValue      = toPersistValue . unWxppBriefMediaID
-    fromPersistValue    = fmap WxppBriefMediaID . fromPersistValue
-
-instance PersistFieldSql WxppBriefMediaID where
-    sqlType _ = SqlString
-
-instance ToJSON WxppBriefMediaID where
-    toJSON = toJSON . unWxppBriefMediaID
-
 instance FromJSON WxppBriefMediaID where
   parseJSON = fmap WxppBriefMediaID
                 . (parseJSON >=> nonEmptyJsonText "Weixin brief media id cannot be empty text")
+-- }}}1
 
 
 -- | 为区分临时素材和永久素材，这个值专指 永久素材
 -- 虽然文档叫这种值 media id，但接口用的词是 material
 newtype WxppDurableMediaID = WxppDurableMediaID { unWxppDurableMediaID :: Text }
-  deriving (Show, Eq, Ord, Read, ToMessage, ToMarkup, NFData)
+  deriving (Show, Eq, Ord, Read, ToMessage, ToMarkup, NFData
+           , PersistField, PersistFieldSql
+           , ToJSON
+           )
 
+-- {{{1 instances
 instance SafeCopy WxppDurableMediaID where
     getCopy                         = contain $ WxppDurableMediaID <$> safeGet
     putCopy (WxppDurableMediaID x)  = contain $ safePut x
     errorTypeName _                 = "WxppDurableMediaID"
-
-instance PersistField WxppDurableMediaID where
-    toPersistValue      = toPersistValue . unWxppDurableMediaID
-    fromPersistValue    = fmap WxppDurableMediaID . fromPersistValue
-
-instance PersistFieldSql WxppDurableMediaID where
-    sqlType _ = SqlString
-
-instance ToJSON WxppDurableMediaID where
-    toJSON = toJSON . unWxppDurableMediaID
 
 instance FromJSON WxppDurableMediaID where
   parseJSON = fmap WxppDurableMediaID
@@ -194,6 +182,8 @@ instance FromJSON WxppDurableMediaID where
 instance PathPiece WxppDurableMediaID where
     fromPathPiece = fmap WxppDurableMediaID . fromPathPiece
     toPathPiece = toPathPiece . unWxppDurableMediaID
+-- }}}1
+
 
 -- | 代表永久或临时的素材ID
 newtype WxppMediaID = WxppMediaID { unWxppMediaID :: Text }
@@ -220,22 +210,15 @@ newtype WxppOpenID = WxppOpenID { unWxppOpenID :: Text}
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
                              , ToHttpApiData, FromHttpApiData
                              , NFData
+                             , PersistField, PersistFieldSql
+                             , ToJSON
                              , ToMessage, ToMarkup)
 
+-- {{{1 instances
 instance SafeCopy WxppOpenID where
     getCopy                 = contain $ WxppOpenID <$> safeGet
     putCopy (WxppOpenID x)  = contain $ safePut x
     errorTypeName _         = "WxppOpenID"
-
-instance PersistField WxppOpenID where
-    toPersistValue      = toPersistValue . unWxppOpenID
-    fromPersistValue    = fmap WxppOpenID . fromPersistValue
-
-instance PersistFieldSql WxppOpenID where
-    sqlType _ = SqlString
-
-instance ToJSON WxppOpenID where
-    toJSON = toJSON . unWxppOpenID
 
 instance FromJSON WxppOpenID where
   parseJSON = fmap WxppOpenID
@@ -247,54 +230,39 @@ instance PathPiece WxppOpenID where
                                     in if T.null t'
                                           then Nothing
                                           else WxppOpenID <$> fromPathPiece t'
+-- }}}1
 
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
                              , ToHttpApiData, FromHttpApiData
                              , NFData
+                             , PersistField, PersistFieldSql
+                             , ToJSON
                              , ToMessage, ToMarkup)
 
+-- {{{1 instances
 instance FromJSON WxppUnionID where
   parseJSON = fmap WxppUnionID
                 . (parseJSON >=> nonEmptyJsonText "Weixin union id cannot be empty text")
-
-instance ToJSON WxppUnionID where
-    toJSON = toJSON . unWxppUnionID
 
 instance SafeCopy WxppUnionID where
     getCopy                 = contain $ WxppUnionID <$> safeGet
     putCopy (WxppUnionID x) = contain $ safePut x
     errorTypeName _         = "WxppUnionID"
 
-instance PersistField WxppUnionID where
-    toPersistValue      = toPersistValue . unWxppUnionID
-    fromPersistValue    = fmap WxppUnionID . fromPersistValue
-
-instance PersistFieldSql WxppUnionID where
-    sqlType _ = SqlString
-
 instance PathPiece WxppUnionID where
     toPathPiece (WxppUnionID x) = toPathPiece x
     fromPathPiece t             = WxppUnionID <$> fromPathPiece t
+-- }}}1
+
 
 newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                     deriving (Show, Eq, Ord, Typeable, Generic, Binary
                              , NFData
+                             , PersistField, PersistFieldSql
+                             , ToJSON, FromJSON
                              , ToMarkup)
-
-instance PersistField WxppInMsgID where
-    toPersistValue      = toPersistValue . unWxppInMsgID
-    fromPersistValue    = fmap WxppInMsgID . fromPersistValue
-
-instance PersistFieldSql WxppInMsgID where
-    sqlType _ = SqlInt64
-
-instance ToJSON WxppInMsgID where
-    toJSON = toJSON . unWxppInMsgID
-
-instance FromJSON WxppInMsgID where
-    parseJSON = fmap WxppInMsgID . parseJSON
 
 
 -- | 二维码场景ID
