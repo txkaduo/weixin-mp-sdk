@@ -26,7 +26,8 @@ import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
 import Data.Conduit                         (Source, yield)
 import Data.Time                            (diffUTCTime, NominalDiffTime)
-import qualified Data.Text                  as T
+
+import Yesod.Helpers.Utils                  (nullToNothing)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
@@ -64,7 +65,8 @@ instance FromJSON GetUserResult where
                             Nothing -> return []
                             Just o  -> map WxppOpenID <$> o .: "openid"
 
-                    next_openid <- fmap WxppOpenID <$> obj .:? "next_openid"
+                    -- 平台是用空字串表示结束的
+                    next_openid <- fmap WxppOpenID . join . fmap nullToNothing <$> obj .:? "next_openid"
                     return $ GetUserResult
                                 total count lst next_openid
 
@@ -91,14 +93,7 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = do
                 liftIO (WS.getWith opts sess url) >>= asWxppWsResponseNormal'
             yield r
 
-            -- 平台是用空字串表示结束的
-            let m_next_id' = do
-                    oid <- m_next_id
-                    if T.null $ T.strip $ unWxppOpenID oid
-                        then mzero
-                        else m_next_id
-
-            maybe (return ()) (loop . Just) $ m_next_id'
+            maybe (return ()) (loop . Just) m_next_id
 
     loop Nothing
 
