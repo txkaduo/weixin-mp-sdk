@@ -6,6 +6,7 @@ module WeiXin.PublicPlatform.OAuth
     , oauthScopeAccessTokenWithUnionID
     , oauthScopeMinForUnionID
     , oauthScopeIsUnknown
+    , oauthScopesKnown
     , WxppAuthConfig(..)
     , OAuthAccessToken(..)
     , OAuthAccessTokenPkg(..)
@@ -75,6 +76,11 @@ oauthScopeIsUnknown :: OAuthScope -> Maybe Text
 oauthScopeIsUnknown (AS_Unknown t) = Just t
 oauthScopeIsUnknown _              = Nothing
 
+
+-- | 所有已知的 OAuthScope
+-- 此函数是因为 OAuthScope 无法做成 Enum 的实例
+oauthScopesKnown :: [OAuthScope]
+oauthScopesKnown = [ AS_SnsApiBase, AS_SnsApiUserInfo, AS_SnsApiLogin ]
 
 
 -- | 当仅需要做 OAuth 认证时，不需要 WxppAppConfig 那么多信息
