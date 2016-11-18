@@ -804,6 +804,23 @@ wxppTpTokenGetComponentAccessTokenE x comp_app_id = do
       return atk
 
 
+wxppTpTokenGetComponentAccessToken' :: (MonadError e m, MonadIO m, IsString e, WxppTpTokenReader a)
+                                    => a
+                                    -> WxppAppID
+                                    -> m (Maybe WxppTpAccessToken)
+wxppTpTokenGetComponentAccessToken' x comp_app_id = do
+  m_atk_t <- liftIO $ wxppTpTokenGetComponentAccessToken x comp_app_id
+
+  case m_atk_t of
+    Nothing -> return Nothing
+
+    Just (atk, expiry) -> do
+      now <- liftIO getCurrentTime
+      if now >= expiry
+         then return Nothing
+         else return $ Just atk
+
+
 class WxppTpTokenWriter a where
   wxppTpTokenSaveVerifyTicket :: a
                              -> WxppAppID
