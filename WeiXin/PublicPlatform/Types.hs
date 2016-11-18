@@ -1633,12 +1633,14 @@ instance FromJSON OAuthAccessTokenResult where
                     OAuthAccessTokenResult
                         <$> o .: "access_token"
                         <*> ((fromIntegral :: Int -> NominalDiffTime) <$> o .: "expires_in")
-                        <*> (fmap Set.fromList $ o .: "scope" >>= parseTextByParsec p_scopes)
+                        <*> (fmap Set.fromList $ o .: "scope"
+                              >>= parseTextByParsec wxppParseOAuthScopesList)
                         <*> o .: "refresh_token"
                         <*> o .: "openid"
                         <*> (fmap WxppUnionID . join . fmap nullToNothing <$> o .:? "unionid")
-                where
-                    p_scopes = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
+
+wxppParseOAuthScopesList :: Stream s m Char => ParsecT s u m [OAuthScope]
+wxppParseOAuthScopesList = simpleParser `sepBy1` (spaces *> char ',' <* spaces)
 -- }}}1
 
 
