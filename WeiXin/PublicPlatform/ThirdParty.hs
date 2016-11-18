@@ -444,6 +444,11 @@ instance PersistField TpAppType where
 
 instance PersistFieldSql TpAppType where
   sqlType _ = sqlType (Proxy :: Proxy Int8)
+
+instance ToJSON TpAppType where toJSON = toJSON . fromEnum
+
+instance FromJSON TpAppType where
+  parseJSON v = parseJSON v >>= either fail return . toEnumEither
 -- }}}1
 
 
@@ -500,6 +505,11 @@ instance PersistField TpAppVerifyType where
 
 instance PersistFieldSql TpAppVerifyType where
   sqlType _ = sqlType (Proxy :: Proxy Int8)
+
+instance ToJSON TpAppVerifyType where toJSON = toJSON . fromEnum
+
+instance FromJSON TpAppVerifyType where
+  parseJSON v = parseJSON v >>= either fail return . toEnumEither
 -- }}}1
 
 -- | 文档中的 business_info 字段的值
