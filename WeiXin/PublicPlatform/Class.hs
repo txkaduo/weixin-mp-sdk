@@ -221,7 +221,7 @@ data WxUserInfo = WxUserInfo
   , wxUserInfoHeadImgUrl :: Maybe UrlText
   , wxUserInfoUnionID    :: Maybe WxppUnionID
   }
-  deriving (Eq, Ord)
+  deriving (Eq, Ord, Show)
 
 instance ToJSON WxUserInfo where
   toJSON x = object [ "open_id" .= wxUserInfoOpenID x
