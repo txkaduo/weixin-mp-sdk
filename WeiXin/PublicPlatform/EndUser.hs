@@ -3,6 +3,7 @@ module WeiXin.PublicPlatform.EndUser
     , GetUserResult(..)
     , wxppOpenIdListInGetUserResult
     , wxppGetEndUserSource
+    , wxppGetEndUserSource'
     , wxppLookupAllCacheForUnionID
     , wxppCachedGetEndUserUnionID
     , wxppCachedQueryEndUserInfo
@@ -74,14 +75,16 @@ wxppOpenIdListInGetUserResult :: GetUserResult -> [WxppOpenID]
 wxppOpenIdListInGetUserResult (GetUserResult _ _ x _) = x
 
 -- | 调用服务器接口，查询所有订阅用户
-wxppGetEndUserSource :: (WxppApiMonad env m)
-                     => AccessToken
+wxppGetEndUserSource' :: (WxppApiMonad env m)
+                     => m AccessToken
+                     -- ^ 我们要反复取用 access token,　而且不确定用多长时间
                      -> Source m GetUserResult
-wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = do
+wxppGetEndUserSource' get_atk = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
 
     let url         = wxppUrlConfSecureApiBase url_conf <> "/user/get"
         loop m_start_id = do
+            AccessToken { accessTokenData = atk } <- lift get_atk
             let opts = defaults & param "access_token" .~ [ atk ]
                                 & (case m_start_id of
                                     Nothing     -> id
@@ -96,6 +99,13 @@ wxppGetEndUserSource (AccessToken { accessTokenData = atk }) = do
             maybe (return ()) (loop . Just) m_next_id
 
     loop Nothing
+
+
+{-# DEPRECATED  wxppGetEndUserSource "use wxppGetEndUserSource' instead" #-}
+wxppGetEndUserSource :: (WxppApiMonad env m)
+                     => AccessToken
+                     -> Source m GetUserResult
+wxppGetEndUserSource = wxppGetEndUserSource' . return
 
 
 -- | 只找 cache: 根据 app id, open_id 找 union id

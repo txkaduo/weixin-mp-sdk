@@ -624,8 +624,8 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
 
     let api_env = wxppSubApiEnv foundation
     _ <- liftIO $ forkIO $ wxppSubRunLoggingT foundation $ do
-                _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp api_env atk
-                return ()
+          _ <- runWxppDB (wxppSubRunDBAction foundation) $ initWxppUserDbCacheOfApp api_env (return atk)
+          return ()
 
     return $ toJSON ("run in background" :: Text)
 -- }}}1
@@ -849,20 +849,22 @@ fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
 
 
 -- | initialize db table: WxppUserCachedInfo
-initWxppUserDbCacheOfApp ::
-    ( MonadIO m, MonadLogger m, MonadThrow m) =>
-    WxppApiEnv -> AccessToken -> ReaderT WxppDbBackend m Int
+initWxppUserDbCacheOfApp :: ( MonadIO m, MonadLogger m, MonadThrow m)
+                         => WxppApiEnv
+                         -> m AccessToken
+                         -> ReaderT WxppDbBackend m Int
 -- {{{1
-initWxppUserDbCacheOfApp api_env atk = do
+initWxppUserDbCacheOfApp api_env get_atk = do
+    atk <- lift get_atk
     flip runReaderT api_env $ do
-      wxppGetEndUserSource atk
+      wxppGetEndUserSource' (lift $ lift get_atk)
           =$= CL.concatMap wxppOpenIdListInGetUserResult
-          =$= save_to_db
+          =$= save_to_db atk
           $$ CC.length
     where
-        app_id = accessTokenApp atk
 
-        save_to_db = awaitForever $ \open_id -> do
+        save_to_db atk = awaitForever $ \open_id -> do
+            let app_id = accessTokenApp atk
             now <- liftIO getCurrentTime
             _ <- lift $ do
                 m_old <- lift $ getBy $ UniqueWxppUserCachedInfo open_id app_id
