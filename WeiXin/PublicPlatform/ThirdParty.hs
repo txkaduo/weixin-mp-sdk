@@ -782,6 +782,16 @@ class WxppTpTokenReader a where
                                                 )
 
 
+data WxppTpStoreBind a = WxppTpStoreBind
+                            a           -- ^ cache store
+                            WxppAppID   -- ^ component app id
+                            WxppAppID   -- ^ authorizer app id
+
+instance WxppTpTokenReader a => HasAccessTokenIO (WxppTpStoreBind a) where
+  wxppGetAccessTokenIO (WxppTpStoreBind x comp_app_id auther_app_id) =
+    fmap (fmap wxppGetAccessToken) $ wxppTpTokenGetAuthorizerTokens x comp_app_id auther_app_id
+
+
 data SomeWxppTpTokenReader = forall a. WxppTpTokenReader a => SomeWxppTpTokenReader a
 
 

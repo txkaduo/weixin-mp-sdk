@@ -209,6 +209,16 @@ instance HasAccessTokenIO (IO (Maybe (AccessToken, UTCTime))) where
     wxppGetAccessTokenIO = id
 
 
+wxppGetAccessTokenIOMay :: HasAccessTokenIO a
+                        => a
+                        -> IO (Maybe AccessToken)
+wxppGetAccessTokenIOMay x = runMaybeT $ do
+  (atk, expiry) <- MaybeT $ wxppGetAccessTokenIO x
+  now <- liftIO getCurrentTime
+  guard $ now < expiry
+  return atk
+
+
 -- | 微信用户的信息
 -- 有两种来源，一是从已关注用户信息中取，另一种是oauth接口取任意授权用户的信息
 data WxUserInfo = WxUserInfo
