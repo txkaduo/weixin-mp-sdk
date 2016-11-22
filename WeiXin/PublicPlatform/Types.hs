@@ -664,6 +664,16 @@ wxppEventTypeString (WxppEvtScanCodePush {})      = "scancode_push"
 wxppEventTypeString (WxppEvtScanCodeWaitMsg {})   = "scancode_waitmsg"
 wxppEventTypeString (WxppEvtGroupSendReport {})   = "MASSSENDJOBFINISH"
 
+wxppEventTypeStringOfSubs :: IsString a => [a]
+wxppEventTypeStringOfSubs = [ "subscribe"
+                            , "subscribe_at_scene"
+                            ]
+
+wxppEventTypeStringOfUnsubs :: IsString a => [a]
+wxppEventTypeStringOfUnsubs = [ "unsubscribe"
+                              ]
+
+
 instance ToJSON WxppEvent where
     toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
       where
