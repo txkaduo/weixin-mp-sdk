@@ -53,6 +53,7 @@ newtype WxUserPayOutRefundNo = WxUserPayOutRefundNo { unWxUserPayOutRefundNo :: 
 
 -- | 多个接口要求输入一个ip参数
 newtype WxPayParamIpStr = WxPayParamIpStr { unWxPayParamIpStr :: Text }
+  deriving (Show, Read, Eq, Ord, PersistFieldSql, PersistField)
 
 
 -- | 商户自定义的商品ID
