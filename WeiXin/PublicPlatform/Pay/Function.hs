@@ -39,6 +39,30 @@ import WeiXin.PublicPlatform.Pay.BankCode
 -- }}}1
 
 
+-- | result code 可以理解为非永久性错误的情况
+-- CAUTION: 这个列表很难完全准确，而且是否永久性错误有时间也很模糊
+--          还有一个问题是同一个代码在不同的api返回时意义未必一样
+--          大致的标准是：
+--          * 参数错误，算是永久性的
+--          * 环境参数错误，报文错误（理解了程序的bug），签名错误(bug)，算是暂时的
+--          
+--          需要根据实用的需要不断完善
+wxPayErrorCodeIsResumable :: WxPayErrorCode -> Bool
+-- {{{1
+wxPayErrorCodeIsResumable (WxPayErrorCode ec) =
+  case ec of
+    "NOAUTH"      -> True
+    "NO_AUTH"     -> True
+    "NOTENOUGH"   -> True
+    "SYSTEMERROR" -> True
+    "SIGN_ERROR"  -> True
+    "XML_ERROR"   -> True
+    "CA_ERROR"    -> True
+    "FREQ_LIMIT"  -> True
+    _             -> False
+-- }}}1
+
+
 -- | 微信签名算法
 wxPaySignInternal :: WxPayAppKey
                   -> [(Text, Text)]
