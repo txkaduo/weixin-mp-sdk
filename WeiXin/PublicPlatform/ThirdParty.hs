@@ -398,7 +398,7 @@ wxppTpRefreshAuthorizerTokens atk refresh_token = do
   let url       = wxppUrlConfSecureApiBase url_conf <> "/component/api_authorizer_token"
       post_data = object [ "component_appid" .= app_id
                          , "authorizer_appid" .= target_app_id
-                         , "authorizer_refresh_token" .= old_refresh_token_raw 
+                         , "authorizer_refresh_token" .= old_refresh_token_raw
                          ]
       opt       = defaults & param "component_access_token" .~ [ atk_raw ]
 
@@ -680,9 +680,9 @@ instance ToJSON TpAuthCustomerService where
 
 -- | 取选项设置信息的报文
 data TpAuthOptionResp a = TpAuthOptionResp
-                            WxppAppID -- ^ authorizer app id
-                            Text      -- ^ option name
-                            a         -- ^ option value
+                            WxppAppID -- authorizer app id
+                            Text      -- option name
+                            a         -- option value
 
 instance TpAuthOption a => FromJSON (TpAuthOptionResp a) where
   parseJSON = withObject "TpAuthOptionResp" $ \o -> do
@@ -777,15 +777,15 @@ class WxppTpTokenReader a where
   -- | 取第三方平台相关的所有已保存的授权方令牌
   wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, MonadBaseControl IO m)
                                     => a
-                                    -> Source m ( WxppAppID   -- ^ our app id: component app id
+                                    -> Source m ( WxppAppID   -- our app id: component app id
                                                 , WxppTpAuthorizerTokens
                                                 )
 
 
 data WxppTpStoreBind a = WxppTpStoreBind
-                            a           -- ^ cache store
-                            WxppAppID   -- ^ component app id
-                            WxppAppID   -- ^ authorizer app id
+                            a           -- cache store
+                            WxppAppID   -- component app id
+                            WxppAppID   -- authorizer app id
 
 instance WxppTpTokenReader a => HasAccessTokenIO (WxppTpStoreBind a) where
   wxppGetAccessTokenIO (WxppTpStoreBind x comp_app_id auther_app_id) =

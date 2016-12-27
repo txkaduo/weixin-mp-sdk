@@ -983,7 +983,7 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
                                                (unpack current_url)
                oauth_retrurn_url2  <- fix_return_url oauth_return_url
                let oauth_url = wxppOAuthRequestAuthInsideWx
-                                   Nothing -- ^ not third-prty
+                                   Nothing -- not third-prty
                                    app_id
                                    scope
                                    oauth_retrurn_url2

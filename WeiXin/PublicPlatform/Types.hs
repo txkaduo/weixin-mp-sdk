@@ -1735,11 +1735,9 @@ data WxppSignal = WxppSignalNewApp WxppAppID
 
 
 -- | 分别描述是否第三方平台时，我们在处理消息时可知道的app id
-data ProcAppIdInfo = ProcAppSingle        -- ^ 开发者服务器: 只有一个 app id
-                      WxppAppID           -- ^ the only app id
-                    | ProcAppThirdParty   -- ^ work as third-party
-                        WxppAppID         -- ^ component_appid
-                        WxppAppID         -- ^ authorizer_appid
+data ProcAppIdInfo = ProcAppSingle WxppAppID -- ^ 开发者服务器: 只有一个 app id
+                    | ProcAppThirdParty WxppAppID WxppAppID
+                    -- ^ work as third-party: component_appid, authorizer_appid
                     deriving (Show, Eq, Ord)
 
 procAppIdInfoMyId :: ProcAppIdInfo -> WxppAppID
