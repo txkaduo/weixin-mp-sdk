@@ -129,6 +129,9 @@ data BankCode = ICBC_DEBIT
               | JCB_CREDIT
               | MASTERCARD_CREDIT
               | VISA_CREDIT
+
+              --  远行出现的代码, 不在文档内
+              | CFT
               deriving (Show, Read, Eq, Ord, Enum, Bounded)
 
 
@@ -262,3 +265,4 @@ renderBankCodeSC GSNX_DEBIT        = "甘肃农信(借记卡)"
 renderBankCodeSC JCB_CREDIT        = "JCB(信用卡)"
 renderBankCodeSC MASTERCARD_CREDIT = "MASTERCARD(信用卡)"
 renderBankCodeSC VISA_CREDIT       = "VISA(信用卡)"
+renderBankCodeSC CFT               = "财付通"
