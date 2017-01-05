@@ -158,8 +158,10 @@ wxPayMoneyAmountFromYuanEither :: (Show a, Num a, RealFrac a, IsString s)
                                => a
                                -> Either s WxPayMoneyAmount
 wxPayMoneyAmountFromYuanEither y =
-  if fromIntegral fen_int /= fen
-     then Left $ fromString $ "Cannot convert to convert to WxPayMoneyAmount loselessly: " <> show y
+  if abs (fromIntegral fen_int - fen) > 0.001
+     then Left $ fromString $
+                  "Cannot convert to convert to WxPayMoneyAmount loselessly: " <> show y
+                  <> "because " <> show fen_int <> " != " <> show fen
      else Right $ WxPayMoneyAmount fen_int
   where
     fen = y * fromIntegral (100 :: Int)
