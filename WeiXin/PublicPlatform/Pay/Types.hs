@@ -405,7 +405,8 @@ data WxUserPayStatInfo = WxUserPayStatInfo
   -- ^ 用户是否关注公众号
   , wxUserPayStatTradeType          :: WxPayTradeType
   -- , wxUserPayStatStatus             :: WxUserPayStatus
-  , wxUserPayStatBankCode           :: BankCode
+  , wxUserPayStatBankCode           :: Either Text BankCode
+  -- ^ Left 是无法告别的银行代码．运行表明，微信会发不在文档里的银行代码
   , wxUserPayStatTotalFee           :: WxPayMoneyAmount
   , wxUserPayStatSettlementTotalFee :: Maybe WxPayMoneyAmount
   , wxUserPayStatCashFee            :: Maybe WxPayMoneyAmount

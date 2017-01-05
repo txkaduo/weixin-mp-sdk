@@ -603,8 +603,10 @@ wxUserPayParseStateParams resp_params = runExceptT $ do
 
   bank_type_t <- req_param "bank_type"
   bank_type <- case parseBankCode bank_type_t of
-                 Nothing -> throwError $ WxPayDiagError $ "Unknown bank_type: " <> bank_type_t
-                 Just x  -> return x
+                 Just x  -> return $ Right x
+                 Nothing -> do
+                   $logErrorS wxppLogSource $ "Unknown bank_type: " <> bank_type_t
+                   return $ Left bank_type_t
 
   total_fee <- ExceptT $ reqXmlFeeField resp_params "total_fee"
   settlement_total_fee <- ExceptT $ optXmlFeeField resp_params "settlement_total_fee"
