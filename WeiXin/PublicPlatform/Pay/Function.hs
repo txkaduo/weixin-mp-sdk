@@ -478,7 +478,8 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
                     , Just $ Endo $ insertMap "openid" (unWxppOpenID open_id)
 
                     , case check_name of
-                        WxNoCheckName -> Nothing
+                        WxNoCheckName ->
+                          Just $ Endo $ insertMap "check_name" "NO_CHECK"
 
                         WxOptCheckName name ->
                           Just $ mconcat
