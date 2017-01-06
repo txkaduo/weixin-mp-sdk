@@ -188,16 +188,25 @@ wxPayRenderOutgoingXmlDoc app_key params nonce =
 
 wxPayParseIncomingXmlDoc :: WxPayAppKey
                         -> Document
-                        -> Either Text (Either WxPayCallReturnError WxPayParams)
+                        -> Either Text (Either WxPayCallError WxPayParams)
 -- {{{1
 wxPayParseIncomingXmlDoc app_key doc = do
   (ret_code, params1) <- pop_up_find "return_code" all_params
   if ret_code /= "SUCCESS"
      then do
           let m_err_msg = lookup "return_msg" params1
-          return $ Left $ WxPayCallReturnError m_err_msg
+          return $ Left $ WxPayCallErrorReturn $ WxPayCallReturnError m_err_msg
 
-     else check_signaure_and_return
+     else do
+          let req_param name = maybe (Left $ "'" <> name <> "' not found: ") return (lookup name all_params )
+          result_code <- req_param "result_code"
+          if result_code /= "SUCCESS"
+             then do
+                  err_code <- fmap WxPayErrorCode $ req_param "err_code"
+                  err_desc <- req_param "err_code_des"
+                  return $ Left $ WxPayCallErrorResult $ WxPayCallResultError err_code err_desc
+
+             else check_signaure_and_return
 
   where
     cursor = fromDocument doc
@@ -890,7 +899,7 @@ wxPayParseInputXmlLbs app_key lbs = runExceptT $ do
             throwError $ WxPayCallErrorDiag $ WxPayDiagError err
 
           Right (Left err) -> do
-            throwError $ WxPayCallErrorReturn err
+            throwError err
 
           Right (Right resp_params) -> do
             let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
