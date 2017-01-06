@@ -45,7 +45,7 @@ import WeiXin.PublicPlatform.Pay.BankCode
 --          大致的标准是：
 --          * 参数错误，算是永久性的
 --          * 环境参数错误，报文错误（理解了程序的bug），签名错误(bug)，算是暂时的
---          
+--
 --          需要根据实用的需要不断完善
 wxPayErrorCodeIsResumable :: WxPayErrorCode -> Bool
 -- {{{1
