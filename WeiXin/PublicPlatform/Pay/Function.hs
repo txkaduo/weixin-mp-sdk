@@ -188,18 +188,16 @@ wxPayRenderOutgoingXmlDoc app_key params nonce =
 
 wxPayParseIncomingXmlDoc :: WxPayAppKey
                         -> Document
-                        -> Either Text WxPayParams
+                        -> Either Text (Either WxPayCallReturnError WxPayParams)
 -- {{{1
 wxPayParseIncomingXmlDoc app_key doc = do
-  (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
-  (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
-  let params = params2
-  let sign2 = wxPayXmlSign app_key params nonce
+  (ret_code, params1) <- pop_up_find "return_code" all_params
+  if ret_code /= "SUCCESS"
+     then do
+          let m_err_msg = lookup "return_msg" params1
+          return $ Left $ WxPayCallReturnError m_err_msg
 
-  unless (sign2 == sign) $ do
-    Left $ "incorrect signature"
-
-  return params
+     else check_signaure_and_return
 
   where
     cursor = fromDocument doc
@@ -207,6 +205,17 @@ wxPayParseIncomingXmlDoc app_key doc = do
     all_params = mapFromList $
                   catMaybes $ map param_from_node $
                     cursor $| child &| node
+
+    check_signaure_and_return = do
+      (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
+      (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
+      let params = params2
+      let sign2 = wxPayXmlSign app_key params nonce
+
+      unless (sign2 == sign) $ do
+        Left $ "incorrect signature"
+
+      return $ Right params
 
     pop_up_find name ps = do
       let (m_matched, unmatched) = (lookup name &&& deleteMap name) ps
@@ -879,13 +888,11 @@ wxPayParseInputXmlLbs app_key lbs = runExceptT $ do
             $logErrorS wxppLogSource $ "Invalid response XML: " <> err
             throwError $ WxPayCallErrorDiag $ WxPayDiagError err
 
-          Right resp_params -> do
-            let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
+          Right (Left err) -> do
+            throwError $ WxPayCallErrorReturn err
 
-            ret_code <- req_param "return_code"
-            unless (ret_code == "SUCCESS") $ do
-              let m_err_msg = lookup "return_msg" resp_params
-              throwError $ WxPayCallErrorReturn $ WxPayCallReturnError m_err_msg
+          Right (Right resp_params) -> do
+            let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
             result_code <- req_param "result_code"
             if result_code == "SUCCESS"
