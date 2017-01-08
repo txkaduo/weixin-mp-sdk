@@ -1008,4 +1008,23 @@ reqXmlTimeField vars parse_time n = runExceptT $ do
     tz = hoursToTimeZone 8
 -- }}}1
 
+
+optXmlTimeField :: Monad m
+                => WxPayParams
+                -> (String -> Maybe LocalTime)
+                -> Text
+                -> m (Either WxPayDiagError (Maybe UTCTime))
+-- {{{1
+optXmlTimeField vars parse_time n = runExceptT $ runMaybeT $ do
+  time_t <- MaybeT $ return $ lookup n vars
+  fmap (localTimeToUTC tz) $
+    maybe
+      (throwError $ WxPayDiagError $ "Invalid response XML: time string is invalid: " <> time_t)
+      return
+      (parse_time $ unpack time_t)
+  where
+    tz = hoursToTimeZone 8
+-- }}}1
+
+
 -- vim: set foldmethod=marker:
