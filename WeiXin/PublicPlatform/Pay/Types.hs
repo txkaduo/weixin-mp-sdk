@@ -397,27 +397,56 @@ data WxPayMchTransInfo = WxPayMchTransInfo
   deriving (Show)
 
 
--- | 查询或支付成功通知接口中核心提供的数据
-data WxUserPayStatInfo = WxUserPayStatInfo
-  { wxUserPayStatDeviceInfo         :: Maybe WxPayDeviceInfo
-  , wxUserPayStatOpenId             :: WxppOpenID
-  , wxUserPayStatIsSubs             :: Maybe Bool
+-- | 支付成功通知接口中核心提供的数据
+-- 这个信息跟 WxUserPayQueryInfo 内容，当支付是成功时是重合的
+data WxUserPaySuccInfo = WxUserPaySuccInfo
+-- {{{1
+  { wxUserPaySuccDeviceInfo         :: Maybe WxPayDeviceInfo
+  , wxUserPaySuccOpenId             :: WxppOpenID
+  , wxUserPaySuccIsSubs             :: Maybe Bool
   -- ^ 用户是否关注公众号
-  , wxUserPayStatTradeType          :: WxPayTradeType
-  -- , wxUserPayStatStatus             :: WxUserPayStatus
-  , wxUserPayStatBankCode           :: Either Text BankCode
+  , wxUserPaySuccTradeType          :: WxPayTradeType
+  -- , wxUserPaySuccStatus             :: WxUserPayStatus
+  , wxUserPaySuccBankCode           :: Either Text BankCode
   -- ^ Left 是无法识别的银行代码．运行表明，微信会发不在文档里的银行代码
-  , wxUserPayStatTotalFee           :: WxPayMoneyAmount
-  , wxUserPayStatSettlementTotalFee :: Maybe WxPayMoneyAmount
-  , wxUserPayStatCashFee            :: Maybe WxPayMoneyAmount
+  , wxUserPaySuccTotalFee           :: WxPayMoneyAmount
+  , wxUserPaySuccSettlementTotalFee :: Maybe WxPayMoneyAmount
+  , wxUserPaySuccCashFee            :: Maybe WxPayMoneyAmount
   -- ^ 现金支付金额：文档说是必须出现的字段，但在两个示例中都没出现这个字段
   -- 估计这应该是可选的
-  , wxUserPayStatCouponFee          :: Maybe WxPayMoneyAmount
-  , wxUserPayStatTransId            :: WxUserPayTransId
-  , wxUserPayStatOutTradeNo         :: WxUserPayOutTradeNo
-  , wxUserPayStatAttach             :: Maybe Text
-  , wxUserPayStatTimeEnd            :: UTCTime
+  , wxUserPaySuccCouponFee          :: Maybe WxPayMoneyAmount
+  , wxUserPaySuccTransId            :: WxUserPayTransId
+  , wxUserPaySuccOutTradeNo         :: WxUserPayOutTradeNo
+  , wxUserPaySuccAttach             :: Maybe Text
+  , wxUserPaySuccTimeEnd            :: UTCTime
   }
+-- }}}1
+
+
+-- | 查询接口提供的数据
+-- 有很多字段文档说一定有，但实测，至少在若支付单未成功时，无此字段
+data WxUserPayQueryInfo = WxUserPayQueryInfo
+-- {{{1
+  { wxUserPayQueryDeviceInfo         :: Maybe WxPayDeviceInfo
+  , wxUserPayQueryOpenId             :: Maybe WxppOpenID
+  , wxUserPayQueryIsSubs             :: Maybe Bool
+  -- ^ 用户是否关注公众号
+  , wxUserPayQueryTradeType          :: Maybe WxPayTradeType
+  -- , wxUserPayQueryStatus             :: WxUserPayStatus
+  , wxUserPayQueryBankCode           :: Maybe (Either Text BankCode)
+  -- ^ Left 是无法识别的银行代码．运行表明，微信会发不在文档里的银行代码
+  , wxUserPayQueryTotalFee           :: Maybe WxPayMoneyAmount
+  , wxUserPayQuerySettlementTotalFee :: Maybe WxPayMoneyAmount
+  , wxUserPayQueryCashFee            :: Maybe WxPayMoneyAmount
+  -- ^ 现金支付金额：文档说是必须出现的字段，但在两个示例中都没出现这个字段
+  -- 估计这应该是可选的
+  , wxUserPayQueryCouponFee          :: Maybe WxPayMoneyAmount
+  , wxUserPayQueryTransId            :: Maybe WxUserPayTransId
+  , wxUserPayQueryOutTradeNo         :: WxUserPayOutTradeNo
+  , wxUserPayQueryAttach             :: Maybe Text
+  , wxUserPayQueryTimeEnd            :: Maybe UTCTime
+  }
+-- }}}1
 
 
 data WxPayRefundChannel = WxPayRefundOriginal

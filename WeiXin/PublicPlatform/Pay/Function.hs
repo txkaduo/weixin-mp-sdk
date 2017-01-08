@@ -72,6 +72,36 @@ wxPayCallErrorIsDoesNotExist :: WxPayCallError -> Bool
 wxPayCallErrorIsDoesNotExist = (== Just (WxPayErrorCode "ORDERNOTEXIST")) . wxPayCallErrorCode
 
 
+-- | 查询状态为成功时应能提供支付成功通知接口中核心提供的相同数据
+toWxUserPaySucceededInfo :: WxUserPayQueryInfo
+                         -> Either Text WxUserPaySuccInfo
+-- {{{1
+toWxUserPaySucceededInfo x = do
+  open_id <- maybe (Left "missing openid") return $ wxUserPayQueryOpenId x
+  trade_type <- maybe (Left "missing trade_type") return $ wxUserPayQueryTradeType x
+  bank_code <- maybe (Left "missing bank_code") return $ wxUserPayQueryBankCode x
+  total_fee <- maybe (Left "missing total_fee") return $ wxUserPayQueryTotalFee x
+  trans_id <- maybe (Left "missing transaction_id") return $ wxUserPayQueryTransId x
+  end_time <- maybe (Left "missing end_time") return $ wxUserPayQueryTimeEnd x
+
+  return $ WxUserPaySuccInfo
+    (wxUserPayQueryDeviceInfo x)
+    open_id
+    (wxUserPayQueryIsSubs x)
+    trade_type
+    bank_code
+    total_fee
+    (wxUserPayQuerySettlementTotalFee x)
+    (wxUserPayQueryCashFee x)
+    (wxUserPayQueryCouponFee x)
+    trans_id
+    (wxUserPayQueryOutTradeNo x)
+    (wxUserPayQueryAttach x)
+    end_time
+-- }}}1
+
+
+
 -- | 微信签名算法
 wxPaySignInternal :: WxPayAppKey
                   -> [(Text, Text)]
@@ -311,7 +341,7 @@ wxUserPayQueryOrder :: WxppApiMonad env m
                     => WxPayCommonParams
                     -> Either WxUserPayTransId WxUserPayOutTradeNo
                     -> m ( Either WxPayCallError
-                                (WxUserPayStatInfo, (WxUserPayStatus, Maybe Text))
+                                (WxUserPayQueryInfo, (WxUserPayStatus, Maybe Text))
                            , (LB.ByteString, LB.ByteString)
                          )
                     -- ^ 额外的信息包括 trade_state, trade_state_desc
@@ -330,7 +360,7 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
                     ])
 
   wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
-    pay_state <- withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseStateParams resp_params
+    pay_state <- withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseQueryParams resp_params
 
     trade_state_t <- withExceptT WxPayCallErrorDiag $ ExceptT $ reqXmlTextField resp_params "trade_state"
     trade_state <- case trade_state_t of
@@ -609,7 +639,7 @@ wxPayMchTransferInfo common_params mch_trade_no = do
 -- * 查询接口多了: trade_state, trade_state_desc (似乎通知接口默认是成功的)
 wxUserPayParseStateParams :: (MonadLogger m)
                           => WxPayParams
-                          -> m (Either WxPayDiagError WxUserPayStatInfo)
+                          -> m (Either WxPayDiagError WxUserPaySuccInfo)
 -- {{{1
 wxUserPayParseStateParams resp_params = runExceptT $ do
   let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
@@ -647,12 +677,76 @@ wxUserPayParseStateParams resp_params = runExceptT $ do
 
   let m_attach = lookup "attach" resp_params
 
-  return $ WxUserPayStatInfo
+  return $ WxUserPaySuccInfo
                      m_dev_info
                      open_id
                      m_is_subs
                      trade_type
                      bank_type
+                     total_fee
+                     settlement_total_fee
+                     cash_fee
+                     coupon_fee
+                     trans_id
+                     out_trade_no
+                     m_attach
+                     time_end
+
+  where
+    req_param = ExceptT . reqXmlTextField resp_params
+-- }}}1
+
+
+wxUserPayParseQueryParams :: (MonadLogger m)
+                          => WxPayParams
+                          -> m (Either WxPayDiagError WxUserPayQueryInfo)
+-- {{{1
+wxUserPayParseQueryParams resp_params = runExceptT $ do
+  let m_dev_info = fmap WxPayDeviceInfo $ lookup "device_info" resp_params
+
+  let m_open_id = fmap WxppOpenID $ lookup "openid" resp_params
+  let m_is_subs_t = lookup "is_subscribe" resp_params
+  m_is_subs <- forM m_is_subs_t $ \is_subs_t ->
+                 case toUpper is_subs_t of
+                   "Y" -> return True
+                   "N" -> return False
+                   _ -> do
+                     $logErrorS wxppLogSource $ "invalid value of 'is_subscribe': " <> is_subs_t
+                     throwError $ WxPayDiagError "invalid value of 'is_subscribe'"
+
+
+  m_trade_type <- runMaybeT $ do
+    trade_type_t <- MaybeT $ return $ lookup "trade_type" resp_params
+    case parseMaybeSimpleEncoded trade_type_t of
+      Nothing -> lift $ throwError $ WxPayDiagError $ "Unknown trade_type: " <> trade_type_t
+      Just x  -> return x
+
+  m_bank_type <- runMaybeT $ do
+    bank_type_t <- MaybeT $ return $ lookup "bank_type" resp_params
+    case parseBankCode bank_type_t of
+      Just x  -> return $ Right x
+      Nothing -> do
+        $logErrorS wxppLogSource $ "Unknown bank_type: " <> bank_type_t
+        return $ Left bank_type_t
+
+  total_fee <- ExceptT $ optXmlFeeField resp_params "total_fee"
+  settlement_total_fee <- ExceptT $ optXmlFeeField resp_params "settlement_total_fee"
+  cash_fee <- ExceptT $ optXmlFeeField resp_params "cash_fee"
+  coupon_fee <- ExceptT $ optXmlFeeField resp_params "coupon_fee"
+  time_end <- ExceptT $ optXmlTimeField resp_params wxUserPayParseTimeStr "time_end"
+
+  let trans_id = fmap WxUserPayTransId $ lookup "transaction_id" resp_params
+
+  out_trade_no <- fmap WxUserPayOutTradeNo $ req_param "out_trade_no"
+
+  let m_attach = lookup "attach" resp_params
+
+  return $ WxUserPayQueryInfo
+                     m_dev_info
+                     m_open_id
+                     m_is_subs
+                     m_trade_type
+                     m_bank_type
                      total_fee
                      settlement_total_fee
                      cash_fee

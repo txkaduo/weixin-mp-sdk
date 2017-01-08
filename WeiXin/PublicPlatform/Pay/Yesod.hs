@@ -17,7 +17,7 @@ yesodHandleWxUserPayNotify :: (MonadHandler m, MonadLogger m, MonadBaseControl I
                            => WxPayAppKey
                            -> ( WxppAppID
                                  -> WxPayMchID
-                                 -> WxUserPayStatInfo
+                                 -> WxUserPaySuccInfo
                                  -> m ()
                               )
                            -> m RepXml
