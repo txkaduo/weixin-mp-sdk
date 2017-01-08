@@ -63,6 +63,15 @@ wxPayErrorCodeIsResumable (WxPayErrorCode ec) =
 -- }}}1
 
 
+wxPayCallErrorCode :: WxPayCallError -> Maybe WxPayErrorCode
+wxPayCallErrorCode (WxPayCallErrorResult (WxPayCallResultError ec _)) = Just ec
+wxPayCallErrorCode _                                                  = Nothing
+
+-- | 支付单不存在的错误代码是经常要特别处理的
+wxPayCallErrorIsDoesNotExist :: WxPayCallError -> Bool
+wxPayCallErrorIsDoesNotExist = (== Just (WxPayErrorCode "ORDERNOTEXIST")) . wxPayCallErrorCode
+
+
 -- | 微信签名算法
 wxPaySignInternal :: WxPayAppKey
                   -> [(Text, Text)]
