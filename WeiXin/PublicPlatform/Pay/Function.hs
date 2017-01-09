@@ -4,7 +4,7 @@ import ClassyPrelude
 
 -- {{{1 imports
 import           Control.Lens           hiding ((.=))
-import           Control.Monad.Except
+import           Control.Monad.Except   hiding (forM_)
 import           Control.Monad.Logger
 import           Control.Monad.Reader   (asks)
 import           Control.Monad.Trans.Maybe
@@ -225,11 +225,12 @@ wxPayRenderOutgoingXmlDoc app_key params nonce =
   renderText def $ wxPayOutgoingXmlDoc app_key params nonce
 
 
-wxPayParseIncomingXmlDoc :: WxPayAppKey
-                        -> Document
-                        -> Either Text (Either WxPayCallError WxPayParams)
+-- | 初步解释收到的报文
+wxPayParseIncomingXmlDoc :: Maybe WxPayAppKey -- ^ 如果是Nothing，则不检查签名
+                         -> Document
+                         -> Either Text (Either WxPayCallError WxPayParams)
 -- {{{1
-wxPayParseIncomingXmlDoc app_key doc = do
+wxPayParseIncomingXmlDoc m_app_key doc = do
   (ret_code, params1) <- pop_up_find "return_code" all_params
   if ret_code /= "SUCCESS"
      then do
@@ -245,7 +246,9 @@ wxPayParseIncomingXmlDoc app_key doc = do
                   err_desc <- req_param "err_code_des"
                   return $ Left $ WxPayCallErrorResult $ WxPayCallResultError err_code err_desc
 
-             else check_signaure_and_return
+             else do
+                  forM_ m_app_key $ check_signaure
+                  return $ Right $ deleteMap "result_code" params1
 
   where
     cursor = fromDocument doc
@@ -254,7 +257,7 @@ wxPayParseIncomingXmlDoc app_key doc = do
                   catMaybes $ map param_from_node $
                     cursor $| child &| node
 
-    check_signaure_and_return = do
+    check_signaure app_key = do
       (nonce, params1) <- fmap (first Nonce) $ pop_up_find "nonce_str" all_params
       (sign, params2) <- fmap (first WxPaySignature) $ pop_up_find "sign" params1
       let params = params2
@@ -262,8 +265,6 @@ wxPayParseIncomingXmlDoc app_key doc = do
 
       unless (sign2 == sign) $ do
         Left $ "incorrect signature"
-
-      return $ Right params
 
     pop_up_find name ps = do
       let (m_matched, unmatched) = (lookup name &&& deleteMap name) ps
@@ -317,7 +318,7 @@ wxUserPayPrepay common_params notify_url amount out_trade_no trade_type ip_str b
                     , fmap (Endo . insertMap "openid" . unWxppOpenID) m_open_id
                     ])
 
-  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
+  wxPayCallInternalHelper (WxCallSignReqInOut app_key) url params $ \resp_params -> runExceptT $ do
     let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     prepay_id <- fmap WxUserPayPrepayId $ req_param "prepay_id"
@@ -359,7 +360,7 @@ wxUserPayQueryOrder common_params trans_id_trade_no = do
                               Right out_trade_no -> insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
                     ])
 
-  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
+  wxPayCallInternalHelper (WxCallSignReqInOut app_key) url params $ \resp_params -> runExceptT $ do
     pay_state <- withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseQueryParams resp_params
 
     trade_state_t <- withExceptT WxPayCallErrorDiag $ ExceptT $ reqXmlTextField resp_params "trade_state"
@@ -402,7 +403,7 @@ wxUserPayCloseOrder common_params out_trade_no = do
                     , Endo $ insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
                     ])
 
-  wxPayCallInternalHelper app_key url params $ \_resp_params -> runExceptT $ do
+  wxPayCallInternalHelper (WxCallSignReqInOut app_key) url params $ \_resp_params -> runExceptT $ do
     return ()
 
   where
@@ -442,7 +443,7 @@ wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee r
                     , Endo $ insertMap "op_user_id" op_user_id
                     ])
 
-  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
+  wxPayCallInternalHelper (WxCallSignReqInOut app_key) url params $ \resp_params -> runExceptT $ do
     withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseRefundReqParams resp_params
 
   where
@@ -485,7 +486,8 @@ wxUserPayRefundQuery common_params m_dev_info query_order_id = do
                               RefundQueryOrderByRefundId refund_id ->
                                 insertMap "refund_id" (unWxUserPayRefundId refund_id)
                     ])
-  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
+
+  wxPayCallInternalHelper (WxCallSignReqInOut app_key) url params $ \resp_params -> runExceptT $ do
     withExceptT WxPayCallErrorDiag $ ExceptT $ wxUserPayParseRefundQueryResult resp_params
 
   where
@@ -547,7 +549,7 @@ wxPayMchTransfer common_params m_dev_info mch_trade_no open_id check_name pay_am
                     ])
 
 
-  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
+  wxPayCallInternalHelper (WxCallSignReqOut app_key) url params $ \resp_params -> runExceptT $ do
     let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
@@ -588,7 +590,7 @@ wxPayMchTransferInfo common_params mch_trade_no = do
                     , Just $ Endo $ insertMap "partner_trade_no" (unWxMchTransMchNo mch_trade_no)
                     ])
 
-  wxPayCallInternalHelper app_key url params $ \resp_params -> runExceptT $ do
+  wxPayCallInternalHelper (WxCallSignReqOut app_key) url params $ \resp_params -> runExceptT $ do
     let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
 
     mch_out_trade_no <- fmap WxMchTransMchNo $ req_param "partner_trade_no"
@@ -942,8 +944,23 @@ wxUserPayParseRefundQueryResult resp_params = runExceptT $ do
 -- }}}1
 
 
+-- | 有些接口返回时没有签名．
+-- 大部分输出输入报文都有签名
+-- 目前未看到有第三种情况
+data WxCallSignReq = WxCallSignReqInOut WxPayAppKey
+                   | WxCallSignReqOut WxPayAppKey
+
+wxCallSignReqOutAppKey :: WxCallSignReq -> WxPayAppKey
+wxCallSignReqOutAppKey (WxCallSignReqInOut x) = x
+wxCallSignReqOutAppKey (WxCallSignReqOut x)   = x
+
+wxCallSignReqInAppKey :: WxCallSignReq -> Maybe WxPayAppKey
+wxCallSignReqInAppKey (WxCallSignReqInOut x) = Just x
+wxCallSignReqInAppKey (WxCallSignReqOut {})  = Nothing
+
+
 wxPayCallInternal :: (WxppApiMonad env m)
-                  => WxPayAppKey
+                  => WxCallSignReq
                   -> String
                   -> WxPayParams
                   -> m ( Either WxPayCallError WxPayParams
@@ -951,21 +968,21 @@ wxPayCallInternal :: (WxppApiMonad env m)
                        )
                   -- ^ 同时提供调用请求所用的报文及收到的报文的原始内容，以便分析问题
 -- {{{1
-wxPayCallInternal app_key url params = do
+wxPayCallInternal sign_req url params = do
   sess <- asks getWreqSession
   nonce <- wxppMakeNonce 32
-  let doc_txt = wxPayRenderOutgoingXmlDoc app_key params nonce
+  let doc_txt = wxPayRenderOutgoingXmlDoc (wxCallSignReqOutAppKey sign_req) params nonce
       req_lbs = encodeUtf8 doc_txt
 
   r <- liftIO (WS.post sess url req_lbs)
   let resp_lbs = r ^. responseBody
 
-  fmap (, (req_lbs, resp_lbs)) $ wxPayParseInputXmlLbs app_key resp_lbs
+  fmap (, (req_lbs, resp_lbs)) $ wxPayParseInputXmlLbs (wxCallSignReqInAppKey sign_req) resp_lbs
 -- }}}1
 
 
 wxPayCallInternalHelper :: (WxppApiMonad env m)
-                        => WxPayAppKey
+                        => WxCallSignReq
                         -> String
                         -> WxPayParams
                         -> (WxPayParams -> m (Either WxPayCallError a))
@@ -974,8 +991,8 @@ wxPayCallInternalHelper :: (WxppApiMonad env m)
                              )
                         -- ^ 同时提供调用请求所用的报文及收到的报文的原始内容，以便分析问题
 -- {{{1
-wxPayCallInternalHelper app_key url params f = do
-  (err_or_x, io_lbs) <- wxPayCallInternal app_key url params
+wxPayCallInternalHelper sign_req url params f = do
+  (err_or_x, io_lbs) <- wxPayCallInternal sign_req url params
 
   fmap (,(io_lbs)) $ case err_or_x of
                        Left err -> return $ Left err
@@ -985,18 +1002,18 @@ wxPayCallInternalHelper app_key url params f = do
 
 
 wxPayParseInputXmlLbs :: (MonadLogger m)
-                      => WxPayAppKey
+                      => Maybe WxPayAppKey
                       -> LB.ByteString
                       -> m (Either WxPayCallError WxPayParams)
 -- {{{1
-wxPayParseInputXmlLbs app_key lbs = runExceptT $ do
+wxPayParseInputXmlLbs m_app_key lbs = runExceptT $ do
   case parseLBS def lbs of
       Left ex         -> do
         $logErrorS wxppLogSource $ "Failed to parse XML: " <> tshow ex
         throwError $ WxPayCallErrorXml ex
 
       Right resp_doc  -> do
-        case wxPayParseIncomingXmlDoc app_key resp_doc of
+        case wxPayParseIncomingXmlDoc m_app_key resp_doc of
           Left err -> do
             $logErrorS wxppLogSource $ "Invalid response XML: " <> err
             throwError $ WxPayCallErrorDiag $ WxPayDiagError err
@@ -1005,18 +1022,7 @@ wxPayParseInputXmlLbs app_key lbs = runExceptT $ do
             throwError err
 
           Right (Right resp_params) -> do
-            let req_param = withExceptT WxPayCallErrorDiag . ExceptT . reqXmlTextField resp_params
-
-            result_code <- req_param "result_code"
-            if result_code == "SUCCESS"
-               then do
-                 return resp_params
-
-               else do
-                 -- failed
-                 err_code <- fmap WxPayErrorCode $ req_param "err_code"
-                 err_desc <- req_param "err_code_des"
-                 throwError $ WxPayCallErrorResult $ WxPayCallResultError err_code err_desc
+            return resp_params
 -- }}}1
 
 

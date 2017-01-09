@@ -25,7 +25,7 @@ yesodHandleWxUserPayNotify app_key handle_notify = do
 -- {{{1
   lbs <- rawRequestBody $$ sinkLbs
   let parse_params = runExceptT $ do
-        input_params <- ExceptT $ wxPayParseInputXmlLbs app_key lbs
+        input_params <- ExceptT $ wxPayParseInputXmlLbs (Just app_key) lbs
 
         app_id <- fmap WxppAppID $
                     withExceptT WxPayCallErrorDiag $ ExceptT $
