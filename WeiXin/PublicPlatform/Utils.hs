@@ -300,6 +300,14 @@ encodeStringQRCodeJpeg pixelPerCell input =
     liftM (P.imageToJpg 100 . P.ImageY8) $ encodeStringQRCodeImage pixelPerCell input
 
 
+encodeStringQRCodePng :: MonadIO m
+                      => Int
+                      -> String
+                      -> m LB.ByteString
+encodeStringQRCodePng pixelPerCell input =
+    liftM (P.imageToPng . P.ImageY8) $ encodeStringQRCodeImage pixelPerCell input
+
+
 -- | 经常需要保存微信的文件内容及mime到本地
 -- 这个类型及下面的工具函数为此而设
 type FileContentAndMime = (LB.ByteString, MimeType)
