@@ -279,6 +279,7 @@ wxppGetUsableAccessToken cache app_id = liftIO $ do
     fmap (join . (fmap $ \x -> if snd x > now then Just x else Nothing)) $
         wxppCacheGetAccessToken cache app_id
 
+
 wxppGetSnsUserInfoCached :: (MonadIO m, WxppCacheTemp c)
                             => c
                             -> NominalDiffTime
@@ -291,6 +292,24 @@ wxppGetSnsUserInfoCached cache ttl app_id open_id lang = runMaybeT $ do
     now <- liftIO getCurrentTime
     guard $ diffUTCTime now update_time < ttl
     return info
+
+-- | Lookup SNS or subscribers user info
+wxppGetAnyUserInfoCached :: (MonadIO m, WxppCacheTemp c)
+                         => c
+                         -> WxppAppID
+                         -> WxppOpenID
+                         -> Lang
+                         -> m (Maybe (WxUserInfo, UTCTime))
+wxppGetAnyUserInfoCached cache app_id open_id lang = do
+  fmap (listToMaybe . ClassyPrelude.sortWith (Down . snd) . catMaybes) $ sequence [ runMaybeT by_sns, runMaybeT by_subs ]
+  where
+    by_sns = do
+      fmap (first getWxUserInfo) $ MaybeT $ liftIO $ wxppCacheGetSnsUserInfo cache app_id open_id lang
+
+    by_subs = do
+      (m_info, t) <- fmap (first mayGetWxUserInfo) $ MaybeT $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id
+      info <- MaybeT $ return m_info
+      return (info, t)
 
 
 data SomeWxppCacheClient = forall a. (WxppCacheTokenReader a, WxppCacheTemp a) => SomeWxppCacheClient a
