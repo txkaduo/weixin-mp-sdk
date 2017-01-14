@@ -1537,6 +1537,7 @@ instance SimpleStringRep OAuthScope where
 newtype OAuthCode = OAuthCode { unOAuthCode :: Text }
   deriving (Eq, Ord, Show, PersistField, PersistFieldSql, NFData
            , PathPiece, ToJSON
+           , Hashable, Binary
            )
 
 
