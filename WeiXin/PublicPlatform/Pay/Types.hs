@@ -47,6 +47,7 @@ class HaveWxUserPayOutTradeNo a where
 newtype WxUserPayOutRefundNo = WxUserPayOutRefundNo { unWxUserPayOutRefundNo :: Text }
   deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
            , PersistFieldSql, PersistField
+           , FromJSON, ToJSON
            , NFData
            , ToMessage, ToMarkup)
 
@@ -72,6 +73,7 @@ newtype WxUserPayTransId = WxUserPayTransId { unWxUserPayTransId :: Text }
 newtype WxUserPayRefundId = WxUserPayRefundId { unWxUserPayRefundId :: Text }
   deriving (Show, Eq, Ord
            , PersistFieldSql, PersistField
+           , FromJSON, ToJSON
            )
 
 
