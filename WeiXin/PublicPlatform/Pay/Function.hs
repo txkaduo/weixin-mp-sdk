@@ -865,7 +865,7 @@ wxUserPayParseRefundQueryItem n resp_params = runExceptT $ do
   recv_account <- req_param $ "refund_recv_accout" <> suffix
 
   coupon_type <- mapM (ExceptT . wxUserPayParseCouponTypeText) $
-                    join $ fmap nullToNothing $ lookup ("refund_channel" <> suffix) resp_params
+                    join $ fmap nullToNothing $ lookup ("coupon_type" <> suffix) resp_params
 
   let coupon_refound_count = join $ fmap readMay $ lookup ("coupon_refund_count" <> suffix) resp_params
 
