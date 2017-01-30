@@ -860,7 +860,9 @@ wxUserPayParseRefundQueryItem n resp_params = runExceptT $ do
 
   refund_fee <- ExceptT $ reqXmlFeeField resp_params $ "refund_fee" <> suffix
   settlement_refund_fee <- ExceptT $ optXmlFeeField resp_params $ "settlement_refund_fee" <> suffix
-  recv_account <- req_param $ "refund_recv_account" <> suffix
+
+  -- accout is a typo, but it is correct element name in response xml
+  recv_account <- req_param $ "refund_recv_accout" <> suffix
 
   coupon_type <- mapM (ExceptT . wxUserPayParseCouponTypeText) $
                     join $ fmap nullToNothing $ lookup ("refund_channel" <> suffix) resp_params
