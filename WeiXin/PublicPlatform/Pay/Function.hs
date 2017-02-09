@@ -27,7 +27,7 @@ import           Text.XML.Cursor        (child, content, fromDocument, fromNode
                                         , node, ($/), ($|), (&|)
                                         )
 
-import           Text.Parsec.TX.Utils   (SimpleStringRep (..), parseMaybeSimpleEncoded)
+import           Text.Parsec.TX.Utils   (SimpleStringRep (..), SimpleEncode(..), parseMaybeSimpleEncoded)
 import           Yesod.Helpers.Utils    (nullToNothing)
 
 import WeiXin.PublicPlatform.Types

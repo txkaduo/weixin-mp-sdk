@@ -11,9 +11,9 @@ import           Database.Persist.Sql   (PersistField (..), PersistFieldSql (..)
 import           Text.Blaze.Html        (ToMarkup (..))
 import           Text.Shakespeare.I18N  (ToMessage (..))
 
-import           Text.Parsec.TX.Utils   (SimpleStringRep (..), deriveJsonS,
-                                         derivePersistFieldS,
-                                         makeSimpleParserByTable)
+import           Text.Parsec.TX.Utils   ( SimpleEncode(..)
+                                        , deriveJsonS, deriveSimpleStringRepEnumBounded, derivePersistFieldS
+                                        )
 import           Yesod.Helpers.Parsec   (derivePathPieceS)
 
 import WeiXin.PublicPlatform.Types
@@ -213,21 +213,15 @@ data WxPayTradeType = WxPayTradeJsApi
 $(derivePersistFieldS "WxPayTradeType")
 $(derivePathPieceS "WxPayTradeType")
 $(deriveJsonS "WxPayTradeType")
+$(deriveSimpleStringRepEnumBounded "WxPayTradeType")
 
-instance SimpleStringRep WxPayTradeType where
-    simpleEncode mtype =
-        case mtype of
-            WxPayTradeJsApi    -> "JSAPI"
-            WxPayTradeNative   -> "NATIVE"
-            WxPayTradeApp      -> "APP"
-            WxPayTradeMicroPay -> "MICROPAY"
-
-    simpleParser = makeSimpleParserByTable
-                    [ ("JSAPI", WxPayTradeJsApi)
-                    , ("NATIVE", WxPayTradeNative)
-                    , ("APP", WxPayTradeApp)
-                    , ("MICROPAY", WxPayTradeMicroPay)
-                    ]
+instance SimpleEncode WxPayTradeType where
+  simpleEncode mtype =
+      case mtype of
+          WxPayTradeJsApi    -> "JSAPI"
+          WxPayTradeNative   -> "NATIVE"
+          WxPayTradeApp      -> "APP"
+          WxPayTradeMicroPay -> "MICROPAY"
 -- }}}1
 
 
@@ -248,15 +242,11 @@ data WxPayResultCode = WxPaySuccess
 $(derivePersistFieldS "WxPayResultCode")
 $(derivePathPieceS "WxPayResultCode")
 $(deriveJsonS "WxPayResultCode")
+$(deriveSimpleStringRepEnumBounded "WxPayResultCode")
 
-instance SimpleStringRep WxPayResultCode where
+instance SimpleEncode WxPayResultCode where
   simpleEncode WxPaySuccess = "SUCCESS"
   simpleEncode WxPayFail    = "FAIL"
-
-  simpleParser = makeSimpleParserByTable
-                    [ ("SUCCESS", WxPaySuccess)
-                    , ("FAIL", WxPayFail)
-                    ]
 -- }}}1
 
 
@@ -356,8 +346,9 @@ data WxUserPayStatus = WxUserPaySuccess
 $(derivePersistFieldS "WxUserPayStatus")
 $(derivePathPieceS "WxUserPayStatus")
 $(deriveJsonS "WxUserPayStatus")
+$(deriveSimpleStringRepEnumBounded "WxUserPayStatus")
 
-instance SimpleStringRep WxUserPayStatus where
+instance SimpleEncode WxUserPayStatus where
   simpleEncode WxUserPaySuccess    = "success"
   simpleEncode WxUserPayRefund     = "refund"
   simpleEncode WxUserPayNotPay     = "not_pay"
@@ -365,16 +356,6 @@ instance SimpleStringRep WxUserPayStatus where
   simpleEncode WxUserPayRevoked    = "revoked"
   simpleEncode WxUserPayUserPaying = "paying"
   simpleEncode WxUserPayPayError   = "error"
-
-  simpleParser = makeSimpleParserByTable
-                  [ ("success", WxUserPaySuccess)
-                  , ("refund", WxUserPayRefund)
-                  , ("not_pay", WxUserPayNotPay)
-                  , ("closed", WxUserPayClosed)
-                  , ("revoked", WxUserPayRevoked)
-                  , ("paying", WxUserPayUserPaying)
-                  , ("error", WxUserPayPayError)
-                  ]
 -- }}}1
 
 -- | 企业支付转账状态
@@ -466,20 +447,15 @@ data WxPayRefundStatus = WxPayRefundSuccess
 $(derivePersistFieldS "WxPayRefundStatus")
 $(derivePathPieceS "WxPayRefundStatus")
 $(deriveJsonS "WxPayRefundStatus")
+$(deriveSimpleStringRepEnumBounded "WxPayRefundStatus")
 
-instance SimpleStringRep WxPayRefundStatus where
+instance SimpleEncode WxPayRefundStatus where
   simpleEncode WxPayRefundSuccess    = "success"
   simpleEncode WxPayRefundFail       = "fail"
   simpleEncode WxPayRefundProcessing = "processing"
   simpleEncode WxPayRefundChange     = "change"
-
-  simpleParser = makeSimpleParserByTable
-                    [ ("success", WxPayRefundSuccess)
-                    , ("fail", WxPayRefundFail)
-                    , ("processing", WxPayRefundProcessing)
-                    , ("change", WxPayRefundChange)
-                    ]
 -- }}}1
+
 
 data WxPayRefundAccount = WxPayRefundAccountUnsettledFunds
                         | WxPayRefundAccountRechargeFunds

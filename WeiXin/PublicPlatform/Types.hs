@@ -43,8 +43,9 @@ import Web.HttpApiData                      (ToHttpApiData, FromHttpApiData)
 import Yesod.Helpers.Aeson                  (parseArray, parseIntWithTextparsec, parseTextByParsec)
 import Yesod.Helpers.Utils                  (nullToNothing)
 import Yesod.Helpers.Types                  (Gender(..), UrlText(..), unUrlText)
-import Text.Parsec.TX.Utils                 ( SimpleStringRep(..), natural
-                                            , derivePersistFieldS, makeSimpleParserByTable
+import Text.Parsec.TX.Utils                 ( SimpleEncode(..), SimpleStringRep(..)
+                                            , makeSimpleParserByTable, natural
+                                            , derivePersistFieldS, deriveSimpleStringRepEnumBounded
                                             , deriveJsonS
                                             )
 import Yesod.Helpers.Parsec                 ( derivePathPieceS )
@@ -306,11 +307,11 @@ instance FromJSON WxppScene where
 -- 另一种情况“用户已关注……”时则只说是个 32 位整数
 -- 因此目前不知道如果创建时用的是字串型场景ID，在后一种情况下会是什么样子
 -- 测试结果：qrscene_ 的确是有时有，有时无
-instance SimpleStringRep WxppScene where
-
+instance SimpleEncode WxppScene where
     simpleEncode (WxppSceneInt (WxppIntSceneID x)) = "qrscene_" ++ show x
     simpleEncode (WxppSceneStr (WxppStrSceneID x)) = "qrscene_" ++ T.unpack x
 
+instance SimpleStringRep WxppScene where
     simpleParser = try parse_as_int Text.Parsec.<|> parse_as_str
         where
             parse_as_int = do
@@ -604,11 +605,12 @@ instance Binary GroupSendStatus
 
 $(deriveJsonS "GroupSendStatus")
 
-instance SimpleStringRep GroupSendStatus where
+instance SimpleEncode GroupSendStatus where
     simpleEncode GroupSendSuccess   = "send success"
     simpleEncode GroupSendFail      = "send fail"
     simpleEncode (GroupSendError x) = "err(" <> show x <> ")"
 
+instance SimpleStringRep GroupSendStatus where
     simpleParser = choice
                     [ try $ string "send success" >> return GroupSendSuccess
                     , try $ string "send fail" >> return GroupSendFail
@@ -1180,21 +1182,15 @@ deriveSafeCopy 0 'base ''WxppMediaType
 $(derivePersistFieldS "WxppMediaType")
 $(derivePathPieceS "WxppMediaType")
 $(deriveJsonS "WxppMediaType")
+$(deriveSimpleStringRepEnumBounded "WxppMediaType")
 
-instance SimpleStringRep WxppMediaType where
+instance SimpleEncode WxppMediaType where
     simpleEncode mtype =
         case mtype of
             WxppMediaTypeImage -> "image"
             WxppMediaTypeVoice -> "voice"
             WxppMediaTypeVideo -> "video"
             WxppMediaTypeThumb -> "thumb"
-
-    simpleParser = makeSimpleParserByTable
-                    [ ("image", WxppMediaTypeImage)
-                    , ("voice", WxppMediaTypeVoice)
-                    , ("video", WxppMediaTypeVideo)
-                    , ("thumb", WxppMediaTypeThumb)
-                    ]
 -- }}}1
 
 
@@ -1513,7 +1509,7 @@ $(derivePersistFieldS "OAuthScope")
 $(derivePathPieceS "OAuthScope")
 $(deriveSafeCopy 0 'base ''OAuthScope)
 
-instance SimpleStringRep OAuthScope where
+instance SimpleEncode OAuthScope where
     -- Encode values will be used in wxppAuthPageUrl
     -- so they must be consistent with WX doc.
     simpleEncode AS_SnsApiBase      = "snsapi_base"
@@ -1521,6 +1517,7 @@ instance SimpleStringRep OAuthScope where
     simpleEncode AS_SnsApiLogin     = "snsapi_login"
     simpleEncode (AS_Unknown s)     = T.unpack s
 
+instance SimpleStringRep OAuthScope where
     simpleParser = try p Text.Parsec.<|> parse_unknown
         where
             p = makeSimpleParserByTable
@@ -1764,19 +1761,13 @@ instance NFData WxAppKind
 $(derivePersistFieldS "WxAppKind")
 $(derivePathPieceS "WxAppKind")
 $(deriveJsonS "WxAppKind")
+$(deriveSimpleStringRepEnumBounded "WxAppKind")
 
-instance SimpleStringRep WxAppKind where
+instance SimpleEncode WxAppKind where
   simpleEncode WxAppKindPublisher  = "publisher"
   simpleEncode WxAppKindServer     = "server"
   simpleEncode WxAppKindWeb        = "web"
   simpleEncode WxAppKindThirdParty = "third-party"
-
-  simpleParser = makeSimpleParserByTable
-                    [ ("publisher", WxAppKindPublisher)
-                    , ("server", WxAppKindServer)
-                    , ("web", WxAppKindWeb)
-                    , ("third-party", WxAppKindThirdParty)
-                    ]
 -- }}}1
 
 -- | 哪种app可以做oauth接口调用

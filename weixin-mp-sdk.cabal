@@ -106,7 +106,7 @@ library
                      , yesod-core
                      , yesod-form
                      , shakespeare
-                     , yesod-helpers >= 0.14
+                     , yesod-helpers >= 0.17
                      , text
                      , aeson
                      , bytestring
@@ -169,7 +169,7 @@ library
                      , http-api-data
                      , binary-orphans
                      , hash-tx-utils
-                     , parsec-tx-utils
+                     , parsec-tx-utils >= 0.3
 
   if flag(parsec3)
       build-depends:   parsec3
