@@ -461,6 +461,18 @@ data WxPayRefundAccount = WxPayRefundAccountUnsettledFunds
                         | WxPayRefundAccountRechargeFunds
                        deriving (Show, Eq, Ord, Enum, Bounded)
 
+-- {{{1 instances
+$(derivePersistFieldS "WxPayRefundAccount")
+$(derivePathPieceS "WxPayRefundAccount")
+$(deriveJsonS "WxPayRefundAccount")
+$(deriveSimpleStringRepEnumBounded "WxPayRefundAccount")
+
+instance SimpleEncode WxPayRefundAccount where
+  simpleEncode WxPayRefundAccountUnsettledFunds = "unseltted"
+  simpleEncode WxPayRefundAccountRechargeFunds  = "recharge"
+-- }}}1
+
+
 
 -- | 申请退款成功产生的返回
 -- 查询退款接口也会提供这部分信息
