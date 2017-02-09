@@ -418,6 +418,7 @@ wxUserPayCloseOrder common_params out_trade_no = do
 wxUserPayRefund :: WxppApiMonad env m
                 => WxPayCommonParams
                 -> Text   -- ^ 操作员帐号
+                -> WxPayRefundOptArgs
                 -> Either WxUserPayTransId WxUserPayOutTradeNo
                 -> WxUserPayOutRefundNo
                 -> WxPayMoneyAmount
@@ -426,21 +427,35 @@ wxUserPayRefund :: WxppApiMonad env m
                      , (LB.ByteString, LB.ByteString)
                      )
 -- {{{1
-wxUserPayRefund common_params op_user_id trans_id_trade_no refund_no total_fee refund_fee = do
+wxUserPayRefund common_params op_user_id opt_args trans_id_trade_no refund_no total_fee refund_fee = do
   url_conf <- asks getWxppUrlConfig
   let url = wxppUrlConfUserPayApiSecBase url_conf <> "/refund"
   let params :: WxPayParams
       params = mempty &
-                (appEndo $ mconcat $
-                    [ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
-                    , Endo $ insertMap "appid" (unWxppAppID app_id)
-                    , Endo $ case trans_id_trade_no of
-                              Left trans_id -> insertMap "transaction_id" (unWxUserPayTransId trans_id)
-                              Right out_trade_no -> insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
-                    , Endo $ insertMap "out_refund_no" (unWxUserPayOutRefundNo refund_no)
-                    , Endo $ insertMap "total_fee" (tshow $ unWxPayMoneyAmount total_fee)
-                    , Endo $ insertMap "refund_fee" (tshow $ unWxPayMoneyAmount refund_fee)
-                    , Endo $ insertMap "op_user_id" op_user_id
+                  (appEndo $ mconcat $ catMaybes
+                    [ Just $ Endo $ insertMap "mch_id" (unWxPayMchID mch_id)
+                    , Just $ Endo $ insertMap "appid" (unWxppAppID app_id)
+                    , Just $ Endo $ case trans_id_trade_no of
+                                      Left trans_id -> insertMap "transaction_id" (unWxUserPayTransId trans_id)
+                                      Right out_trade_no -> insertMap "out_trade_no" (unWxUserPayOutTradeNo out_trade_no)
+                    , Just $ Endo $ insertMap "out_refund_no" (unWxUserPayOutRefundNo refund_no)
+                    , Just $ Endo $ insertMap "total_fee" (tshow $ unWxPayMoneyAmount total_fee)
+                    , Just $ Endo $ insertMap "refund_fee" (tshow $ unWxPayMoneyAmount refund_fee)
+                    , Just $ Endo $ insertMap "op_user_id" op_user_id
+
+                    , flip fmap (wxPayRefundOptArgAccount opt_args) $
+                        \ account ->
+                          Endo $ insertMap "refund_account" $
+                                case account of
+                                  WxPayRefundAccountUnsettledFunds -> "REFUND_SOURCE_UNSETTLED_FUNDS"
+                                  WxPayRefundAccountRechargeFunds -> "REFUND_SOURCE_RECHARGE_FUNDS"
+
+                    , flip fmap (wxPayRefundOptArgChannel opt_args) $
+                        \ ch ->
+                          Endo $ insertMap "refund_channel" $
+                                case ch of
+                                  WxPayRefundOriginal -> "ORIGINAL"
+                                  WxPayRefundBalance  -> "BALANCE"
                     ])
 
   wxPayCallInternalHelper (WxCallSignReqInOut app_key) url params $ \resp_params -> runExceptT $ do

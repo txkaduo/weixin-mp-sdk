@@ -7,6 +7,7 @@ import ClassyPrelude
 import           Control.DeepSeq        (NFData)
 import           Data.Binary            (Binary)
 import           Data.Aeson             (FromJSON(..), ToJSON(..), object, (.=))
+import           Data.Default           (Default(..))
 import           Database.Persist.Sql   (PersistField (..), PersistFieldSql (..))
 import           Text.Blaze.Html        (ToMarkup (..))
 import           Text.Shakespeare.I18N  (ToMessage (..))
@@ -472,6 +473,17 @@ instance SimpleEncode WxPayRefundAccount where
   simpleEncode WxPayRefundAccountRechargeFunds  = "recharge"
 -- }}}1
 
+
+-- | 退款接口的各种可选参数
+data WxPayRefundOptArgs = WxPayRefundOptArgs
+  { wxPayRefundOptArgAccount :: Maybe WxPayRefundAccount
+  , wxPayRefundOptArgChannel :: Maybe WxPayRefundChannel
+  }
+
+-- {{{1
+instance Default WxPayRefundOptArgs where
+  def = WxPayRefundOptArgs def def
+-- }}}1
 
 
 -- | 申请退款成功产生的返回
