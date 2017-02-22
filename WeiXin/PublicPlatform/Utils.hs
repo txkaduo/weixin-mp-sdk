@@ -1,6 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE CPP #-}
-module  WeiXin.PublicPlatform.Utils where
+module  WeiXin.PublicPlatform.Utils
+  ( module WeiXin.PublicPlatform.Utils
+  , epochIntToUtcTime
+  , utcTimeToEpochInt
+  ) where
 
 import ClassyPrelude
 import qualified Data.QRCode                as QR   -- haskell-qrencode
@@ -18,8 +22,6 @@ import qualified Data.HashMap.Strict        as HM
 import Data.Array                           (bounds,(!), array)
 import Data.List                            ((!!))
 import Data.Time                            (NominalDiffTime)
-import Data.Time.Clock.POSIX                ( posixSecondsToUTCTime
-                                            , utcTimeToPOSIXSeconds)
 import System.FilePath                      (hasExtension)
 import System.Directory                     (doesFileExist)
 import Network.Mime                         (MimeType, defaultMimeType)
@@ -37,12 +39,7 @@ import Data.List.NonEmpty                   as LNE hiding (length, (!!), filter)
 import Numeric                              (readDec, readFloat)
 
 import Crypto.Hash.TX.Utils                 (MD5Hash(..), md5HashBS)
-
-epochIntToUtcTime :: Int64 -> UTCTime
-epochIntToUtcTime = posixSecondsToUTCTime . (realToFrac :: Int64 -> NominalDiffTime)
-
-utcTimeToEpochInt :: UTCTime -> Int64
-utcTimeToEpochInt = round . utcTimeToPOSIXSeconds
+import Yesod.Helpers.Utils                  (epochIntToUtcTime, utcTimeToEpochInt)
 
 
 data YamlFileParseException = YamlFileParseException
