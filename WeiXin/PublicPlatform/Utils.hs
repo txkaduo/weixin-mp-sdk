@@ -21,7 +21,6 @@ import qualified Data.HashMap.Strict        as HM
 
 import Data.Array                           (bounds,(!), array)
 import Data.List                            ((!!))
-import Data.Time                            (NominalDiffTime)
 import System.FilePath                      (hasExtension)
 import System.Directory                     (doesFileExist)
 import Network.Mime                         (MimeType, defaultMimeType)
