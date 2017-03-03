@@ -18,7 +18,7 @@ type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, MonadCatch m)
 
 type LoadMsgEnv r = ( HasWxppOutMsgDir r
                     , HasSomeWxppCacheBackend r
-                    , HasAccessToken r
+                    , HasAccessTokenIO r
                     , HasWxppAppID r
                     , HasWreqSession r
                     , HasWxppUrlConfig r
