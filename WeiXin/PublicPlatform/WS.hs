@@ -9,7 +9,9 @@ import Control.Monad.Logger
 import Control.Lens hiding ((.=))
 import qualified Data.ByteString.Lazy       as LB
 
-#if !MIN_VERSION_classy_prelude(1, 0, 0)
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+import ClassyPrelude                        (onException)
+#else
 import Control.Monad.Catch                  ( Handler(..), catches, onException )
 #endif
 
@@ -200,9 +202,14 @@ asWxppWsResponseNormal' =
 
 
 -- | Like asWxppWsResponseNormal', but log responseBody when got exception
-asWxppWsResponseNormal'L :: (MonadThrow m, FromJSON a, MonadLogger m, MonadCatch m)
-                        => Response LB.ByteString
-                        -> m a
+asWxppWsResponseNormal'L :: ( MonadThrow m, FromJSON a, MonadLogger m
+                            , MonadCatch m
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+                            , MonadMask m
+#endif
+                            )
+                         => Response LB.ByteString
+                         -> m a
 asWxppWsResponseNormal'L resp = do
   let report = $logErrorS wxppLogSource $
                   "Invalid diagram:\n" <> toStrict (decodeUtf8 $ resp ^. responseBody) <> "\n"

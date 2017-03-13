@@ -1,6 +1,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.ThirdParty
   ( module WeiXin.PublicPlatform.Class
   , module WeiXin.PublicPlatform.ThirdParty
@@ -583,7 +584,13 @@ instance FromJSON AuthorizationPack where
 -- }}}1
 
 -- | 调用远程接口:授权公众号帐号基本信息
-wxppTpGetAuthorizationInfo :: (WxppApiMonad env m, MonadCatch m)
+wxppTpGetAuthorizationInfo :: ( WxppApiMonad env m
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+                              , MonadMask m
+#else
+                              , MonadCatch m
+#endif
+                              )
                            => WxppTpAccessToken
                            -> WxppAppID
                            -> m AuthorizationPack

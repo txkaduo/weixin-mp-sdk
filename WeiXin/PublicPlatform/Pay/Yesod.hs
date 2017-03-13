@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Pay.Yesod where
 
 import ClassyPrelude.Yesod
@@ -13,7 +14,13 @@ import WeiXin.PublicPlatform.Pay.Function
 
 
 -- | 用于实现主动通知接口
-yesodHandleWxUserPayNotify :: (MonadHandler m, MonadLogger m, MonadBaseControl IO m)
+yesodHandleWxUserPayNotify :: (MonadHandler m, MonadLogger m
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+                              , MonadCatch m
+#else
+                              , MonadBaseControl IO m
+#endif
+                              )
                            => WxPayAppKey
                            -> ( WxppAppID
                                  -> WxPayMchID

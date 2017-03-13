@@ -1,6 +1,9 @@
 module Main where
 
-import ClassyPrelude hiding ((<>))
+import ClassyPrelude
+#if !MIN_VERSION_optparse_applicative(0, 13, 0)
+    hiding ((<>))
+#endif
 import Control.Monad.Logger
 import Options.Applicative
 import Data.Aeson

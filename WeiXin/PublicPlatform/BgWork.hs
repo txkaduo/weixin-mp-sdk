@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.BgWork where
 
 import ClassyPrelude hiding (catch)
@@ -5,7 +6,9 @@ import Data.Time                            (addUTCTime, NominalDiffTime)
 import Control.Monad.Logger
 import System.Timeout                       (timeout)
 import Control.Exception                    (evaluate)
+#if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Trans.Control          (MonadBaseControl)
+#endif
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Security
@@ -144,9 +147,14 @@ loopRunBgJob chk_abort intv job = loop
 
 
 -- | 重复执行计算，并记录出现的异常
-runRepeatlyLogExc ::
-    (MonadIO m, MonadLogger m, MonadBaseControl IO m) =>
-    MVar a
-    -> Int      -- ^ ms
-    -> m () -> m ()
+runRepeatlyLogExc :: ( MonadIO m, MonadLogger m
+#if MIN_VERSION_classy_prelude(1, 0, 0)
+                     , MonadCatch m
+#else
+                     , MonadBaseControl IO m
+#endif
+                     )
+                  => MVar a
+                  -> Int      -- ^ ms
+                  -> m () -> m ()
 runRepeatlyLogExc exit_mvar = foreverLogExc (readMVar exit_mvar >> return True)
