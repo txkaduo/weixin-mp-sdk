@@ -101,7 +101,7 @@ yesodHandleWxUserPayNotify app_key handle_notify = do
 wxPayNewUniqueId :: PathPiece a => Int -> a -> IO Text
 wxPayNewUniqueId pre_len k = do
   prefix <- randomString pre_len $ ['a'..'z'] <> ['A'..'Z']
-  return $ fromString prefix <> "-" <> toPathPiece k
+  return $ fromString prefix <> toPathPiece k
 
 
 -- vim: set foldmethod=marker:
