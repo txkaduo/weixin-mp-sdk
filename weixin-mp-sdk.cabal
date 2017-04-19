@@ -53,6 +53,7 @@ library
                        WeiXin.PublicPlatform.QRCode
                        WeiXin.PublicPlatform.EndUser
                        WeiXin.PublicPlatform.Propagate
+                       WeiXin.PublicPlatform.Yesod.Utils
                        WeiXin.PublicPlatform.Yesod.Site
                        WeiXin.PublicPlatform.Yesod.Types
                        WeiXin.PublicPlatform.Yesod.Model
