@@ -178,12 +178,16 @@ testWxPaySign = do
   putStrLn $ "WX Pay call document:"
   putStrLn $ LT.toStrict doc_t
 
-  case wxPayParseIncomingXmlDoc app_key doc of
+  case wxPayParseIncomingXmlDoc (Just app_key) doc of
     Left err -> do
       putStrLn $ "Failed to parse pay doc: " <> err
       exitFailure
 
-    Right params' -> do
+    Right (Left err) -> do
+      putStrLn $ "Failed to parse pay doc: " <> tshow err
+      exitFailure
+
+    Right (Right params') -> do
       when ( params /= params' ) $ do
         putStrLn $ "Failed to parse pay doc: params is not expected"
         exitFailure
@@ -245,8 +249,8 @@ testWxUserPayStateDoc1 = do
   \</xml>"
 
   pay_stat <- testWxUserPayStateDocHelper doc
-  testEq (Just "支付测试") (wxUserPayStatAttach pay_stat)
-  testEq (Just True) (wxUserPayStatIsSubs pay_stat)
+  testEq (Just "支付测试") (wxUserPaySuccAttach pay_stat)
+  testEq (Just True) (wxUserPaySuccIsSubs pay_stat)
 
 testWxUserPayStateDoc2 :: IO ()
 testWxUserPayStateDoc2 = do
@@ -273,11 +277,11 @@ testWxUserPayStateDoc2 = do
    \</xml>"
 
   pay_stat <- testWxUserPayStateDocHelper doc
-  testEq (Just "订单额外描述") (wxUserPayStatAttach pay_stat)
-  testEq (Just True) (wxUserPayStatIsSubs pay_stat)
+  testEq (Just "订单额外描述") (wxUserPaySuccAttach pay_stat)
+  testEq (Just True) (wxUserPaySuccIsSubs pay_stat)
 
 
-testWxUserPayStateDocHelper :: Text -> IO (WxUserPayStatInfo)
+testWxUserPayStateDocHelper :: Text -> IO (WxUserPaySuccInfo)
 testWxUserPayStateDocHelper = testWxUserParseXmlDocHelper wxUserPayParseStateParams
 
 testWxUserParseXmlDocHelper :: (WxPayParams -> LoggingT IO (Either WxPayDiagError a))
