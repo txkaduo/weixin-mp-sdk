@@ -57,7 +57,7 @@ import qualified Data.Aeson                 as A
 
 import Database.Persist.Sql
 
-import WeiXin.PublicPlatform.Yesod.Types    (handlerGetWeixinClientVersion)
+import WeiXin.PublicPlatform.Yesod.Utils    (handlerGetWeixinClientVersion)
 import WeiXin.PublicPlatform.Yesod.Model
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Class
