@@ -889,9 +889,8 @@ initWxppUserDbCacheOfApp api_env get_atk = do
 -- }}}1
 
 
--- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
--- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
---       不适用于第三方平台
+-- | 若当前会话未经过微信登录，则调用 yesodComeBackWithWxLogin
+--   否则从会话中取已登录的微信用户信息
 yesodMakeSureInWxLoggedIn :: ( MonadHandler m, Yesod (HandlerSite m)
                              , RenderMessage (HandlerSite m) FormMessage
                              , MonadLogger m, MonadCatch m
@@ -918,78 +917,107 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
   m_wx_id <- sessionGetWxppUserU app_id
   case m_wx_id of
     Just (open_id, m_union_id) -> h (getWxppOpenID open_id) m_union_id Nothing
-    Nothing -> do
-      m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt hiddenField "code"
-      case m_code of
-        Just code | not (deniedOAuthCode code) -> do
-          err_or_wx_id <- runExceptT $ do
-            m_state <- lift $ lookupGetParam "state"
-            m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
-            unless (m_expected_state == m_state) $ do
-              $logError $ "OAuth state check failed, got: " <> tshow m_state
-              throwError $ "unexpected state"
+    Nothing -> yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id h_no_id h
+-- }}}1
 
-            m_secret <- lift $ get_secret app_id
-            secret <- case m_secret of
-                        Nothing -> do
-                          $logError $ "cannot get app secret from cache server"
-                          throwError $ asString "no secret"
-                        Just x -> return x
 
-            err_or_atk_info <- tryWxppWsResult $ flip runReaderT wx_api_env $
-                                wxppOAuthGetAccessToken app_id secret code
-            oauth_atk_info <- case err_or_atk_info of
-                            Left err -> do
-                                $logError $
-                                    "wxppOAuthGetAccessToken failed: " <> tshow err
-                                throwError "wxppOAuthGetAccessToken failed"
+-- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
+-- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
+--       不适用于第三方平台
+yesodComeBackWithWxLogin :: ( MonadHandler m, Yesod (HandlerSite m)
+                            , RenderMessage (HandlerSite m) FormMessage
+                            , MonadLogger m, MonadCatch m
+                            , HasWxppUrlConfig e, HasWreqSession e
+                            , WxppCacheTemp c
+                            )
+                         => e
+                         -> c
+                         -> (WxppAppID -> m (Maybe WxppAppSecret))
+                         -> (UrlText -> m UrlText)
+                         -- ^ 修改微信返回地址
+                         -> OAuthScope
+                         -> WxppAppID
+                         -> m a
+                         -- ^ 确实不能取得 open id　时调用
+                         -> (WxppOpenID -> Maybe WxppUnionID -> Maybe OAuthGetUserInfoResult-> m a)
+                         -- ^ 取得 open_id 之后调用这个函数
+                         -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
+                         -- OAuthGetUserInfoResult 是副产品，不一定有
+                         -- openid/unionid 会尽量尝试从session里取得
+                         -> m a
+-- {{{1
+yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id h_no_id h = do
+  m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt hiddenField "code"
+  case m_code of
+    Just code | not (deniedOAuthCode code) -> do
+      err_or_wx_id <- runExceptT $ do
+        m_state <- lift $ lookupGetParam "state"
+        m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
+        unless (m_expected_state == m_state) $ do
+          $logError $ "OAuth state check failed, got: " <> tshow m_state
+          throwError $ "unexpected state"
 
-                            Right x -> return x
+        m_secret <- lift $ get_secret app_id
+        secret <- case m_secret of
+                    Nothing -> do
+                      $logError $ "cannot get app secret from cache server"
+                      throwError $ asString "no secret"
+                    Just x -> return x
 
-            let open_id = oauthAtkOpenID oauth_atk_info
-                scopes = oauthAtkScopes oauth_atk_info
+        err_or_atk_info <- tryWxppWsResult $ flip runReaderT wx_api_env $
+                            wxppOAuthGetAccessToken app_id secret code
+        oauth_atk_info <- case err_or_atk_info of
+                        Left err -> do
+                            $logError $
+                                "wxppOAuthGetAccessToken failed: " <> tshow err
+                            throwError "wxppOAuthGetAccessToken failed"
 
-            if member AS_SnsApiUserInfo scopes
-               then do
-                  let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
-                      lang = "zh_CN"
+                        Right x -> return x
 
-                  oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo lang oauth_atk_pkg
-                  liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
-                  return $ (open_id, Just oauth_user_info)
+        let open_id = oauthAtkOpenID oauth_atk_info
+            scopes = oauthAtkScopes oauth_atk_info
 
-               else do
-                  return $ (open_id, Nothing)
+        if member AS_SnsApiUserInfo scopes
+           then do
+              let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
+                  lang = "zh_CN"
 
-          case err_or_wx_id of
-            Left _        -> throwM $ userError "微信接口错误，请稍后重试"
-            Right (open_id, m_oauth_uinfo) -> h open_id
-                                              (join $ oauthUserInfoUnionID <$> m_oauth_uinfo)
-                                              m_oauth_uinfo
+              oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo lang oauth_atk_pkg
+              liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
+              return $ (open_id, Just oauth_user_info)
 
-        _ -> do
-          m_state <- lookupGetParam "state"
-          if isJust m_state
-             then do
-               -- 说明当前已经是从微信认证回来的回调
-               h_no_id
+           else do
+              return $ (open_id, Nothing)
 
-             else do
-               random_state <- wxppOAuthMakeRandomState app_id
-               current_url <- getCurrentUrl
-               let oauth_return_url    = UrlText $ fromMaybe current_url $ fmap pack $
-                                           urlUpdateQueryText
-                                               (filter (flip onotElem ["state", "code"] . fst))
-                                               (unpack current_url)
-               oauth_retrurn_url2  <- fix_return_url oauth_return_url
-               let oauth_url = wxppOAuthRequestAuthInsideWx
-                                   Nothing -- not third-prty
-                                   app_id
-                                   scope
-                                   oauth_retrurn_url2
-                                   random_state
+      case err_or_wx_id of
+        Left _        -> throwM $ userError "微信接口错误，请稍后重试"
+        Right (open_id, m_oauth_uinfo) -> h open_id
+                                          (join $ oauthUserInfoUnionID <$> m_oauth_uinfo)
+                                          m_oauth_uinfo
 
-               redirect oauth_url
+    _ -> do
+      m_state <- lookupGetParam "state"
+      if isJust m_state
+         then do
+           -- 说明当前已经是从微信认证回来的回调
+           h_no_id
+
+         else do
+           random_state <- wxppOAuthMakeRandomState app_id
+           current_url <- getCurrentUrl
+           let oauth_return_url    = UrlText $ fromMaybe current_url $ fmap pack $
+                                       urlUpdateQueryText
+                                           (filter (flip onotElem ["state", "code"] . fst))
+                                           (unpack current_url)
+           oauth_retrurn_url2  <- fix_return_url oauth_return_url
+           let oauth_url = wxppOAuthRequestAuthInsideWx
+                               Nothing -- not third-prty
+                               app_id
+                               scope
+                               oauth_retrurn_url2
+                               random_state
+
+           redirect oauth_url
 -- }}}1
 
 
