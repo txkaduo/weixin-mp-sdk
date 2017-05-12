@@ -979,7 +979,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
         let open_id = oauthAtkOpenID oauth_atk_info
             scopes = oauthAtkScopes oauth_atk_info
 
-        if member AS_SnsApiUserInfo scopes
+        if any oauthScopeCanGetUserInfo scopes
            then do
               let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
                   lang = "zh_CN"
