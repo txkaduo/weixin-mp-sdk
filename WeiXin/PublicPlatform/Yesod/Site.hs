@@ -923,7 +923,7 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
 
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
---       不适用于第三方平台
+--       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
 yesodComeBackWithWxLogin :: ( MonadHandler m, Yesod (HandlerSite m)
                             , RenderMessage (HandlerSite m) FormMessage
                             , MonadLogger m, MonadCatch m
@@ -947,7 +947,9 @@ yesodComeBackWithWxLogin :: ( MonadHandler m, Yesod (HandlerSite m)
                          -> m a
 -- {{{1
 yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id h_no_id h = do
+  is_client_wx <- isJust <$> handlerGetWeixinClientVersion
   m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt hiddenField "code"
+
   case m_code of
     Just code | not (deniedOAuthCode code) -> do
       err_or_wx_id <- runExceptT $ do
@@ -1010,12 +1012,18 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
                                            (filter (flip onotElem ["state", "code"] . fst))
                                            (unpack current_url)
            oauth_retrurn_url2  <- fix_return_url oauth_return_url
-           let oauth_url = wxppOAuthRequestAuthInsideWx
-                               Nothing -- not third-prty
-                               app_id
-                               scope
-                               oauth_retrurn_url2
-                               random_state
+
+           let oauth_url = if is_client_wx
+                              then wxppOAuthRequestAuthInsideWx
+                                     Nothing -- not third-prty
+                                     app_id
+                                     scope
+                                     oauth_retrurn_url2
+                                     random_state
+                              else wxppOAuthRequestAuthOutsideWx
+                                     app_id
+                                     oauth_retrurn_url2
+                                     random_state
 
            redirect oauth_url
 -- }}}1
