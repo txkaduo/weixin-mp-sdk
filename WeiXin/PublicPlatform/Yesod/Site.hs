@@ -998,7 +998,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
                                           m_oauth_uinfo
 
     _ -> do
-      m_state <- lookupGetParam "state"
+      m_state <- runInputGet $ iopt textField "state"
       if isJust m_state
          then do
            -- 说明当前已经是从微信认证回来的回调
