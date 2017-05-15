@@ -957,6 +957,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
         m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
         unless (m_expected_state == m_state) $ do
           $logError $ "OAuth state check failed, got: " <> tshow m_state
+                        <> ", expect: " <> tshow m_expected_state
           throwError $ "unexpected state"
 
         m_secret <- lift $ get_secret app_id
