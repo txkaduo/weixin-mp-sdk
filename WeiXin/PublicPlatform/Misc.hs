@@ -29,7 +29,7 @@ import Yesod.Core                           (HandlerSite, PathPiece(..), Yesod, 
 import Text.Shakespeare.I18N                (RenderMessage)
 
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
-import Yesod.Helpers.Persist
+import Database.Persist.TX.Utils
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS

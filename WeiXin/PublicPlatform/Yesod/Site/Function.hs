@@ -8,6 +8,7 @@ module WeiXin.PublicPlatform.Yesod.Site.Function
     , module WeiXin.PublicPlatform.Yesod.Site.Data
     )where
 
+-- {{{1
 import ClassyPrelude
 import Yesod
 import Control.Lens
@@ -19,10 +20,9 @@ import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as Map
 import Data.Conduit
-import Database.Persist.Sql
 import Data.Time                            (addUTCTime, diffUTCTime, NominalDiffTime)
-
-import Yesod.Helpers.Persist
+import Database.Persist.Sql
+import Database.Persist.TX.Utils
 
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Media
@@ -31,6 +31,7 @@ import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Model
+-- }}}1
 
 
 
@@ -369,6 +370,7 @@ wxppUserLatestActiveTime :: (MonadIO m, MonadResource m) =>
     UTCTime         -- ^ 只检查过去一段时间内的消息历史
     -> WxppAppID
     -> Source (ReaderT WxppDbBackend m) (WxppOpenID, UTCTime)
+-- {{{1
 wxppUserLatestActiveTime start_time app_id = do
     open_id_fn <- lift $ getFieldName WxppInMsgRecordFrom
     created_time_fn <- lift $ getFieldName WxppInMsgRecordCreatedTime
@@ -395,3 +397,6 @@ wxppUserLatestActiveTime start_time app_id = do
                                                 <> (fromString $ show $ length x)
                     )
         =$= CL.mapM (either (throwM . PersistMarshalError) return)
+-- }}}1
+
+-- vim: set foldmethod=marker:
