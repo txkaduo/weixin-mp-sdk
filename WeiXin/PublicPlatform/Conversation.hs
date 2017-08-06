@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Conversation where
 
+-- {{{1 import
 import ClassyPrelude
 import Data.Proxy
 
@@ -21,6 +22,7 @@ import Data.Aeson                           (ToJSON(..))
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
+-- }}}1
 
 class TalkerState a where
     talkPromptNext :: a -> (Maybe Text, a)
@@ -160,8 +162,22 @@ class Monad m => WxTalkerFreshState r m a where
     wxTalkInitiateBlank _ _ = return $ Left []
 
 
+-- | 对应于会话正常结束的操作
+-- 例如可保存会话中的临时数据等
 class WxTalkerDoneAction r m a where
     wxTalkDone :: a -> WxTalkerMonad r m [WxppOutMsg]
+
+
+-- | 会话中止的原因
+data WxTalkAbortInitiator = WxTalkAbortByUser
+                          | WxTalkAbortBySys
+                          deriving (Show, Eq, Ord, Enum, Bounded)
+
+-- | 对应于会话中止结束的操作
+-- 中止通常由于会话超时，或用户使用＂中止＂指令
+class WxTalkerAbortAction r m a where
+  wxTalkAbort :: a -> WxTalkAbortInitiator -> WxTalkerMonad r m [WxppOutMsg]
+
 
 
 wxTalkerRun :: (Monad m, Eq a, WxTalkerState r m a) =>
@@ -467,3 +483,7 @@ instance Monad m => WxTalkerState m (SomeWxTalkerState m) where
 instance WxTalkerDoneAction m (SomeWxTalkerState m) where
     wxTalkDone cache (SomeWxTalkerState x) = wxTalkDone cache x
 --}
+
+
+
+-- vim: set foldmethod=marker:

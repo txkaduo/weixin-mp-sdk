@@ -2,6 +2,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module WeiXin.PublicPlatform.Conversation.Yesod where
 
+-- {{{1 imports
 import ClassyPrelude.Yesod hiding (Proxy, proxy)
 import Data.Proxy
 import qualified Data.ByteString.Lazy       as LB
@@ -14,7 +15,6 @@ import Control.Monad.Except hiding (forM_)
 import Control.Monad.Trans.Maybe
 import Data.Time                            (NominalDiffTime, addUTCTime)
 import Data.List.NonEmpty                   (NonEmpty(..))
-import Data.Aeson                           ((.:?), (.!=))
 
 import WeiXin.PublicPlatform.Conversation
 import WeiXin.PublicPlatform.Class
@@ -23,6 +23,7 @@ import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Media
+-- }}}1
 
 
 saveWxppTalkState :: forall m a r.
@@ -42,19 +43,55 @@ saveWxppTalkState get_state_type state_id x = mkWxTalkerMonad $ \env -> runExcep
             ]
 
 
-abortCurrentWxppTalkState :: forall m.
-    (MonadIO m) =>
-    WxppAppID
-    -> WxppOpenID
-    -> ReaderT SqlBackend m ()
-abortCurrentWxppTalkState app_id open_id = do
-    m_rec <- selectFirst
-                        [ WxppTalkStateOpenId ==. open_id
-                        , WxppTalkStateAppId ==. app_id
-                        ]
-                        [ Desc WxppTalkStateId ]
-    forM_ m_rec $ \ (Entity rec_id _rec) -> do
-        update rec_id [ WxppTalkStateAborted =. True ]
+abortCurrentWxppTalkState :: forall m r.  (MonadIO m, MonadLogger m)
+                          => r
+                          -> (Text -> Maybe (WxppTalkerAbortStateEntry r m))
+                          -- ^ lookup WxppTalkerAbortStateEntry by state's type string
+                          -> WxTalkAbortInitiator
+                          -> WxppAppID
+                          -> WxppOpenID
+                          -> ReaderT SqlBackend m ([WxppOutMsg])
+-- {{{1
+abortCurrentWxppTalkState common_env lookup_se initiator app_id open_id = do
+  m_rec <- selectFirst
+                      [ WxppTalkStateOpenId ==. open_id
+                      , WxppTalkStateAppId ==. app_id
+                      ]
+                      [ Desc WxppTalkStateId ]
+
+  fmap (fromMaybe []) $ forM m_rec $ \ e_rec@(Entity rec_id rec) -> do
+    let typ_str = wxppTalkStateTyp rec
+
+    out_msgs <-
+      case lookup_se typ_str of
+        Nothing -> do
+          $logWarn $ "could not find state entry for record #" <> toPathPiece rec_id
+                      <> ", type string was: " <> typ_str
+          return []
+
+        Just (WxppTalkerAbortStateEntry sp ext_env) -> do
+          err_or_st <- parseWxppTalkStateFromRecord sp e_rec
+          case err_or_st of
+            Left err -> do
+              $logError $ "parseWxppTalkStateFromRecord failed for record #" <> toPathPiece rec_id
+                            <> ": " <> fromString err
+              return []
+
+            Right Nothing -> return []
+
+            Right (Just st) -> do
+              err_or_outmsgs <- flip runWxTalkerMonad (common_env, ext_env) $ wxTalkAbort st initiator
+              case err_or_outmsgs of
+                Left err -> do
+                  $logError $ "wxTalkAbort failed for record #" <> toPathPiece rec_id
+                              <> ": " <> fromString err
+                  return []
+
+                Right x -> return x
+
+    update rec_id [ WxppTalkStateAborted =. True ]
+    return out_msgs
+-- }}}1
 
 
 newWxppTalkState :: forall m a.
@@ -194,6 +231,18 @@ cleanUpTimedOutWxTalk ttls on_abort_talk = do
             on_abort_talk app_id open_id
 
 
+-- | 仅是为了减少代码重复而设
+-- 由于这个对象可以构造其它需求稍低一些的 WxppTalkerStateEntry WxppTalkerFreshStateEntry WxppTalkerAbortStateEntry
+data WxppTalkerFullStateEntry r0 m = forall s r.
+  (Eq s, ToJSON s, FromJSON s, HasStateType s
+  , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
+  , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
+  , WxTalkerAbortAction (r0, r) (ReaderT WxppDbBackend m) s
+  , WxTalkerFreshState (r0, r) (ReaderT WxppDbBackend m) s
+  )
+  => WxppTalkerFullStateEntry (Proxy s) r
+
+
 -- | 作为下面 WxppTalkHandlerGeneral 的参数用
 -- r0 是 WxppTalkHandlerGeneral 提供的全局环境
 data WxppTalkerStateEntry r0 m = forall s r.
@@ -202,6 +251,11 @@ data WxppTalkerStateEntry r0 m = forall s r.
                             , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
                             ) =>
                             WxppTalkerStateEntry (Proxy s) r
+
+
+wxppTalkerStateEntryFromFull :: WxppTalkerFullStateEntry r m -> WxppTalkerStateEntry r m
+wxppTalkerStateEntryFromFull (WxppTalkerFullStateEntry p x) = WxppTalkerStateEntry p x
+
 
 -- | 这个通用的对话处理器
 -- 所有输入都应经过这个处理器处理一次
@@ -321,6 +375,9 @@ data WxppTalkerFreshStateEntry r0 m = forall s r.
                                 ) =>
                                 WxppTalkerFreshStateEntry (Proxy s) r
 
+wxppTalkerFreshStateEntryFromFull :: WxppTalkerFullStateEntry r m -> WxppTalkerFreshStateEntry r m
+wxppTalkerFreshStateEntryFromFull (WxppTalkerFullStateEntry p x) = WxppTalkerFreshStateEntry p x
+
 wxppTalkerFreshStateEntryToStateEntry :: WxppTalkerFreshStateEntry r m -> WxppTalkerStateEntry r m
 wxppTalkerFreshStateEntryToStateEntry (WxppTalkerFreshStateEntry p x) = WxppTalkerStateEntry p x
 
@@ -395,43 +452,64 @@ instance
                                     ExceptT $ processJustInitedWxTalk st_px (env, extra_env) e_state
 
 
+-- | 与 WxppTalkerStateEntry 的区别只是多了 WxTalkerFreshState 的要求
+data WxppTalkerAbortStateEntry r0 m = forall s r.
+  (Eq s, ToJSON s, FromJSON s, HasStateType s
+  , WxTalkerAbortAction (r0, r) (ReaderT WxppDbBackend m) s
+  )
+  => WxppTalkerAbortStateEntry (Proxy s) r
+
+wxppTalkerAbortStateEntryFromFull :: WxppTalkerFullStateEntry r m -> WxppTalkerAbortStateEntry r m
+wxppTalkerAbortStateEntryFromFull (WxppTalkerFullStateEntry p x) = WxppTalkerAbortStateEntry p x
+
+
 -- | 消息处理器：调用后会无条件结束当前会话
-data WxppTalkTerminator = WxppTalkTerminator
-  { wxppTalkTermDir      :: (NonEmpty FilePath) -- ^ out-msg dir path
-  , wxppTalkTermDbRunner :: WxppDbRunner
-  , wxppTalkTermPrimary  :: Bool                -- ^ if primary
-  , wxppTalkTermOurMsg   :: WxppOutMsgLoader    -- ^ 打算回复用户的消息
+data WxppTalkTerminator r m = WxppTalkTerminator
+  { wxppTalkTermDir          :: (NonEmpty FilePath) -- ^ out-msg dir path
+  , wxppTalkTermDbRunner     :: WxppDbRunner
+  , wxppTalkTermCommonEnv    :: r            -- ^ read only data/environment
+  , wxppTalkTermStateEntries :: [ WxppTalkerAbortStateEntry r m ]
+  -- , wxppTalkTermPrimary  :: Bool                -- ^ if primary
+  -- 一但这个处理器被调用，则很可能已发生数据库的实质修改
+  -- 这里再指定是否 primary 已无太大意义，应总是理解为primary响应
+  , wxppTalkTermOurMsg       :: WxppOutMsgLoader    -- ^ 打算回复用户的消息
   }
 
-instance JsonConfigable WxppTalkTerminator where
-    type JsonConfigableUnconfigData WxppTalkTerminator = (NonEmpty FilePath, WxppDbRunner)
+instance JsonConfigable (WxppTalkTerminator r m) where
+  type JsonConfigableUnconfigData (WxppTalkTerminator r m) = (NonEmpty FilePath, WxppDbRunner, r, [ WxppTalkerAbortStateEntry r m ])
 
-    isNameOfInMsgHandler _ x = x == "terminate-talk"
+  isNameOfInMsgHandler _ x = x == "terminate-talk"
 
-    parseWithExtraData _ (f1, f2) obj =
-        WxppTalkTerminator f1 f2
-                <$> (obj .:? "primary" .!= True)
-                <*> parseWxppOutMsgLoader obj
+  parseWithExtraData _ (f1, f2, f3, f4) obj =
+    WxppTalkTerminator f1 f2 f3 f4
+            -- <$> (obj .:? "primary" .!= True)
+            <$> parseWxppOutMsgLoader obj
 
 
-type instance WxppInMsgProcessResult WxppTalkTerminator = WxppInMsgHandlerResult
+type instance WxppInMsgProcessResult (WxppTalkTerminator r m) = WxppInMsgHandlerResult
 
 instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
-    IsWxppInMsgProcessor m WxppTalkTerminator where
-    processInMsg (WxppTalkTerminator msg_dirs db_runner primary get_outmsg) cache app_info _bs ime =
+  IsWxppInMsgProcessor m (WxppTalkTerminator r m) where
+    processInMsg (WxppTalkTerminator msg_dirs db_runner common_env entries get_outmsg) cache app_info _bs ime =
+-- {{{1
       runExceptT $ do
         let from_open_id = wxppInFromUserName ime
-        mapExceptT (runWxppDB db_runner) $ do
-            lift $ abortCurrentWxppTalkState app_id from_open_id
+
+        out_msgs_abort <- mapExceptT (runWxppDB db_runner) $ do
+          lift $ abortCurrentWxppTalkState common_env (\ x -> find (match_entry x) entries) WxTalkAbortBySys app_id from_open_id
 
         let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
                             wxppCacheGetAccessToken cache app_id)
                         >>= maybe (throwError $ "no access token available") (return . fst)
-        outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
-        liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
-                        tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg
+        outmsg_l <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
+        out_msg <- tryWxppWsResultE "fromWxppOutMsgL" $
+                        tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg_l
+        return $ map ((primary,) . Just) $ out_msgs_abort <> [ out_msg ]
       where
+        primary = True
         app_id = procAppIdInfoReceiverId app_info
+        match_entry typ_str (WxppTalkerAbortStateEntry p _) = getStateType p == typ_str
+-- }}}1
 
 
 
@@ -479,3 +557,6 @@ processJustInitedWxTalk state_proxy env state_id = runExceptT $ do
         set_st = saveAnyWxppTalkState state_id
         get_st = mkWxTalkerMonad $ \_ -> loadAnyWxppTalkState state_proxy state_id
 
+
+
+-- vim: set foldmethod=marker:
