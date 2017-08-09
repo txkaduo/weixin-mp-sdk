@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                weixin-mp-sdk
-version:             0.34.0
+version:             0.35.0
 -- synopsis:            
 -- description:         
 license:             MIT
