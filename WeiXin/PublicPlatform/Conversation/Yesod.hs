@@ -497,7 +497,7 @@ instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
         let from_open_id = wxppInFromUserName ime
 
         m_out_msgs_abort <- mapExceptT (runWxppDB db_runner) $ do
-          lift $ abortCurrentWxppTalkState common_env (\ x -> find (match_entry x) entries) WxTalkAbortBySys app_id from_open_id
+          lift $ abortCurrentWxppTalkState common_env (\ x -> find (match_entry x) entries) WxTalkAbortByUser app_id from_open_id
 
         liftM (fromMaybe []) $ forM m_out_msgs_abort $ \ out_msgs_abort -> do
           let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
