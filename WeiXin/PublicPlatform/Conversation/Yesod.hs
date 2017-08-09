@@ -50,16 +50,17 @@ abortCurrentWxppTalkState :: forall m r.  (MonadIO m, MonadLogger m)
                           -> WxTalkAbortInitiator
                           -> WxppAppID
                           -> WxppOpenID
-                          -> ReaderT SqlBackend m ([WxppOutMsg])
+                          -> ReaderT SqlBackend m (Maybe [WxppOutMsg])
 -- {{{1
 abortCurrentWxppTalkState common_env lookup_se initiator app_id open_id = do
   m_rec <- selectFirst
                       [ WxppTalkStateOpenId ==. open_id
                       , WxppTalkStateAppId ==. app_id
+                      , WxppTalkStateAborted ==. False
                       ]
                       [ Desc WxppTalkStateId ]
 
-  fmap (fromMaybe []) $ forM m_rec $ \ e_rec@(Entity rec_id rec) -> do
+  forM m_rec $ \ e_rec@(Entity rec_id rec) -> do
     let typ_str = wxppTalkStateTyp rec
 
     out_msgs <-
@@ -495,16 +496,17 @@ instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
       runExceptT $ do
         let from_open_id = wxppInFromUserName ime
 
-        out_msgs_abort <- mapExceptT (runWxppDB db_runner) $ do
+        m_out_msgs_abort <- mapExceptT (runWxppDB db_runner) $ do
           lift $ abortCurrentWxppTalkState common_env (\ x -> find (match_entry x) entries) WxTalkAbortBySys app_id from_open_id
 
-        let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
-                            wxppCacheGetAccessToken cache app_id)
-                        >>= maybe (throwError $ "no access token available") (return . fst)
-        outmsg_l <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
-        out_msg <- tryWxppWsResultE "fromWxppOutMsgL" $
-                        tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg_l
-        return $ map ((primary,) . Just) $ out_msgs_abort <> [ out_msg ]
+        liftM (fromMaybe []) $ forM m_out_msgs_abort $ \ out_msgs_abort -> do
+          let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
+                              wxppCacheGetAccessToken cache app_id)
+                          >>= maybe (throwError $ "no access token available") (return . fst)
+          outmsg_l <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
+          out_msg <- tryWxppWsResultE "fromWxppOutMsgL" $
+                          tryYamlExcE $ fromWxppOutMsgL msg_dirs cache get_atk outmsg_l
+          return $ map ((primary,) . Just) $ out_msgs_abort <> [ out_msg ]
       where
         primary = True
         app_id = procAppIdInfoReceiverId app_info
