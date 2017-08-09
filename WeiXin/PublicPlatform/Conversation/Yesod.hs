@@ -60,38 +60,49 @@ abortCurrentWxppTalkState common_env lookup_se initiator app_id open_id = do
                       ]
                       [ Desc WxppTalkStateId ]
 
-  forM m_rec $ \ e_rec@(Entity rec_id rec) -> do
-    let typ_str = wxppTalkStateTyp rec
-
-    out_msgs <-
-      case lookup_se typ_str of
-        Nothing -> do
-          $logWarn $ "could not find state entry for record #" <> toPathPiece rec_id
-                      <> ", type string was: " <> typ_str
-          return []
-
-        Just (WxppTalkerAbortStateEntry sp ext_env) -> do
-          err_or_st <- parseWxppTalkStateFromRecord sp e_rec
-          case err_or_st of
-            Left err -> do
-              $logError $ "parseWxppTalkStateFromRecord failed for record #" <> toPathPiece rec_id
-                            <> ": " <> fromString err
-              return []
-
-            Right Nothing -> return []
-
-            Right (Just st) -> do
-              err_or_outmsgs <- flip runWxTalkerMonad (common_env, ext_env) $ wxTalkAbort st initiator
-              case err_or_outmsgs of
-                Left err -> do
-                  $logError $ "wxTalkAbort failed for record #" <> toPathPiece rec_id
-                              <> ": " <> fromString err
-                  return []
-
-                Right x -> return x
-
+  forM m_rec $ \ e_rec@(Entity rec_id _rec) -> do
+    out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec
     update rec_id [ WxppTalkStateAborted =. True ]
     return out_msgs
+-- }}}1
+
+
+wxppExecTalkAbortForRecord :: (MonadLogger m, MonadIO m)
+                           => r
+                           -> (Text -> Maybe (WxppTalkerAbortStateEntry r m))
+                           -- ^ lookup WxppTalkerAbortStateEntry by state's type string
+                           -> WxTalkAbortInitiator
+                           -> Entity WxppTalkState
+                           -> SqlPersistT m [WxppOutMsg]
+wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec@(Entity rec_id rec) = do
+-- {{{1
+  case lookup_se typ_str of
+    Nothing -> do
+      $logWarn $ "could not find state entry for record #" <> toPathPiece rec_id
+                  <> ", type string was: " <> typ_str
+      return []
+
+    Just (WxppTalkerAbortStateEntry sp ext_env) -> do
+      err_or_st <- parseWxppTalkStateFromRecord sp e_rec
+      case err_or_st of
+        Left err -> do
+          $logError $ "parseWxppTalkStateFromRecord failed for record #" <> toPathPiece rec_id
+                        <> ": " <> fromString err
+          return []
+
+        Right Nothing -> return []
+
+        Right (Just st) -> do
+          err_or_outmsgs <- flip runWxTalkerMonad (common_env, ext_env) $ wxTalkAbort st initiator
+          case err_or_outmsgs of
+            Left err -> do
+              $logError $ "wxTalkAbort failed for record #" <> toPathPiece rec_id
+                          <> ": " <> fromString err
+              return []
+
+            Right x -> return x
+
+  where typ_str = wxppTalkStateTyp rec
 -- }}}1
 
 
@@ -188,11 +199,15 @@ loadWxppTalkStateCurrent open_id = do
 
 
 -- | used with loopRunBgJob
-cleanUpTimedOutWxTalk :: MonadResource m =>
-    (NominalDiffTime, NominalDiffTime)
-    -> (WxppAppID -> WxppOpenID -> ReaderT SqlBackend m ())
-    -> ReaderT SqlBackend m ()
-cleanUpTimedOutWxTalk ttls on_abort_talk = do
+cleanUpTimedOutWxTalk :: (MonadResource m, MonadLogger m)
+                      => r
+                      -> [WxppTalkerAbortStateEntry r m]
+                      -- ^ lookup WxppTalkerAbortStateEntry by state's type string
+                      -> (NominalDiffTime, NominalDiffTime)
+                      -> (WxppAppID -> WxppOpenID -> [WxppOutMsg] -> ReaderT SqlBackend m ())
+                      -> ReaderT SqlBackend m ()
+cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
+-- {{{1
     let timeout_ttl = uncurry min ttls
         chk_ttl     = uncurry max ttls
     now <- liftIO getCurrentTime
@@ -209,17 +224,17 @@ cleanUpTimedOutWxTalk ttls on_abort_talk = do
                 ]
                 []
                 $= ( CL.map $ \(Entity rec_id rec) ->
-                                    (rec_id, (wxppTalkStateAppId &&& wxppTalkStateOpenId) rec)
+                                  (Entity rec_id rec, (wxppTalkStateAppId &&& wxppTalkStateOpenId) rec)
                     )
                 $$ CL.consume
 
     -- 一次性用一个 SQL 更新
     updateWhere
-        [ WxppTalkStateId <-. map fst infos ]
+        [ WxppTalkStateId <-. map (entityKey . fst) infos ]
         [ WxppTalkStateAborted =. True ]
 
     -- 然后通告用户
-    forM_ infos $ \(rec_id, (app_id, open_id)) -> do
+    forM_ infos $ \(e_rec@(Entity rec_id _), (app_id, open_id)) -> do
         m_new <- selectFirst
                      [ WxppTalkStateAppId     ==. app_id
                      , WxppTalkStateOpenId    ==. open_id
@@ -229,7 +244,13 @@ cleanUpTimedOutWxTalk ttls on_abort_talk = do
 
         -- 仅当那个用户没有更新的会话已建立时才发通告給用户
         when (isNothing m_new) $ do
-            on_abort_talk app_id open_id
+          out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se WxTalkAbortBySys e_rec
+          on_abort_talk app_id open_id out_msgs
+
+    where
+        match_entry typ_str (WxppTalkerAbortStateEntry p _) = getStateType p == typ_str
+        lookup_se = \ x -> find (match_entry x) entries
+-- }}}1
 
 
 -- | 仅是为了减少代码重复而设
