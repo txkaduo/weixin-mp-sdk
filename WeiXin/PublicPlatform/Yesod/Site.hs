@@ -268,8 +268,9 @@ realHandlerMsg foundation app_info = do
           forM_ m_extra_data $ \other_out_msgs -> do
             when (not $ null other_out_msgs) $ do
                 void $ liftIO $ async $ do
-                    -- 延迟半秒只要为了让直接回复的回应能第一个到达用户
-                    threadDelay $ 1000 * 500
+                    -- 本来延迟半秒只要为了让直接回复的回应能第一个到达用户
+                    -- 但实践表明这是毫无必要
+                    -- threadDelay $ 1000 * 500
                     wxppSendOutMsgs processor to_app_id other_out_msgs
 
           return xmls
