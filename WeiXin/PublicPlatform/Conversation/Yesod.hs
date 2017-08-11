@@ -199,7 +199,7 @@ loadWxppTalkStateCurrent open_id = do
 
 
 -- | used with loopRunBgJob
-cleanUpTimedOutWxTalk :: (MonadResource m, MonadLogger m)
+cleanUpTimedOutWxTalk :: (MonadResource m, MonadLogger m, HasWxppAppID r)
                       => r
                       -> [WxppTalkerAbortStateEntry r m]
                       -- ^ lookup WxppTalkerAbortStateEntry by state's type string
@@ -219,13 +219,12 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
     infos <- selectSource
                 [ WxppTalkStateDone       ==. False
                 , WxppTalkStateAborted    ==. False
+                , WxppTalkStateAppId      ==. app_id
                 , WxppTalkStateUpdatedTime <. dt
                 , WxppTalkStateUpdatedTime >. too_old
                 ]
                 []
-                $= ( CL.map $ \(Entity rec_id rec) ->
-                                  (Entity rec_id rec, (wxppTalkStateAppId &&& wxppTalkStateOpenId) rec)
-                    )
+                $= CL.map (id &&& (wxppTalkStateOpenId . entityVal))
                 $$ CL.consume
 
     -- 一次性用一个 SQL 更新
@@ -234,7 +233,7 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
         [ WxppTalkStateAborted =. True ]
 
     -- 然后通告用户
-    forM_ infos $ \(e_rec@(Entity rec_id _), (app_id, open_id)) -> do
+    forM_ infos $ \(e_rec@(Entity rec_id _), open_id) -> do
         m_new <- selectFirst
                      [ WxppTalkStateAppId     ==. app_id
                      , WxppTalkStateOpenId    ==. open_id
@@ -248,6 +247,7 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
           on_abort_talk app_id open_id out_msgs
 
     where
+        app_id = getWxppAppID common_env
         match_entry typ_str (WxppTalkerAbortStateEntry p _) = getStateType p == typ_str
         lookup_se = \ x -> find (match_entry x) entries
 -- }}}1
