@@ -26,6 +26,7 @@ import Control.Monad.Catch                  (catch, catches, Handler(..))
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:), Value)
+import qualified Data.Aeson                 as A
 import Data.Aeson.Encode.Pretty             (encodePretty)
 import Network.HTTP                         (urlEncodeVars)
 import System.FilePath                      (takeFileName)
@@ -57,6 +58,15 @@ wxppDownloadMediaUrl url_conf if_ssl (AccessToken { accessTokenData = atk }) mid
 -- }}}1
 
 
+-- | 获取临时素材的接口有时候返回的是一个json，而不是原生的内容
+data DownloadMediaJsResult = DownloadMediaJsVideo Text
+  deriving (Show)
+
+instance FromJSON DownloadMediaJsResult where
+  parseJSON = withObject "DownloadMediaJsResult" $ \ o -> do
+    DownloadMediaJsVideo <$> o .: "video_url"
+
+
 -- | 下载一个多媒体文件
 wxppDownloadMedia :: ( WxppApiMonad env m, MonadCatch m )
                   => Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
@@ -79,13 +89,21 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
     -- rb ^. responseHeader "Content-Type"
     -- 这里使用的方法是先测试一下当作错误报告的 json 解释，不行就认为是正常返回
     let as_json = liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb
-        unexpected_json = \ (jv :: Value) -> do
-            -- 至此，说明报文真的是个json，而且不是错误报文
-            $logErrorS wxppLogSource $ "cannot parse download media respnose: "
-                                        <> toStrict (decodeUtf8 (encodePretty jv))
-            throwM $ userError "cannot parse download media respnose."
+        handle_json = \ (jv :: Value) -> do
+          -- 至此，说明报文真的是个json，而且不是错误报文
+          case A.fromJSON jv of
+            A.Error _ -> do
+              $logErrorS wxppLogSource $ "cannot parse download media respnose: "
+                                          <> toStrict (decodeUtf8 (encodePretty jv))
+              throwM $ userError "cannot parse download media respnose."
 
-    (as_json >>= either throwM unexpected_json . unWxppWsResp)
+            A.Success js_res -> do
+              case js_res of
+                DownloadMediaJsVideo down_url -> do
+                  $logDebug $ "Download video media from: " <> down_url
+                  liftIO $ WS.get sess (unpack url)
+
+    (as_json >>= either throwM handle_json . unWxppWsResp)
                 `catch`
                     (\(_ :: JSONError) -> return rb)
 -- }}}1
