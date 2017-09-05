@@ -5,6 +5,7 @@ module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Class
     ) where
 
+-- {{{1 imports
 #if MIN_VERSION_classy_prelude(1, 0, 0)
 import ClassyPrelude
 #else
@@ -24,7 +25,8 @@ import Control.Monad.Catch                  (catch, catches, Handler(..))
 #endif
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
-import Data.Aeson                           (FromJSON(..), withObject, (.:))
+import Data.Aeson                           (FromJSON(..), withObject, (.:), Value)
+import Data.Aeson.Encode.Pretty             (encodePretty)
 import Network.HTTP                         (urlEncodeVars)
 import System.FilePath                      (takeFileName)
 import Crypto.Hash.TX.Utils                 (sha256HashFile, sha256HashBS)
@@ -32,6 +34,7 @@ import Crypto.Hash.TX.Utils                 (sha256HashFile, sha256HashBS)
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
+-- }}}1
 
 
 -- | 生成直接下载临时素材的URL，可用于从第三方平台直接下载
@@ -41,6 +44,7 @@ wxppDownloadMediaUrl :: WxppUrlConfig
                      -> AccessToken
                      -> WxppBriefMediaID
                      -> UrlText
+-- {{{1
 wxppDownloadMediaUrl url_conf if_ssl (AccessToken { accessTokenData = atk }) mid =
     UrlText $ fromString $ url0 <> "?" <> qs
     where
@@ -50,6 +54,7 @@ wxppDownloadMediaUrl url_conf if_ssl (AccessToken { accessTokenData = atk }) mid
                 , ("media_id", T.unpack (unWxppBriefMediaID mid))
                 ]
         qs  = urlEncodeVars vars
+-- }}}1
 
 
 -- | 下载一个多媒体文件
@@ -58,6 +63,7 @@ wxppDownloadMedia :: ( WxppApiMonad env m, MonadCatch m )
                   -> AccessToken
                   -> WxppBriefMediaID
                   -> m (Response LB.ByteString)
+-- {{{1
 wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
     let url = (if if_ssl then wxppUrlConfSecureApiBase else wxppUrlConfNonSecureApiBase) url_conf
@@ -73,14 +79,16 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
     -- rb ^. responseHeader "Content-Type"
     -- 这里使用的方法是先测试一下当作错误报告的 json 解释，不行就认为是正常返回
     let as_json = liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb
-        unexpected_jsn = \(_ :: ()) -> do
+        unexpected_json = \ (jv :: Value) -> do
             -- 至此，说明报文真的是个json，而且不是错误报文
-            $logErrorS wxppLogSource $ "cannot parse download media respnose."
+            $logErrorS wxppLogSource $ "cannot parse download media respnose: "
+                                        <> toStrict (decodeUtf8 (encodePretty jv))
             throwM $ userError "cannot parse download media respnose."
 
-    (as_json >>= either throwM unexpected_jsn . unWxppWsResp)
+    (as_json >>= either throwM unexpected_json . unWxppWsResp)
                 `catch`
                     (\(_ :: JSONError) -> return rb)
+-- }}}1
 
 
 wxppUploadMediaInternal :: ( WxppApiMonad env m )
@@ -104,10 +112,13 @@ wxppUploadMedia :: ( WxppApiMonad env m )
                 -> WxppMediaType
                 -> FilePath
                 -> m UploadResult
+-- {{{1
 wxppUploadMedia atk mtype fp = do
     wxppUploadMediaInternal atk mtype $
         partFileSource "media" fp
             & partContentType .~ Just (defaultMimeLookup $ fromString $ takeFileName fp)
+-- }}}1
+
 
 -- | 上传已在内存中的 ByteString
 wxppUploadMediaBS :: ( WxppApiMonad env m )
@@ -117,10 +128,12 @@ wxppUploadMediaBS :: ( WxppApiMonad env m )
                   -> String
                   -> ByteString
                   -> m UploadResult
+-- {{{1
 wxppUploadMediaBS atk mtype mime filename bs = do
     wxppUploadMediaInternal atk mtype $
         partBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
+-- }}}1
 
 wxppUploadMediaLBS :: (WxppApiMonad env m)
                    => AccessToken
@@ -129,10 +142,13 @@ wxppUploadMediaLBS :: (WxppApiMonad env m)
                    -> String
                    -> LB.ByteString
                    -> m UploadResult
+-- {{{1
 wxppUploadMediaLBS atk mtype mime filename bs = do
     wxppUploadMediaInternal atk mtype $
         partLBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
+-- }}}1
+
 
 wxppUploadMediaCached :: ( WxppApiMonad env m, WxppCacheTemp c)
                       => c
@@ -140,6 +156,7 @@ wxppUploadMediaCached :: ( WxppApiMonad env m, WxppCacheTemp c)
                       -> WxppMediaType
                       -> FilePath
                       -> m UploadResult
+-- {{{1
 wxppUploadMediaCached cache atk mtype fp = do
     h <- liftIO $ sha256HashFile fp
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
@@ -159,6 +176,7 @@ wxppUploadMediaCached cache atk mtype fp = do
     where
         dt = fromIntegral (60 * 60 * 24 :: Int)
         app_id = accessTokenApp atk
+-- }}}1
 
 
 -- | 这里有个问题：如果之前上传过的文件的 mime 发生变化，可能会使用旧的文件 media id
@@ -170,6 +188,7 @@ wxppUploadMediaCachedBS :: ( WxppApiMonad env m, WxppCacheTemp c )
                         -> String
                         -> ByteString
                         -> m UploadResult
+-- {{{1
 wxppUploadMediaCachedBS cache atk mtype mime filename bs = do
     let h = sha256HashBS bs
     m_res <- liftIO $ wxppCacheLookupUploadedMediaIDByHash cache app_id h
@@ -185,6 +204,7 @@ wxppUploadMediaCachedBS cache atk mtype mime filename bs = do
     where
         dt = fromIntegral (60 * 60 * 24 :: Int)
         app_id = accessTokenApp atk
+-- }}}1
 
 
 newtype UploadImgResult = UploadImgResult UrlText
@@ -240,6 +260,7 @@ fromWxppOutMsgL :: (WxppApiMonad env m, WxppCacheTemp c)
                 -> m AccessToken
                 -> WxppOutMsgL
                 -> m WxppOutMsg
+-- {{{1
 fromWxppOutMsgL _       _   _   (WxppOutMsgTextL x)     = return (WxppOutMsgText x)
 
 fromWxppOutMsgL msg_dir _   _   (WxppOutMsgNewsL loaders)  =
@@ -293,6 +314,7 @@ fromWxppOutMsgL _ _cache    _get_atk (WxppOutMsgMusicL (Left media_id) x1 x2 x3 
 
 fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
                                                     return WxppOutMsgTransferToCustomerService
+-- }}}1
 
 
 fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTemp c)
@@ -301,8 +323,13 @@ fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTemp c)
                  -> m AccessToken
                  -> WxppOutMsgL
                  -> m (Either String WxppOutMsg)
+-- {{{1
 fromWxppOutMsgL' fp cache get_atk out_msg_l =
     (liftM Right $ fromWxppOutMsgL fp cache get_atk out_msg_l) `catches`
         (Handler h_yaml_exc : fmap unifyExcHandler wxppWsExcHandlers)
     where
         h_yaml_exc e = return $ Left $ show (e :: ParseException)
+-- }}}1
+
+
+-- vim: set foldmethod=marker:

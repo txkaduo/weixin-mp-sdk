@@ -111,6 +111,7 @@ library
                      , persistent-tx-utils >= 0.1
                      , text
                      , aeson
+                     , aeson-pretty
                      , bytestring
                      , cryptohash
                      , base64-bytestring
