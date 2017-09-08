@@ -181,12 +181,14 @@ parseWxppTalkStateFromRecord proxy (Entity rec_id rec) = runExceptT $ runMaybeT 
                 Right x -> return x
 
 
+{-
 saveSomeWxppTalkState :: forall m r.
     ( MonadIO m ) =>
     WxppTalkStateId
     -> SomeWxppTalkState r (ReaderT SqlBackend m)
     -> WxTalkerMonad r (ReaderT SqlBackend m) ()
 saveSomeWxppTalkState = saveWxppTalkState getStateTypeOfSomeWxppTalkState
+--}
 
 
 loadWxppTalkStateCurrent :: forall m.

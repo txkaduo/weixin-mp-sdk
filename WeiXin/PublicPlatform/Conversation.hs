@@ -18,7 +18,6 @@ import Text.Parsec.Error
 import Text.Parsec.Pos                      (initialPos)
 import Text.Parsec.Prim
 import Data.Aeson.TH                        (deriveJSON, defaultOptions)
-import Data.Aeson                           (ToJSON(..))
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
@@ -129,25 +128,28 @@ runWxTalkerMonad f env = runExceptT $ runReaderT f env
 runWxTalkerMonadE :: WxTalkerMonad r m a -> r -> ExceptT String m a
 runWxTalkerMonadE = runReaderT
 
+
 -- | 支持更多操作的接口: 例如可以使用 IO 之类
 -- 处理的用户输入也不仅仅是文字输入
 class WxTalkerState r m a where
     -- | 为用户下一个输入提供提示
     -- 注意：这个方法会在 wxTalkHandleInput 之后调用
-    wxTalkPromptToInput ::  a
-                            -> WxTalkerMonad r m ([WxppOutMsg], a)
-                            -- ^ 回应消息及新的状态
+    wxTalkPromptToInput :: (WxTalkerMonad r m (Maybe a), a -> WxTalkerMonad r m ())
+                        -> a
+                        -> WxTalkerMonad r m ([WxppOutMsg], a)
+                        -- ^ 回应消息及新的状态
 
     -- | 处理用户的输入，并产生结果
     -- 在会话过程中，消息可能会被无条件传入这个函数处理
     -- 要表达这个函数是否真正有处理用户输入，因此结果是个 Maybe
-    wxTalkHandleInput :: a
-                        -> WxppInMsgEntity
-                        -> WxTalkerMonad r m ([Maybe WxppOutMsg], a)
+    wxTalkHandleInput :: (WxTalkerMonad r m (Maybe a), a -> WxTalkerMonad r m ())
+                      -> a
+                      -> WxppInMsgEntity
+                      -> WxTalkerMonad r m ([Maybe WxppOutMsg], a)
 
     -- | 判断对话是否已结束
-    wxTalkIfDone :: a
-                    -> WxTalkerMonad r m Bool
+    wxTalkIfDone :: a -> WxTalkerMonad r m Bool
+
 
 
 -- | 代表一种可以从微信消息创建的会话
@@ -179,12 +181,12 @@ class WxTalkerAbortAction r m a where
   wxTalkAbort :: a -> WxTalkAbortInitiator -> WxTalkerMonad r m [WxppOutMsg]
 
 
-
-wxTalkerRun :: (Monad m, Eq a, WxTalkerState r m a) =>
-    Bool
-    -> (WxTalkerMonad r m (Maybe a))
-    -> (a -> WxTalkerMonad r m ())
-    -> Conduit WxppInMsgEntity (WxTalkerMonad r m) (Maybe WxppOutMsg)
+wxTalkerRun :: (Monad m, Eq a, WxTalkerState r m a)
+            => Bool
+            -> (WxTalkerMonad r m (Maybe a))
+            -> (a -> WxTalkerMonad r m ())
+            -> Conduit WxppInMsgEntity (WxTalkerMonad r m) (Maybe WxppOutMsg)
+-- {{{1
 wxTalkerRun skip_first_prompt get_state put_state =
     if skip_first_prompt
         then chk_wait_and_go
@@ -195,7 +197,7 @@ wxTalkerRun skip_first_prompt get_state put_state =
             case m_st of
                 Nothing -> return ()
                 Just st -> do
-                    (replies, new_st) <- lift $ wxTalkPromptToInput st
+                    (replies, new_st) <- lift $ wxTalkPromptToInput (get_state, put_state) st
                     mapM_ yield $ map Just replies
                     unless (st == new_st) $ do
                         lift $ put_state new_st
@@ -217,7 +219,7 @@ wxTalkerRun skip_first_prompt get_state put_state =
                     case m_st of
                         Nothing -> return ()
                         Just st -> do
-                            (replies, new_st) <- lift $ wxTalkHandleInput st t
+                            (replies, new_st) <- lift $ wxTalkHandleInput (get_state, put_state) st t
                             if null replies
                                 then do
                                     -- 约定：如果 wxTalkHandleInput 返回空的消息列表，代表它拒绝处理这个输入消息
@@ -227,6 +229,7 @@ wxTalkerRun skip_first_prompt get_state put_state =
                                     unless (st == new_st) $ do
                                         lift $ put_state new_st
                                     go
+-- }}}1
 
 
 wxTalkerInputOneStep :: (Monad m, WxTalkerState r m s, Eq s) =>
@@ -238,6 +241,7 @@ wxTalkerInputOneStep :: (Monad m, WxTalkerState r m s, Eq s) =>
         -- 之后的调用都应该是 Just
     -> m (Either String [Maybe WxppOutMsg])
         -- ^ 状态机的输出文字
+-- {{{1
 wxTalkerInputOneStep get_st set_st env m_input = flip runWxTalkerMonad env $ do
     send_intput =$= cond $$ CL.consume
     where
@@ -245,6 +249,7 @@ wxTalkerInputOneStep get_st set_st env m_input = flip runWxTalkerMonad env $ do
                         Nothing -> return ()
                         Just x -> yield x
         cond = wxTalkerRun (isJust m_input) get_st set_st
+-- }}}1
 
 
 -- | used to implement processInMsg of class IsWxppInMsgProcessor
@@ -260,6 +265,7 @@ wxTalkerInputProcessInMsg :: forall m r s .
     -> Maybe WxppInMsgEntity
         -- ^ this is nothing only if caller cannot parse the message
     -> m (Either String WxppInMsgHandlerResult)
+-- {{{1
 wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
     liftM (fromMaybe []) $ runMaybeT $ do
         ime <- MaybeT $ return m_ime
@@ -288,6 +294,7 @@ wxTalkerInputProcessInMsg get_st set_st env m_ime = runExceptT $ do
     where
         run_wx_monad :: forall a. WxTalkerMonad r m a -> ExceptT String m a
         run_wx_monad = flip runWxTalkerMonadE env
+-- }}}1
 
 
 -- 用于处理会话刚刚建立，产生一些输出消息
@@ -354,11 +361,11 @@ newtype WrapTalkerState a = WrapTalkerState a
                             deriving (Eq)
 
 instance (TalkerState a, Monad m) => WxTalkerState r m (WrapTalkerState a) where
-    wxTalkPromptToInput (WrapTalkerState s) = mkWxTalkerMonad $ \_ -> runExceptT $ do
+    wxTalkPromptToInput _ (WrapTalkerState s) = mkWxTalkerMonad $ \_ -> runExceptT $ do
         let (m_reply, new_s) = talkPromptNext s
         return $ (maybe [] (return . WxppOutMsgText) m_reply, WrapTalkerState new_s)
 
-    wxTalkHandleInput old_st@(WrapTalkerState s) ime = mkWxTalkerMonad $ \_ -> runExceptT $ do
+    wxTalkHandleInput _ old_st@(WrapTalkerState s) ime = mkWxTalkerMonad $ \_ -> runExceptT $ do
         case wxppInMessage ime of
             WxppInMsgText t -> handle_txt t
 
@@ -384,6 +391,7 @@ instance (TalkerState a, Monad m) => WxTalkerState r m (WrapTalkerState a) where
                         Right (m_t, new_s) -> do
                             return $ (maybe [] (return . Just . WxppOutMsgText) m_t, WrapTalkerState new_s)
 
+
     wxTalkIfDone (WrapTalkerState s) = mkWxTalkerMonad $ const $ return $ Right $ talkDone s
 
 
@@ -394,8 +402,8 @@ data NullTalkerState = NullTalkerState
 $(deriveJSON defaultOptions ''NullTalkerState)
 
 instance Monad m => WxTalkerState r m NullTalkerState where
-    wxTalkPromptToInput x   = mkWxTalkerMonad $ \_ -> runExceptT $ return $ ([], x)
-    wxTalkHandleInput   x _ = mkWxTalkerMonad $ \_ -> runExceptT $ return $ ([], x)
+    wxTalkPromptToInput _ x   = mkWxTalkerMonad $ \_ -> runExceptT $ return $ ([], x)
+    wxTalkHandleInput   _ x _ = mkWxTalkerMonad $ \_ -> runExceptT $ return $ ([], x)
     wxTalkIfDone        _   = mkWxTalkerMonad $ \_ -> runExceptT $ return $ True
 
 instance Monad m => WxTalkerFreshState r m NullTalkerState where
@@ -421,39 +429,6 @@ instance HasStateType NullTalkerState where
 -- | 用于个别有对环境有更多要求的会话
 type family WxppTalkStateExtraEnv s :: *
 
-data SomeWxppTalkState r m = forall a.
-                            ( HasStateType a
-                            , ToJSON a
-                            , WxTalkerState r m a
-                            , WxTalkerDoneAction r m a
-                            , Eq a
-                            ) =>
-                            SomeWxppTalkState a
-
-getStateTypeOfSomeWxppTalkState :: SomeWxppTalkState r m -> Text
-getStateTypeOfSomeWxppTalkState (SomeWxppTalkState x) = getStateType' x
-
-
-instance Monad m => WxTalkerState r m (SomeWxppTalkState r m) where
-    wxTalkPromptToInput (SomeWxppTalkState x)    = liftM (second SomeWxppTalkState) $
-                                                        wxTalkPromptToInput x
-
-    wxTalkHandleInput (SomeWxppTalkState x)   = liftM (second SomeWxppTalkState) .
-                                                    wxTalkHandleInput x
-
-    wxTalkIfDone (SomeWxppTalkState x)      = wxTalkIfDone x
-
-
-instance WxTalkerDoneAction r m (SomeWxppTalkState r m) where
-    wxTalkDone (SomeWxppTalkState x) = wxTalkDone x
-
-instance Eq (SomeWxppTalkState r m) where
-    (==) (SomeWxppTalkState x) (SomeWxppTalkState y) =
-        getStateType' x == getStateType' y && toJSON x == toJSON y
-
-instance ToJSON (SomeWxppTalkState r m) where
-    toJSON (SomeWxppTalkState x) = toJSON x
-
 
 wxTalkGetAccessToken :: (MonadIO m, HasAccessTokenIO r, HasWxppAppID r)
                      => r
@@ -465,25 +440,6 @@ wxTalkGetAccessToken env = runExceptT $ do
                 (return . fst)
     where
         app_id = getWxppAppID env
-
-{-
-data SomeWxTalkerState m = forall a. (WxTalkerState m a, WxTalkerDoneAction m a) =>
-                                SomeWxTalkerState a
-
-instance Monad m => WxTalkerState m (SomeWxTalkerState m) where
-    wxTalkPromptToInput cache (SomeWxTalkerState x) = liftM (fmap $ second SomeWxTalkerState) $
-                                                            wxTalkPromptToInput cache x
-
-    wxTalkHandleInput cache (SomeWxTalkerState x)   = liftM (fmap $ second SomeWxTalkerState) .
-                                                        wxTalkHandleInput cache x
-
-    wxTalkIfDone cache (SomeWxTalkerState x)        = wxTalkIfDone cache x
-
-
-instance WxTalkerDoneAction m (SomeWxTalkerState m) where
-    wxTalkDone cache (SomeWxTalkerState x) = wxTalkDone cache x
---}
-
 
 
 -- vim: set foldmethod=marker:

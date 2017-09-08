@@ -93,6 +93,7 @@ instance (LoadMsgMonad m, LoadMsgEnv r) =>
 instance HasStateType a => HasStateType (ConfirmState a) where
     getStateType _ = "ConfirmState" <> ":" <> getStateType (Proxy :: Proxy a)
 
+
 instance
     ( LoadMsgMonad m, LoadMsgEnv r
     , HasConfirmContent r m a
@@ -100,7 +101,7 @@ instance
     ) =>
     WxTalkerState r m (ConfirmState a)
     where
-    wxTalkPromptToInput old_st@(ConfirmState rd_st m_confirmed) = do
+    wxTalkPromptToInput _ old_st@(ConfirmState rd_st m_confirmed) = do
         case m_confirmed of
             Nothing    -> liftM (, old_st) $ getConfirmContent rd_st
 
@@ -108,11 +109,9 @@ instance
 
             Just True  -> return ([], old_st)
 
-
     wxTalkIfDone (ConfirmState _ m_confirmed) = return $ isJust m_confirmed
 
-
-    wxTalkHandleInput old_st@(ConfirmState rd_st _m_confirmed) ime =
+    wxTalkHandleInput _ old_st@(ConfirmState rd_st _m_confirmed) ime =
         mkWxTalkerMonad $ \env -> runExceptT $ do
             let handle_txt t = do
                     case parse generalParseConfirm "" t of
