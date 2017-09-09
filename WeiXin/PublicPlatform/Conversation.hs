@@ -340,7 +340,9 @@ wxTalkerInputProcessJustInited get_st set_st env =
 
 
 -- | 这个小工具用于减少 getter, setter 访问数据库
--- 前提：状态的读写是单线程的
+-- 前提：状态的读写全部经过同一对包装过的值，是否在同一个线程不重要
+--       例如若有完全另一个进程也作读写修改就有问题了
+-- 使用这个函数是一种hack, 只是目前使用上看并未发发现问题
 ioCachedGetSet :: (MonadIO m, MonadIO n) =>
     m (Maybe s)
     -> (s -> m ())
