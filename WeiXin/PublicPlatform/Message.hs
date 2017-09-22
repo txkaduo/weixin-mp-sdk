@@ -310,6 +310,21 @@ wxppEventFromDocument doc = do
                     return $ WxppEvtGroupSendReport
                                 status total f_cnt sent_cnt err_cnt
 
+        "TEMPLATESENDJOBFINISH" -> do
+                    msg_id <- get_ele_s "MsgID"
+                                >>= maybe (Left $ "failed to parse MsgID") Right
+                                        . simpleParseDecT
+
+                    status <- get_ele_s "Status"
+                    m_err_msg <- if status == "success"
+                                    then pure Nothing
+                                    else case T.stripPrefix "failed:" status of
+                                           Nothing -> Left $ "failed to parse Status: " <> unpack status
+                                           Just msg -> pure $ Just msg
+
+                    return $ WxppEvtTemplateSendJobFinish (WxppTemplSendMsgID msg_id) m_err_msg
+
+
         _       -> Left $ T.unpack $
                     "unknown/unsupported Event type: " <> evt_type
 

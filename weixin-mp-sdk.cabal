@@ -47,6 +47,7 @@ library
                        WeiXin.PublicPlatform.Material
                        WeiXin.PublicPlatform.AutoReplyRules
                        WeiXin.PublicPlatform.Message
+                       WeiXin.PublicPlatform.Message.Template
                        WeiXin.PublicPlatform.InMsgHandler
                        WeiXin.PublicPlatform.Menu
                        WeiXin.PublicPlatform.CS
@@ -111,6 +112,7 @@ library
                      , persistent-tx-utils >= 0.1
                      , text
                      , aeson
+                     , aeson-extra
                      , aeson-pretty
                      , bytestring
                      , cryptohash

@@ -10,6 +10,7 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Material
     , module WeiXin.PublicPlatform.AutoReplyRules
     , module WeiXin.PublicPlatform.Message
+    , module WeiXin.PublicPlatform.Message.Template
     , module WeiXin.PublicPlatform.InMsgHandler
     , module WeiXin.PublicPlatform.Menu
     , module WeiXin.PublicPlatform.CS
@@ -49,6 +50,7 @@ import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.Material
 import WeiXin.PublicPlatform.AutoReplyRules
 import WeiXin.PublicPlatform.Message
+import WeiXin.PublicPlatform.Message.Template
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Menu
 import WeiXin.PublicPlatform.CS

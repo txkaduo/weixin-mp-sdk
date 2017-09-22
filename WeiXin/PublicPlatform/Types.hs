@@ -264,6 +264,13 @@ newtype WxppInMsgID = WxppInMsgID { unWxppInMsgID :: Word64 }
                              , ToJSON, FromJSON
                              , ToMarkup)
 
+newtype WxppTemplSendMsgID = WxppTemplSendMsgID { unWxppTemplSendMsgID :: Word64 }
+                    deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                             , NFData
+                             , PersistField, PersistFieldSql
+                             , ToJSON, FromJSON
+                             , ToMarkup)
+
 
 -- | 二维码场景ID
 -- 从文档“生成带参数的二维码”一文中看
@@ -626,6 +633,7 @@ instance SimpleStringRep GroupSendStatus where
 
 
 -- | 事件推送的各种值
+-- XXX: 事件的具体类型说明分散在文档的各处，无法保证有没有遗漏
 data WxppEvent = WxppEvtSubscribe
                 | WxppEvtUnsubscribe
                 | WxppEvtSubscribeAtScene WxppScene (Maybe QRTicket)
@@ -642,6 +650,7 @@ data WxppEvent = WxppEvtSubscribe
                 | WxppEvtFollowUrl UrlText
                 | WxppEvtGroupSendReport GroupSendStatus Int Int Int Int
                     -- ^ status, total, filter count, sent count, error count
+                | WxppEvtTemplateSendJobFinish WxppTemplSendMsgID (Maybe Text)
                 deriving (Show, Eq, Typeable, Generic)
 
 -- {{{1 instances
@@ -655,6 +664,7 @@ wxppEventIsSubscribe _                            = False
 
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
+-- {{{1
 wxppEventTypeString WxppEvtSubscribe              = "subscribe"
 wxppEventTypeString WxppEvtUnsubscribe            = "unsubscribe"
 wxppEventTypeString (WxppEvtSubscribeAtScene {})  = "subscribe_at_scene"
@@ -665,6 +675,9 @@ wxppEventTypeString (WxppEvtFollowUrl {})         = "follow_url"
 wxppEventTypeString (WxppEvtScanCodePush {})      = "scancode_push"
 wxppEventTypeString (WxppEvtScanCodeWaitMsg {})   = "scancode_waitmsg"
 wxppEventTypeString (WxppEvtGroupSendReport {})   = "MASSSENDJOBFINISH"
+wxppEventTypeString (WxppEvtTemplateSendJobFinish {}) = "TEMPLATESENDJOBFINISH"
+-- }}}1
+
 
 wxppEventTypeStringOfSubs :: IsString a => [a]
 wxppEventTypeStringOfSubs = [ "subscribe"
@@ -678,6 +691,7 @@ wxppEventTypeStringOfUnsubs = [ "unsubscribe"
 
 instance ToJSON WxppEvent where
     toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
+-- {{{1
       where
         get_others WxppEvtSubscribe     = []
         get_others WxppEvtUnsubscribe   = []
@@ -722,6 +736,12 @@ instance ToJSON WxppEvent where
                                           , "error_count"   .= err_cnt
                                           ]
 
+        get_others (WxppEvtTemplateSendJobFinish msg_id m_err_msg) =
+                                          [ "msg_id" .= msg_id
+                                          , "error" .= m_err_msg
+                                          ]
+-- }}}1
+
 
 instance FromJSON WxppEvent where
     parseJSON = withObject "WxppEvent" $ \obj -> do
@@ -761,6 +781,9 @@ instance FromJSON WxppEvent where
                                     <*> obj .: "sent_count"
                                     <*> obj .: "error_count"
 
+          "TEMPLATESENDJOBFINISH" -> WxppEvtTemplateSendJobFinish
+                                        <$> obj .: "msg_id"
+                                        <*> obj .:? "error"
 
           _ -> fail $ "unknown type: " ++ typ
 -- }}}1
@@ -1207,6 +1230,68 @@ instance NFData WxppOutMsgEntity
 
 wxppMediaTypeString :: IsString a => WxppMediaType -> a
 wxppMediaTypeString mtype = fromString $ simpleEncode mtype
+
+
+-- | 模板消息编号
+newtype WxppMsgTemplateShortID = WxppMsgTemplateShortID { unWxppMsgTemplateShortID :: Text }
+                        deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                                 , NFData
+                                 , PersistField, PersistFieldSql
+                                 , ToJSON
+                                 , ToMessage, ToMarkup)
+
+-- {{{1 instance
+instance SafeCopy WxppMsgTemplateShortID where
+    getCopy                            = contain $ WxppMsgTemplateShortID <$> safeGet
+    putCopy (WxppMsgTemplateShortID x) = contain $ safePut x
+    errorTypeName _                    = "WxppMsgTemplateShortID"
+
+instance FromJSON WxppMsgTemplateShortID where
+  parseJSON = fmap WxppMsgTemplateShortID
+                . (parseJSON >=> nonEmptyJsonText "Weixin message template short id cannot be empty text")
+-- }}}1
+
+
+-- | 模板消息id
+newtype WxppMsgTemplateID = WxppMsgTemplateID { unWxppMsgTemplateID :: Text }
+                        deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                                 , NFData
+                                 , PersistField, PersistFieldSql
+                                 , ToJSON
+                                 , ToMessage, ToMarkup)
+
+-- {{{1 instance
+instance SafeCopy WxppMsgTemplateID where
+    getCopy                         = contain $ WxppMsgTemplateID <$> safeGet
+    putCopy (WxppMsgTemplateID x)   = contain $ safePut x
+    errorTypeName _                 = "WxppMsgTemplateID"
+
+instance FromJSON WxppMsgTemplateID where
+  parseJSON = fmap WxppMsgTemplateID
+                . (parseJSON >=> nonEmptyJsonText "Weixin message template id cannot be empty text")
+-- }}}1
+
+
+
+-- | 小程序appid
+newtype WxppMiniProgID = WxppMiniProgID { unWxppMiniProgID :: Text }
+                        deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                                 , NFData
+                                 , PersistField, PersistFieldSql
+                                 , ToJSON
+                                 , ToMessage, ToMarkup)
+
+-- {{{1 instance
+instance SafeCopy WxppMiniProgID where
+    getCopy                         = contain $ WxppMiniProgID <$> safeGet
+    putCopy (WxppMiniProgID x)    = contain $ safePut x
+    errorTypeName _                 = "WxppMiniProgID"
+
+instance FromJSON WxppMiniProgID where
+  parseJSON = fmap WxppMiniProgID
+                . (parseJSON >=> nonEmptyJsonText "Weixin mini program id cannot be empty text")
+-- }}}1
+
 
 
 -- | 可以点击的菜单所携带的数据及菜单的类型
