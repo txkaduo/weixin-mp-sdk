@@ -13,7 +13,7 @@ import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.WS
-import Data.List.NonEmpty                   as LNE hiding (map)
+import Data.List.NonEmpty                   as LNE hiding (map, filter)
 
 
 -- | 微信要求一些类似电子令牌、票据的数据尽量全局统一更新使用
@@ -126,6 +126,16 @@ class WxppCacheTemp a where
         -> WxppAppID
         -> SHA256Hash
         -> IO (Maybe UploadResult)
+
+
+wxppCacheLookupOpenIdByUid :: MonadIO m
+                           => WxppCacheTemp a
+                           => a
+                           -> WxppUnionID
+                           -> WxppAppID
+                           -> m (Maybe WxppOpenID)
+wxppCacheLookupOpenIdByUid cache uid app_id = liftIO $ do
+  fmap (fmap getWxppOpenID . listToMaybe . filter ((== app_id) . getWxppAppID)) $ wxppCacheLookupAllOpenIdByUid cache uid
 
 
 -- | 用于实现中心缓存服务器
