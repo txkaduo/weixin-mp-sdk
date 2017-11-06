@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.WS where
 
+-- {{{1 imports
 import ClassyPrelude hiding (catch, onException)
 import Network.Wreq
 import Control.Monad.Except
@@ -28,6 +29,7 @@ import Data.Aeson                           ( withObject, (.:)
 
 import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Types
+-- }}}1
 
 
 class HasWreqSession a where
@@ -102,17 +104,25 @@ instance ToJSON WxppAppError where
 --       这个假定绝大多数时候都成立，但有个别例外。
 --       例外的例子就是：群发接口中上传图文消息素材等多个接口返回报文格式与错误报文区别太小。
 --       对于这种例子，应使用 WxppWsResp2
+--       UPDATE: 现在会解释成错误报文时会先检查错误代码是不是零，若是，则继续放弃作为错误报文解释，
+--               改作正常报文解释
 newtype WxppWsResp a = WxppWsResp {
                             unWxppWsResp :: Either WxppAppError a
                             }
 
+-- {{{1 instances
 instance FromJSON a => FromJSON (WxppWsResp a) where
-    parseJSON v = fmap WxppWsResp $
-                    fmap Left (parseJSON v) <|> fmap Right (parseJSON v)
+    parseJSON v = fmap WxppWsResp $ fmap Left try_ex_no_err <|> fmap Right (parseJSON v)
+      where
+        try_ex_no_err = do
+          ex@(WxppAppError e _) <- parseJSON v
+          guard $ e /= WxppErrorX (Right WxppNoError)
+          return ex
 
 instance ToJSON a => ToJSON (WxppWsResp a) where
     toJSON (WxppWsResp (Left x))    = toJSON x
     toJSON (WxppWsResp (Right x))   = toJSON x
+-- }}}1
 
 
 newtype WxppWsResp2 a = WxppWsResp2 {
@@ -222,3 +232,6 @@ asWxppWsResponseNormal2' :: (MonadThrow m, FromJSON a) =>
 asWxppWsResponseNormal2' =
     asWxppWsResponseNormal2
         >=> either throwM return . unWxppWsResp2
+
+
+-- vim: set foldmethod=marker:
