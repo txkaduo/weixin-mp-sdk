@@ -6,7 +6,7 @@ import ClassyPrelude
 #endif
 import Control.Monad.Logger
 import Options.Applicative
-import Data.Aeson
+import Data.Aeson                           hiding (Options)
 import Data.Default                         (def)
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB

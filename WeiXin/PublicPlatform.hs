@@ -4,7 +4,9 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.Types
     , module WeiXin.PublicPlatform.Class
     , module WeiXin.PublicPlatform.WS
+#if defined(VERSION_acid_state)
     , module WeiXin.PublicPlatform.Acid
+#endif
     , module WeiXin.PublicPlatform.Security
     , module WeiXin.PublicPlatform.Media
     , module WeiXin.PublicPlatform.Material
@@ -44,7 +46,9 @@ import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
+#if defined(VERSION_acid_state)
 import WeiXin.PublicPlatform.Acid
+#endif
 import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.Material

@@ -36,12 +36,15 @@ Flag cloud
     Description:   Support For Cloud Haskell
     Default:       True
 
+Flag acid-state
+    Description:   Build with acid-state
+    Default: True
+
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
                        WeiXin.PublicPlatform.Types
                        WeiXin.PublicPlatform.Class
                        WeiXin.PublicPlatform.WS
-                       WeiXin.PublicPlatform.Acid
                        WeiXin.PublicPlatform.Security
                        WeiXin.PublicPlatform.Media
                        WeiXin.PublicPlatform.Material
@@ -104,7 +107,7 @@ library
                      , classy-prelude >= 0.12.7
                      , classy-prelude-yesod
                      , yesod
-                     , persistent >= 2.0 && < 2.7
+                     , persistent >= 2.0 && < 2.8
                      , yesod-core
                      , yesod-form
                      , shakespeare
@@ -125,7 +128,6 @@ library
                      , http-client
                      , monad-logger
                      , safecopy
-                     , acid-state
                      , data-default
                      , mtl
                      , async
@@ -192,6 +194,10 @@ library
      build-depends:     distributed-process
                       , distributed-process-monad-control
                       , distributed-process-async
+
+  if flag(acid-state)
+      build-depends:   acid-state
+      exposed-modules: WeiXin.PublicPlatform.Acid
 
   -- hs-source-dirs:      
   default-language:    Haskell2010
