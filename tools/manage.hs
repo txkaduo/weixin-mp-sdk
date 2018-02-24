@@ -438,7 +438,12 @@ extByMime mime =
     listToMaybe $ LM.keys $ LM.filter (== mime) defaultMimeMap
 
 start' :: Options -> IO ()
-start' opts = WS.withSession $ \sess -> do
+start' opts = do
+#if MIN_VERSION_wreq(0, 5, 2)
+    sess <- WS.newAPISession
+#else
+  WS.withAPISession $ \sess -> do
+#endif
     logger_set <- newStderrLoggerSet 0
     let api_env = WxppApiEnv sess def
     runLoggingT
