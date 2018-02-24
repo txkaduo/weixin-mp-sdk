@@ -112,7 +112,7 @@ wxppOAuthRequestAuthInsideWx =
       "https://open.weixin.qq.com/connect/oauth2/authorize"
 
 
--- | 获取用户授权: 用于微信外游览器
+-- | 获取用户授权: 用于微信外浏览器
 wxppOAuthRequestAuthOutsideWx :: WxppAppID
                               -> UrlText      -- ^ return to this url
                               -> Text -- ^ state to return
