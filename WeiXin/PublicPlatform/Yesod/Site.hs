@@ -946,7 +946,56 @@ yesodComeBackWithWxLogin :: ( MonadHandler m, Yesod (HandlerSite m)
                          -- openid/unionid 会尽量尝试从session里取得
                          -> m a
 -- {{{1
-yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id h_no_id h = do
+yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id0 h_no_id h = do
+  yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope app_id0 h_no_id h
+  where
+    get_oauth_atk app_id code = runExceptT $ do
+      m_secret <- lift $ get_secret app_id
+      secret <- case m_secret of
+                  Nothing -> do
+                    $logError $ "cannot get app secret from cache server"
+                    throwError $ asString "no secret"
+                  Just x -> return x
+
+      err_or_atk_info <- tryWxppWsResult $ flip runReaderT wx_api_env $
+                          wxppOAuthGetAccessToken app_id secret code
+      case err_or_atk_info of
+        Left err -> do
+            $logError $
+                "wxppOAuthGetAccessToken failed: " <> tshow err
+            throwError "wxppOAuthGetAccessToken failed"
+
+        Right x -> return x
+-- }}}1
+
+
+
+-- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
+-- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
+--       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
+yesodComeBackWithWxLogin' :: ( MonadHandler m, Yesod (HandlerSite m)
+                            , RenderMessage (HandlerSite m) FormMessage
+                            , MonadLogger m, MonadCatch m
+                            , HasWxppUrlConfig e, HasWreqSession e
+                            , WxppCacheTemp c
+                            )
+                          => e
+                          -> c
+                          -> (WxppAppID -> OAuthCode -> m (Either String OAuthAccessTokenResult))
+                          -> (UrlText -> m UrlText)
+                          -- ^ 修改微信返回地址
+                          -> OAuthScope
+                          -> WxppAppID
+                          -> m a
+                          -- ^ 确实不能取得 open id　时调用
+                          -> (WxppOpenID -> Maybe WxppUnionID -> Maybe OAuthGetUserInfoResult-> m a)
+                          -- ^ 取得 open_id 之后调用这个函数
+                          -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
+                          -- OAuthGetUserInfoResult 是副产品，不一定有
+                          -- openid/unionid 会尽量尝试从session里取得
+                          -> m a
+-- {{{1
+yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope app_id h_no_id h = do
   is_client_wx <- isJust <$> handlerGetWeixinClientVersion
   m_code <- fmap (fmap OAuthCode) $ runInputGet $ iopt hiddenField "code"
 
@@ -960,22 +1009,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
                         <> ", expect: " <> tshow m_expected_state
           throwError $ "unexpected state"
 
-        m_secret <- lift $ get_secret app_id
-        secret <- case m_secret of
-                    Nothing -> do
-                      $logError $ "cannot get app secret from cache server"
-                      throwError $ asString "no secret"
-                    Just x -> return x
-
-        err_or_atk_info <- tryWxppWsResult $ flip runReaderT wx_api_env $
-                            wxppOAuthGetAccessToken app_id secret code
-        oauth_atk_info <- case err_or_atk_info of
-                        Left err -> do
-                            $logError $
-                                "wxppOAuthGetAccessToken failed: " <> tshow err
-                            throwError "wxppOAuthGetAccessToken failed"
-
-                        Right x -> return x
+        oauth_atk_info <- ExceptT $ get_oauth_atk app_id code
 
         let open_id = oauthAtkOpenID oauth_atk_info
             scopes = oauthAtkScopes oauth_atk_info
