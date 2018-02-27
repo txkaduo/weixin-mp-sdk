@@ -6,6 +6,8 @@ import Data.Char
 import Text.Read                            (reads)
 
 import Text.Parsec
+import Text.Parsec.Error
+import Text.Parsec.Pos
 
 import Yesod.Helpers.Parsec
 import Yesod.Helpers.Utils                  (toHalfWidthDigit)
@@ -20,7 +22,10 @@ parseTextWholeLineStripped = liftM T.strip parseTextWholeLine
 parseTextWholeLineStrippedNonempty :: Stream s m Char => ParsecT s u m Text
 parseTextWholeLineStrippedNonempty = do
     s <- parseTextWholeLineStripped
-    guard $ not $ T.null s
+
+    when ( not $ T.null s ) $ do
+      unexpected "没有输入"
+
     return s
 
 parseTextBool :: Stream s m Char => ParsecT s u m Bool
@@ -73,3 +78,15 @@ runTextParser :: forall s a. IsString s
                 -> Either s a
 runTextParser p t = either (Left . fromString . show) Right $ parse p "" (T.unpack $ T.strip t)
 
+showParseErrorZh :: IsString a => ParseError -> a
+showParseErrorZh = fromString . showErrorMessages "或" "未知解释错误" "可接受" "非法输入" "结束输入" . errorMessages
+
+keyword :: Stream s m Char => String -> ParsecT s u m String
+keyword s = do
+  when (not $ null $ filter (not . isPrint) s ) $ do
+    error $ "关键字包含不可见字符: " <> show s
+
+  tokens showKeyword updatePosString s
+
+  where
+    showKeyword k = "【" <> k <> "】"
