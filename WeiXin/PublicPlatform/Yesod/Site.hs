@@ -11,7 +11,6 @@ module WeiXin.PublicPlatform.Yesod.Site
 -- {{{1
 import ClassyPrelude
 import Yesod
-import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.ByteString.Base64     as B64
@@ -29,15 +28,13 @@ import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
 import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
-import System.Random                        (randomIO)
 
 import Yesod.Helpers.Handler                ( httpErrorRetryWithValidParams
                                             , reqPathPieceParamPostGet
                                             , getCurrentUrl
                                             )
-import Yesod.Helpers.Types                  (B64UByteStringPathPiece(..))
 import Yesod.Helpers.Logger
-import Yesod.Helpers.Utils                  (urlUpdateQueryText)
+import Yesod.Helpers.Utils                  (urlUpdateQueryText, randomString)
 import Control.Monad.Logger
 
 import Network.Wai                          (lazyRequestBody)
@@ -297,8 +294,7 @@ wxppOAuthMakeRandomState app_id = do
         Just x | not (null x) -> do
             return x
         _   -> do
-            random_state <- liftIO $ fmap (toPathPiece . B64UByteStringPathPiece) $
-                                fmap B.pack $ replicateM 8 randomIO
+            random_state <- fmap pack $ randomString 32 (['0'..'9'] <> ['a'..'z'] <> ['A'..'Z'])
             setSession (sessionKeyWxppOAuthState app_id) random_state
             return random_state
 -- }}}1
