@@ -152,6 +152,10 @@ data WxppWsCallError =  WxppWsErrorHttp HttpException
 
 instance Exception WxppWsCallError
 
+wxppCallWxError :: WxppWsCallError -> Maybe WxppErrorX
+wxppCallWxError (WxppWsErrorApp (WxppAppError err _msg)) = Just err
+wxppCallWxError _ = Nothing
+
 
 wxppWsExcHandlers :: Monad m => [Handler m (Either WxppWsCallError a)]
 wxppWsExcHandlers = [ Handler h1, Handler h2, Handler h3 ]

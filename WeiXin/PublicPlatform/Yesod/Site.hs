@@ -935,7 +935,7 @@ yesodComeBackWithWxLogin :: ( MonadHandler m, Yesod (HandlerSite m)
                          -> WxppAppID
                          -> m a
                          -- ^ 确实不能取得 open id　时调用
-                         -> (WxppOpenID -> Maybe WxppUnionID -> Maybe OAuthGetUserInfoResult-> m a)
+                         -> (WxppOpenID -> Maybe WxppUnionID -> Maybe OAuthGetUserInfoResult -> m a)
                          -- ^ 取得 open_id 之后调用这个函数
                          -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
                          -- OAuthGetUserInfoResult 是副产品，不一定有
@@ -957,11 +957,16 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
                           wxppOAuthGetAccessToken app_id secret code
       case err_or_atk_info of
         Left err -> do
-            $logErrorS wxppLogSource $
-                "wxppOAuthGetAccessToken failed: " <> tshow err
-            throwError "wxppOAuthGetAccessToken failed"
+          if fmap wxppToErrorCodeX (wxppCallWxError err) == Just (wxppToErrorCode WxppOAuthCodeHasBeenUsed)
+             then do
+                  $logDebugS wxppLogSource $ "OAuth Code has been used, retry"
+                  return Nothing
+             else do
+                  $logErrorS wxppLogSource $
+                      "wxppOAuthGetAccessToken failed: " <> tshow err
+                  throwError "wxppOAuthGetAccessToken failed"
 
-        Right x -> return x
+        Right x -> return $ Just x
 -- }}}1
 
 
@@ -977,14 +982,16 @@ yesodComeBackWithWxLogin' :: ( MonadHandler m, Yesod (HandlerSite m)
                             )
                           => e
                           -> c
-                          -> (WxppAppID -> OAuthCode -> m (Either String OAuthAccessTokenResult))
+                          -> (WxppAppID -> OAuthCode -> m (Either String (Maybe OAuthAccessTokenResult)))
+                          -- ^ 取 oauth token 的函数
+                          -- 若返回Nothing，会重新发起oauth
                           -> (UrlText -> m UrlText)
                           -- ^ 修改微信返回地址
                           -> OAuthScope
                           -> WxppAppID
                           -> m a
                           -- ^ 确实不能取得 open id　时调用
-                          -> (WxppOpenID -> Maybe WxppUnionID -> Maybe OAuthGetUserInfoResult-> m a)
+                          -> (WxppOpenID -> Maybe WxppUnionID -> Maybe OAuthGetUserInfoResult -> m a)
                           -- ^ 取得 open_id 之后调用这个函数
                           -- 假定微信的回调参数 code, state 不会影响这部分的逻辑
                           -- OAuthGetUserInfoResult 是副产品，不一定有
@@ -1001,32 +1008,38 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
         m_state <- lift $ lookupGetParam "state"
         m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
         unless (m_expected_state == m_state) $ do
-          $logErrorS wxppLogSource $ "OAuth state check failed, got: " <> tshow m_state
+          $logErrorS wxppLogSource $
+                        "OAuth state check failed, got: " <> tshow m_state
                         <> ", expect: " <> tshow m_expected_state
-          throwError $ "unexpected state"
+                        <> ", app_id: " <> unWxppAppID app_id
+          permissionDenied $ "unexpected state"
 
-        oauth_atk_info <- ExceptT $ get_oauth_atk app_id code
+        m_oauth_atk_info <- ExceptT $ get_oauth_atk app_id code
+        case m_oauth_atk_info of
+          Nothing -> return Nothing
+          Just oauth_atk_info -> fmap Just $ do
+            let open_id = oauthAtkOpenID oauth_atk_info
+                scopes = oauthAtkScopes oauth_atk_info
 
-        let open_id = oauthAtkOpenID oauth_atk_info
-            scopes = oauthAtkScopes oauth_atk_info
+            if any oauthScopeCanGetUserInfo scopes
+               then do
+                  let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
+                      lang = "zh_CN"
 
-        if any oauthScopeCanGetUserInfo scopes
-           then do
-              let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
-                  lang = "zh_CN"
+                  oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo lang oauth_atk_pkg
+                  liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
+                  return $ (open_id, Just oauth_user_info)
 
-              oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo lang oauth_atk_pkg
-              liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
-              return $ (open_id, Just oauth_user_info)
-
-           else do
-              return $ (open_id, Nothing)
+               else do
+                  return $ (open_id, Nothing)
 
       case err_or_wx_id of
         Left _        -> throwM $ userError "微信接口错误，请稍后重试"
-        Right (open_id, m_oauth_uinfo) -> h open_id
-                                          (join $ oauthUserInfoUnionID <$> m_oauth_uinfo)
-                                          m_oauth_uinfo
+        Right Nothing -> start_oauth is_client_wx
+        Right (Just (open_id, m_oauth_uinfo)) ->
+                          h open_id
+                            (join $ oauthUserInfoUnionID <$> m_oauth_uinfo)
+                            m_oauth_uinfo
 
     _ -> do
       m_state <- runInputGet $ iopt textField "state"
@@ -1035,28 +1048,31 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
            -- 说明当前已经是从微信认证回来的回调
            h_no_id
 
-         else do
-           random_state <- wxppOAuthMakeRandomState app_id
-           current_url <- getCurrentUrl
-           let oauth_return_url    = UrlText $ fromMaybe current_url $ fmap pack $
-                                       urlUpdateQueryText
-                                           (filter (flip onotElem ["state", "code"] . fst))
-                                           (unpack current_url)
-           oauth_retrurn_url2  <- fix_return_url oauth_return_url
+         else start_oauth is_client_wx
 
-           let oauth_url = if is_client_wx
-                              then wxppOAuthRequestAuthInsideWx
-                                     Nothing -- not third-prty
-                                     app_id
-                                     scope
-                                     oauth_retrurn_url2
-                                     random_state
-                              else wxppOAuthRequestAuthOutsideWx
-                                     app_id
-                                     oauth_retrurn_url2
-                                     random_state
+  where
+    start_oauth is_client_wx = do
+       random_state <- wxppOAuthMakeRandomState app_id
+       current_url <- getCurrentUrl
+       let oauth_return_url    = UrlText $ fromMaybe current_url $ fmap pack $
+                                   urlUpdateQueryText
+                                       (filter (flip onotElem ["state", "code"] . fst))
+                                       (unpack current_url)
+       oauth_retrurn_url2  <- fix_return_url oauth_return_url
 
-           redirect oauth_url
+       let oauth_url = if is_client_wx
+                          then wxppOAuthRequestAuthInsideWx
+                                 Nothing -- not third-prty
+                                 app_id
+                                 scope
+                                 oauth_retrurn_url2
+                                 random_state
+                          else wxppOAuthRequestAuthOutsideWx
+                                 app_id
+                                 oauth_retrurn_url2
+                                 random_state
+
+       redirect oauth_url
 -- }}}1
 
 
