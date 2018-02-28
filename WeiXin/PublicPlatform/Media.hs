@@ -100,7 +100,7 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
             A.Success js_res -> do
               case js_res of
                 DownloadMediaJsVideo down_url -> do
-                  $logDebug $ "Download video media from: " <> down_url
+                  $logDebugS wxppLogSource $ "Download video media from: " <> down_url
                   liftIO $ WS.get sess (unpack url)
 
     (as_json >>= either throwM handle_json . unWxppWsResp)

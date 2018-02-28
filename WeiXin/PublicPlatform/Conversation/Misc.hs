@@ -116,7 +116,7 @@ instance
             let handle_txt t = do
                     case parse generalParseConfirm "" t of
                         Left err -> do
-                            $logWarn $ fromString $
+                            $logWarnS wxppLogSource $ fromString $
                                 "cannot parse user input as confirmation: " <> show err
                             liftM (, old_st) $
                                 liftM (fmap Just) $ ExceptT $ flip runWxTalkerMonad env $
@@ -154,7 +154,7 @@ instance ( LoadMsgMonad m
             Just False -> toCancelledMessage rd_st
 
             _ -> do
-                $logWarn $ "should never reach here: confirmation is Nothing"
+                $logWarnS wxppLogSource $ "should never reach here: confirmation is Nothing"
                 toCancelledMessage rd_st
 
 
@@ -192,7 +192,7 @@ parseInputOrLoadErrorMsg prep env err_msg_file p ime = do
                             Right x -> Right x
             case err_or_x of
                 Left err -> do
-                    $logWarn $ T.unlines $
+                    $logWarnS wxppLogSource $ T.unlines $
                                 [ "cannot parse text: " <> t
                                 , "error was: " <> err
                                 ]
@@ -250,7 +250,7 @@ parseInputOrLoadErrorMsg2 prep load_err_msg_file p t = do
                     Right x -> Right x
     case err_or_x of
         Left err -> do
-            $logWarn $ T.unlines $
+            $logWarnS wxppLogSource $ T.unlines $
                         [ "cannot parse text: " <> t
                         , "error was: " <> err
                         ]
@@ -327,7 +327,7 @@ parseUserInputX p nothing_done sth_done ime = do
                                     if err_col > 1 || err_line > 1
                                         then do
                                             -- 如果解释器已吃掉了一部分输入，说明命令有可能匹配，只是有点错
-                                            $logError $ fromString $ "cannot parse user input: " <> show err
+                                            $logErrorS wxppLogSource $ fromString $ "cannot parse user input: " <> show err
                                             sth_done
                                         else
                                             nothing_done

@@ -78,7 +78,7 @@ wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec@(Entity rec_id r
 -- {{{1
   case lookup_se typ_str of
     Nothing -> do
-      $logWarn $ "could not find state entry for record #" <> toPathPiece rec_id
+      $logWarnS wxppLogSource $ "could not find state entry for record #" <> toPathPiece rec_id
                   <> ", type string was: " <> typ_str
       return []
 
@@ -86,7 +86,7 @@ wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec@(Entity rec_id r
       err_or_st <- parseWxppTalkStateFromRecord sp e_rec
       case err_or_st of
         Left err -> do
-          $logError $ "parseWxppTalkStateFromRecord failed for record #" <> toPathPiece rec_id
+          $logErrorS wxppLogSource $ "parseWxppTalkStateFromRecord failed for record #" <> toPathPiece rec_id
                         <> ": " <> fromString err
           return []
 
@@ -96,7 +96,7 @@ wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec@(Entity rec_id r
           err_or_outmsgs <- flip runWxTalkerMonad (common_env, ext_env) $ wxTalkAbort st initiator
           case err_or_outmsgs of
             Left err -> do
-              $logError $ "wxTalkAbort failed for record #" <> toPathPiece rec_id
+              $logErrorS wxppLogSource $ "wxTalkAbort failed for record #" <> toPathPiece rec_id
                           <> ": " <> fromString err
               return []
 
@@ -166,7 +166,7 @@ parseWxppTalkStateFromRecord proxy (Entity rec_id rec) = runExceptT $ runMaybeT 
             let err_msg = "cannot decode JSON ByteString: WxppTalkState #"
                                 <> toPathPiece rec_id
                                 <> ", " <> fromString err
-            $logError err_msg
+            $logErrorS wxppLogSource err_msg
             throwError $ T.unpack err_msg
 
         Right jv -> do
@@ -175,7 +175,7 @@ parseWxppTalkStateFromRecord proxy (Entity rec_id rec) = runExceptT $ runMaybeT 
                     let err_msg = "cannot decode JSON Value: WxppTalkState #"
                                 <> toPathPiece rec_id
                                 <> ", " <> fromString jerr
-                    $logError err_msg
+                    $logErrorS wxppLogSource err_msg
                     throwError $ T.unpack err_msg
 
                 Right x -> return x
@@ -322,7 +322,7 @@ instance (MonadBaseControl IO m, WxppApiMonad env m) =>
                     m_result <- runMaybeT $ asum $ map mk entries
                     case m_result of
                         Nothing -> do
-                            $logWarn $ "no handler could handle talk state: state_id="
+                            $logWarnS wxppLogSource $ "no handler could handle talk state: state_id="
                                         <> toPathPiece state_id
                             return []
                         Just x -> return x

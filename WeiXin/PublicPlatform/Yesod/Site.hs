@@ -487,7 +487,7 @@ wxppHandlerOAuthReturnGetInfo broker app_id = do
           return $ either (const Nothing) Just $ err_or_muid
 
       _ -> do
-        $logError "should never reach here"
+        $logErrorS wxppLogSource $ "should never reach here"
         return Nothing
 -- }}}1
 
@@ -577,7 +577,7 @@ forwardWsResult op_name res = do
             sendResponse $ toJSON err
 
         Left err -> do
-            $logError $ fromString $
+            $logErrorS wxppLogSource $ fromString $
                 op_name ++ " failed: " ++ show err
             mimicServerBusy $ fromString $ op_name ++ " failed"
 
@@ -688,7 +688,7 @@ getShowSimulatedQRCodeR = do
         Left _ -> httpErrorRetryWithValidParams ("invalid ticket" :: Text)
         Right bs -> case decodeEither' bs of
                         Left err -> do
-                            $logError $ fromString $
+                            $logErrorS wxppLogSource $ fromString $
                                 "cannot decode request body as YAML: " ++ show err
                             sendResponseStatus (mkStatus 449 "Retry With") $
                                 ("retry wtih valid request JSON body" :: Text)
@@ -826,7 +826,7 @@ decodePostBodyAsYaml = do
     body <- rawRequestBody $$ sinkLbs
     case decodeEither' (LB.toStrict body) of
         Left err -> do
-            $logError $ fromString $
+            $logErrorS wxppLogSource $ fromString $
                 "cannot decode request body as YAML: " ++ show err
             sendResponseStatus (mkStatus 449 "Retry With") $
                 ("retry wtih valid request JSON body" :: Text)
@@ -953,7 +953,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
       m_secret <- lift $ get_secret app_id
       secret <- case m_secret of
                   Nothing -> do
-                    $logError $ "cannot get app secret from cache server"
+                    $logErrorS wxppLogSource $ "cannot get app secret from cache server"
                     throwError $ asString "no secret"
                   Just x -> return x
 
@@ -961,7 +961,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
                           wxppOAuthGetAccessToken app_id secret code
       case err_or_atk_info of
         Left err -> do
-            $logError $
+            $logErrorS wxppLogSource $
                 "wxppOAuthGetAccessToken failed: " <> tshow err
             throwError "wxppOAuthGetAccessToken failed"
 
@@ -1005,7 +1005,7 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
         m_state <- lift $ lookupGetParam "state"
         m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
         unless (m_expected_state == m_state) $ do
-          $logError $ "OAuth state check failed, got: " <> tshow m_state
+          $logErrorS wxppLogSource $ "OAuth state check failed, got: " <> tshow m_state
                         <> ", expect: " <> tshow m_expected_state
           throwError $ "unexpected state"
 
