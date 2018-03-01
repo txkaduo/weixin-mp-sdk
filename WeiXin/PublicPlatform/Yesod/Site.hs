@@ -1026,7 +1026,9 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
                   let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
                       lang = "zh_CN"
 
-                  oauth_user_info <- flip runReaderT wx_api_env $ wxppOAuthGetUserInfo lang oauth_atk_pkg
+                  oauth_user_info <- flip runReaderT wx_api_env $
+                                        tryWxppWsResultE "wxppOAuthGetUserInfo" $
+                                          wxppOAuthGetUserInfo lang oauth_atk_pkg
                   liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
                   return $ (open_id, Just oauth_user_info)
 
@@ -1034,8 +1036,11 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
                   return $ (open_id, Nothing)
 
       case err_or_wx_id of
-        Left _        -> throwM $ userError "微信接口错误，请稍后重试"
+        Left err      -> do $logErrorS wxppLogSource $ "WX api error: " <> fromString err
+                            throwM $ userError "微信接口错误，请稍后重试"
+
         Right Nothing -> start_oauth is_client_wx
+
         Right (Just (open_id, m_oauth_uinfo)) ->
                           h open_id
                             (join $ oauthUserInfoUnionID <$> m_oauth_uinfo)
