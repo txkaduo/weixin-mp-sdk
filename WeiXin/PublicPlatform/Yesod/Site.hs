@@ -1005,14 +1005,22 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
   case m_code of
     Just code | not (deniedOAuthCode code) -> do
       err_or_wx_id <- runExceptT $ do
+        -- 实测表明，oauth重定向的url经常被不明来源重播
+        -- 因此，我们强制state参数必须有值
         m_state <- lift $ lookupGetParam "state"
+        state <- case m_state of
+                   Just x -> return x
+                   Nothing -> do
+                     $logErrorS wxppLogSource $ "OAuth state param is empty."
+                     invalidArgs ["state"]
+
         m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
-        unless (m_expected_state == m_state) $ do
+        unless (m_expected_state == Just state) $ do
           $logErrorS wxppLogSource $
-                        "OAuth state check failed, got: " <> tshow m_state
+                        "OAuth state check failed, got: " <> tshow state
                         <> ", expect: " <> tshow m_expected_state
                         <> ", app_id: " <> unWxppAppID app_id
-          permissionDenied $ "unexpected state"
+          invalidArgs ["state"]
 
         m_oauth_atk_info <- ExceptT $ get_oauth_atk app_id code
         case m_oauth_atk_info of
