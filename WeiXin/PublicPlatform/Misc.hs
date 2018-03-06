@@ -439,7 +439,7 @@ retryGetAccessTokenDo delay retry_cnt get_atk use_atk = go 0
 
                 case m_atk of
                     Nothing -> do
-                        $logError $ "cannot get access token"
+                        $logErrorS wxppLogSource $ "cannot get access token"
                         liftIO $ threadDelay delay
                         go (cnt + 1)
 

@@ -86,7 +86,7 @@ loadTalkMessageTH default_msgs_dir sub_path = do
                                         `catchIOError`
                                             \ err -> do
                                                 unless (isDoesNotExistError err) $ do
-                                                    $logError $ fromString $
+                                                    $logErrorS wxppLogSource $ fromString $
                                                         "fallback to default message because of failing to load message file '"
                                                         <> sub_path <> "', error was: " <> show err
                                                 return $ Right fallback_v
@@ -99,7 +99,7 @@ loadTalkMessageTH' default_msgs_dir sub_path = do
                                         `catchIOError`
                                             \ err -> do
                                                 unless (isDoesNotExistError err) $ do
-                                                    $logError $ fromString $
+                                                    $logErrorS wxppLogSource $ fromString $
                                                         "fallback to default message because of failing to load message file '"
                                                         <> sub_path <> "', error was: " <> show err
                                                 return $ fallback_v
