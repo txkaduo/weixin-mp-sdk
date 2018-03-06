@@ -23,7 +23,7 @@ parseTextWholeLineStrippedNonempty :: Stream s m Char => ParsecT s u m Text
 parseTextWholeLineStrippedNonempty = do
     s <- parseTextWholeLineStripped
 
-    when ( not $ T.null s ) $ do
+    when ( T.null s ) $ do
       unexpected "没有输入"
 
     return s
