@@ -1,5 +1,6 @@
 module WeiXin.PublicPlatform.QRCode where
 
+-- {{{1 imports
 import ClassyPrelude
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
@@ -12,6 +13,7 @@ import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import Network.HTTP.Types                   (renderQueryText)
 import qualified Blaze.ByteString.Builder   as BBB
+-- }}}1
 
 
 -- | 创建永久场景二维码
@@ -19,30 +21,40 @@ wxppQrCodeCreatePersist :: (WxppApiMonad env m)
                         => AccessToken
                         -> WxppScene
                         -> m WxppMakeSceneResult
+-- {{{1
 wxppQrCodeCreatePersist atk scene = do
-    let action = case scene of
-                    WxppSceneInt {} -> "QR_LIMIT_SCENE" :: Text
-                    WxppSceneStr {} -> "QR_LIMIT_STR_SCENE"
-    wxppQrCodeCreateInternal
-        [ "action_name" .= action ]
-        atk
-        scene
+  wxppQrCodeCreateInternal
+      [ "action_name" .= action ]
+      atk
+      scene
+  where
+    action = case scene of
+               WxppSceneInt {} -> "QR_LIMIT_SCENE" :: Text
+               WxppSceneStr {} -> "QR_LIMIT_STR_SCENE"
+-- }}}1
 
 
 -- | 创建短期场景二维码
+-- UPDATE: 现在看文档又说可以用字串形式的场景参数
 wxppQrCodeCreateTransient :: (WxppApiMonad env m)
                           => AccessToken
                           -> Int      -- ^ TTL in seconds
-                          -> WxppIntSceneID
-                                      -- ^ 文档说临时二维码只支持整数型的场景ID
+                          -> WxppScene
                           -> m WxppMakeSceneResult
-wxppQrCodeCreateTransient atk ttl scene_int_id =
-    wxppQrCodeCreateInternal
-        [ "action_name" .= ("QR_SCENE" :: Text)
-        , "expire_seconds" .= ttl
-        ]
-        atk
-        (WxppSceneInt scene_int_id)
+-- {{{1
+wxppQrCodeCreateTransient atk ttl scene =
+  wxppQrCodeCreateInternal
+      [ "action_name" .= action
+      , "expire_seconds" .= ttl
+      ]
+      atk
+      scene
+  where
+    action = case scene of
+               WxppSceneInt {} -> "QR_SCENE" :: Text
+               WxppSceneStr {} -> "QR_STR_SCENE"
+-- }}}1
+
 
 wxppQrCodeCreateInternal :: (WxppApiMonad env m)
                          => [Pair]
@@ -64,3 +76,6 @@ wxppQrCodeUrlByTicket :: QRTicket -> UrlText
 wxppQrCodeUrlByTicket (QRTicket ticket) = UrlText $
     "https://mp.weixin.qq.com/cgi-bin/showqrcode"
         <> decodeUtf8 (BBB.toByteString $ renderQueryText True [ ("ticket", Just ticket ) ] )
+
+
+-- vim: set foldmethod=marker:
