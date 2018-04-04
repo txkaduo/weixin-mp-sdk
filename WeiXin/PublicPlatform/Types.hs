@@ -664,7 +664,7 @@ wxppEventIsSubscribe _                            = False
 
 
 wxppEventTypeString :: IsString a => WxppEvent -> a
--- {{{1
+-- {{{2
 wxppEventTypeString WxppEvtSubscribe              = "subscribe"
 wxppEventTypeString WxppEvtUnsubscribe            = "unsubscribe"
 wxppEventTypeString (WxppEvtSubscribeAtScene {})  = "subscribe_at_scene"
@@ -676,7 +676,7 @@ wxppEventTypeString (WxppEvtScanCodePush {})      = "scancode_push"
 wxppEventTypeString (WxppEvtScanCodeWaitMsg {})   = "scancode_waitmsg"
 wxppEventTypeString (WxppEvtGroupSendReport {})   = "MASSSENDJOBFINISH"
 wxppEventTypeString (WxppEvtTemplateSendJobFinish {}) = "TEMPLATESENDJOBFINISH"
--- }}}1
+-- }}}2
 
 
 wxppEventTypeStringOfSubs :: IsString a => [a]
@@ -691,7 +691,7 @@ wxppEventTypeStringOfUnsubs = [ "unsubscribe"
 
 instance ToJSON WxppEvent where
     toJSON e = object $ ("type" .= (wxppEventTypeString e :: Text)) : get_others e
--- {{{1
+-- {{{2
       where
         get_others WxppEvtSubscribe     = []
         get_others WxppEvtUnsubscribe   = []
@@ -740,7 +740,7 @@ instance ToJSON WxppEvent where
                                           [ "msg_id" .= msg_id
                                           , "error" .= m_err_msg
                                           ]
--- }}}1
+-- }}}2
 
 
 instance FromJSON WxppEvent where
