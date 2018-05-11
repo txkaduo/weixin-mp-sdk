@@ -1020,7 +1020,8 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
                         "OAuth state check failed, got: " <> tshow state
                         <> ", expect: " <> tshow m_expected_state
                         <> ", app_id: " <> unWxppAppID app_id
-          invalidArgs ["state"]
+          -- invalidArgs ["state"]
+          lift $ void $ start_oauth is_client_wx
 
         m_oauth_atk_info <- ExceptT $ get_oauth_atk app_id code
         case m_oauth_atk_info of
