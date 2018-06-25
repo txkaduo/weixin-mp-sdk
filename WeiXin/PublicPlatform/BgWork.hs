@@ -15,7 +15,6 @@ import WeiXin.PublicPlatform.Security
 import WeiXin.PublicPlatform.JS
 import WeiXin.PublicPlatform.WS
 
-import Yesod.Helpers.Utils                  (foreverLogExc)
 
 -- | 检查最新的 access token 是否已接近过期
 -- 如是，则向服务器请求更新
@@ -144,17 +143,3 @@ loopRunBgJob chk_abort intv job = loop
             case m_if_abort of
                 Just True   -> return ()
                 _           -> loop
-
-
--- | 重复执行计算，并记录出现的异常
-runRepeatlyLogExc :: ( MonadIO m, MonadLogger m
-#if MIN_VERSION_classy_prelude(1, 0, 0)
-                     , MonadCatch m
-#else
-                     , MonadBaseControl IO m
-#endif
-                     )
-                  => MVar a
-                  -> Int      -- ^ ms
-                  -> m () -> m ()
-runRepeatlyLogExc exit_mvar = foreverLogExc (readMVar exit_mvar >> return True)
