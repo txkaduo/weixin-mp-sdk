@@ -53,17 +53,16 @@ abortCurrentWxppTalkState :: forall m r.  (MonadIO m, MonadLogger m)
                           -> ReaderT SqlBackend m (Maybe [WxppOutMsg])
 -- {{{1
 abortCurrentWxppTalkState common_env lookup_se initiator app_id open_id = do
-  m_rec <- selectFirst
-                      [ WxppTalkStateOpenId ==. open_id
-                      , WxppTalkStateAppId ==. app_id
-                      , WxppTalkStateAborted ==. False
-                      ]
-                      [ Desc WxppTalkStateId ]
+  m_rec <- loadWxppTalkStateCurrent app_id open_id
 
-  forM m_rec $ \ e_rec@(Entity rec_id _rec) -> do
-    out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec
-    update rec_id [ WxppTalkStateAborted =. True ]
-    return out_msgs
+  fmap join $ forM m_rec $ \ e_rec@(Entity rec_id rec) -> do
+    if not $ wxppTalkStateAborted rec || wxppTalkStateDone rec
+       then fmap Just $ do
+            out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec
+            update rec_id [ WxppTalkStateAborted =. True ]
+            return out_msgs
+
+       else return Nothing
 -- }}}1
 
 
@@ -191,12 +190,14 @@ saveSomeWxppTalkState = saveWxppTalkState getStateTypeOfSomeWxppTalkState
 --}
 
 
-loadWxppTalkStateCurrent :: forall m.
-    (MonadIO m) =>
-    WxppOpenID
-    -> ReaderT WxppDbBackend m (Maybe (Entity WxppTalkState))
-loadWxppTalkStateCurrent open_id = do
-    selectFirst [ WxppTalkStateOpenId ==. open_id ]
+loadWxppTalkStateCurrent :: forall m.  (MonadIO m)
+                          => WxppAppID
+                          -> WxppOpenID
+                          -> ReaderT WxppDbBackend m (Maybe (Entity WxppTalkState))
+loadWxppTalkStateCurrent app_id open_id = do
+    selectFirst [ WxppTalkStateOpenId ==. open_id
+                , WxppTalkStateAppId ==. app_id
+                ]
                 [ Desc WxppTalkStateId ]
 
 
@@ -304,11 +305,11 @@ type instance WxppInMsgProcessResult (WxppTalkHandlerGeneral r m) = WxppInMsgHan
 instance (MonadBaseControl IO m, WxppApiMonad env m) =>
     IsWxppInMsgProcessor m (WxppTalkHandlerGeneral r m)
     where
-    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache _app_info _bs ime =
+    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache app_info _bs ime =
       runExceptT $ do
         mapExceptT (runWxppDB db_runner) $ do
             let open_id = wxppInFromUserName ime
-            m_state_rec <- lift $ loadWxppTalkStateCurrent open_id
+            m_state_rec <- lift $ loadWxppTalkStateCurrent app_id open_id
             case m_state_rec of
                 Nothing -> return []
                 Just e_state_rec@(Entity state_id _) -> do
@@ -337,6 +338,9 @@ instance (MonadBaseControl IO m, WxppApiMonad env m) =>
                                 db_id
                                 ime
                                 --}
+
+      where
+        app_id = procAppIdInfoReceiverId app_info
 
 
 -- | 消息处理器：调用后会新建一个会话
