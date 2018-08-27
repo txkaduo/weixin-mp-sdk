@@ -182,11 +182,12 @@ wxPayMoneyAmountToYuan = fromIntegral . unWxPayMoneyAmount
 
 
 -- | 对应文档 goods_detail 数组里的一个元素
--- 但只保留必要的字段
--- 其它文档没解释清楚，又是可选的字段直接不反映在这里
 data WxPayGoodsDetail = WxPayGoodsDetail
   { wxPayGoodsIdStr     :: Text
-  , wxPayGoodsName      :: Text
+  -- ^ 大小写字母，数字，中划线，下划线组成，最长32
+  , wxPayGoodsName      :: Maybe Text
+  , wxPayGoodsWxId      :: Maybe Text
+  -- ^ 微信支付定义的统一商品编号
   , wxPayGoodsNum       :: Int
   , wxPayGoodsUnitPrice :: WxPayMoneyAmount
   }
@@ -194,11 +195,12 @@ data WxPayGoodsDetail = WxPayGoodsDetail
 
 -- {{{1
 instance ToJSON WxPayGoodsDetail where
-  toJSON x = object
-              [ "goods_id" .= wxPayGoodsIdStr x
-              , "goods_name" .= wxPayGoodsName x
-              , "goods_num" .= wxPayGoodsNum x
-              , "price" .= unWxPayMoneyAmount (wxPayGoodsUnitPrice x)
+  toJSON x = object $ catMaybes
+              [ Just $ "goods_id" .= wxPayGoodsIdStr x
+              , ("wxpay_goods_id" .=) <$> wxPayGoodsWxId x
+              , ("goods_name" .=) <$> wxPayGoodsName x
+              , Just $ "quantity" .= wxPayGoodsNum x
+              , Just $ "price" .= unWxPayMoneyAmount (wxPayGoodsUnitPrice x)
               ]
 -- }}}1
 
