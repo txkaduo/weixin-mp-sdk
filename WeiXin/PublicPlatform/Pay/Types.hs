@@ -1,12 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.Pay.Types where
 
-import ClassyPrelude
-
 -- {{{1 imports
+import           ClassyPrelude
+
 import           Control.DeepSeq        (NFData)
 import           Data.Binary            (Binary)
-import           Data.Aeson             (FromJSON(..), ToJSON(..), object, (.=))
+import           Data.Aeson             (FromJSON(..), ToJSON(..), object, (.=), withObject, (.:))
 import           Data.Default           (Default(..))
 import           Database.Persist.Sql   (PersistField (..), PersistFieldSql (..))
 import           Text.Blaze.Html        (ToMarkup (..))
@@ -537,5 +537,27 @@ data WxPayRefundQueryCouponRefundItem = WxPayRefundQueryCouponRefundItem
   , wxPayRefundQueryCouponRefundItemRefundFee :: WxPayMoneyAmount
   }
 
+
+-- | 收集跟微信支付相关的配置选项
+data WxPayConfig = WxPayConfig
+    { wxPayConfigAppId       :: WxppAppID
+    , wxPayConfigAppKey      :: WxPayAppKey
+    , wxPayConfigMchId       :: WxPayMchID
+    -- 以下两个字段仅用于生成 prepay 接口的 body 参数
+    , wxPayConfigMchName     :: Text
+    -- ^ 这个应该是公众号的名称
+    , wxPayConfigMchCategory :: Text
+    -- ^ 这个不知道能不能用固定的什么值
+    }
+
+-- {{{1 instances
+instance FromJSON WxPayConfig where
+  parseJSON = withObject "WxPayConfig" $ \ o ->
+                WxPayConfig <$> o .: "app-id"
+                            <*> o .: "app-key"
+                            <*> o .: "mch-id"
+                            <*> o .: "mch-name"
+                            <*> o .: "mch-category"
+-- }}}1
 
 -- vim: set foldmethod=marker:
