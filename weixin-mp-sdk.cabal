@@ -51,6 +51,7 @@ library
                        WeiXin.PublicPlatform.AutoReplyRules
                        WeiXin.PublicPlatform.Message
                        WeiXin.PublicPlatform.Message.Template
+                       WeiXin.PublicPlatform.Message.Templates
                        WeiXin.PublicPlatform.InMsgHandler
                        WeiXin.PublicPlatform.Menu
                        WeiXin.PublicPlatform.CS

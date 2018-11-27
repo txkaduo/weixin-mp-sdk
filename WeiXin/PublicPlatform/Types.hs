@@ -1238,6 +1238,7 @@ newtype WxppMsgTemplateShortID = WxppMsgTemplateShortID { unWxppMsgTemplateShort
                                  , NFData
                                  , PersistField, PersistFieldSql
                                  , ToJSON
+                                 , FromJSONKey
                                  , ToMessage, ToMarkup)
 
 -- {{{1 instance
