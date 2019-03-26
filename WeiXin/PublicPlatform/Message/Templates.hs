@@ -3,7 +3,6 @@ module WeiXin.PublicPlatform.Message.Templates where
 
 import ClassyPrelude
 import Data.Default
-import Data.Proxy
 import WeiXin.PublicPlatform.Message.Template
 import WeiXin.PublicPlatform.Types
 
