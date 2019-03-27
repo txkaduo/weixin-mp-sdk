@@ -1,5 +1,7 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.EndUser
     ( wxppQueryEndUserInfo
+    , wxppBatchQueryEndUserInfo, wxppBatchQueryEndUserInfoMaxNum
     , GetUserResult(..)
     , wxppOpenIdListInGetUserResult
     , wxppGetEndUserSource
@@ -7,6 +9,7 @@ module WeiXin.PublicPlatform.EndUser
     , wxppLookupAllCacheForUnionID
     , wxppCachedGetEndUserUnionID
     , wxppCachedQueryEndUserInfo
+    , wxppCachedBatchQueryEndUserInfo
     , GroupBasicInfo(..)
     , wxppListUserGroups
     , wxppCreateUserGroup
@@ -17,25 +20,31 @@ module WeiXin.PublicPlatform.EndUser
     , wxppBatchSetUserGroup
     ) where
 
-import ClassyPrelude
-import Network.Wreq
+import ClassyPrelude hiding ((\\))
+import Network.Wreq hiding (Proxy)
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
 import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
+import qualified Data.Aeson.Extra           as AE
 import Data.Conduit                         (Source, yield)
 import Data.Time                            (diffUTCTime, NominalDiffTime)
+import Data.List                            ((\\))
+import Data.Proxy
 
 import Yesod.Helpers.Utils                  (nullToNothing)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 
+
 -- | 调用服务器接口，查询用户基础信息
-wxppQueryEndUserInfo :: (WxppApiMonad env m) =>
-    AccessToken -> WxppOpenID -> m EndUserQueryResult
+wxppQueryEndUserInfo :: (WxppApiMonad env m)
+                     => AccessToken
+                     -> WxppOpenID
+                     -> m EndUserQueryResult
 wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id) = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
     let url = wxppUrlConfSecureApiBase url_conf <> "/user/info"
@@ -46,6 +55,30 @@ wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id
     liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
 
+
+-- | 调用服务器接口，批量查询用户基础信息
+wxppBatchQueryEndUserInfo :: (WxppApiMonad env m)
+                          => AccessToken
+                          -> [WxppOpenID]
+                          -> m (Map WxppOpenID EndUserQueryResult)
+wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids = do
+  (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+  let url = wxppUrlConfSecureApiBase url_conf <> "/user/info/batchget"
+      opts = defaults & param "access_token" .~ [ atk ]
+                      & param "lang" .~ [ "zh_CN" :: Text ]
+
+  liftIO (WS.postWith opts sess url $ object [ "user_list" .= map to_jv open_ids ])
+    >>= asWxppWsResponseNormal'
+    >>= return . AE.getSingObject (Proxy :: Proxy "user_info_list")
+    >>= return . mapFromList . map (getWxppOpenID &&& id)
+
+  where to_jv open_id = object [ "lang" .= asText "zh_CN"
+                               , "openid" .= open_id
+                               ]
+
+
+wxppBatchQueryEndUserInfoMaxNum :: Int
+wxppBatchQueryEndUserInfoMaxNum = 100
 
 data GetUserResult = GetUserResult
                         Int             -- total
@@ -140,13 +173,14 @@ wxppCachedGetEndUserUnionID ::
 wxppCachedGetEndUserUnionID cache ttl atk open_id = do
     liftM endUserQueryResultUnionID $ wxppCachedQueryEndUserInfo cache ttl atk open_id
 
-wxppCachedQueryEndUserInfo ::
-    (WxppApiMonad env m, WxppCacheTemp c) =>
-    c
-    -> NominalDiffTime
-    -> AccessToken
-    -> WxppOpenID
-    -> m EndUserQueryResult
+
+-- | 取用户信息，优先查询cache
+wxppCachedQueryEndUserInfo :: (WxppApiMonad env m, WxppCacheTemp c)
+                           => c
+                           -> NominalDiffTime
+                           -> AccessToken
+                           -> WxppOpenID
+                           -> m EndUserQueryResult
 wxppCachedQueryEndUserInfo cache ttl atk open_id = do
     m_res <- liftIO $ wxppCacheLookupUserInfo cache app_id open_id
     now <- liftIO getCurrentTime
@@ -170,8 +204,70 @@ wxppCachedQueryEndUserInfo cache ttl atk open_id = do
             qres <- wxppQueryEndUserInfo atk open_id
             liftIO $ wxppCacheSaveUserInfo cache app_id qres
             return qres
-    where
-        app_id = accessTokenApp atk
+    where app_id = accessTokenApp atk
+
+
+-- | 批量取用户信息，优先查询cache
+wxppCachedBatchQueryEndUserInfo :: (WxppApiMonad env m, WxppCacheTemp c)
+                                => c
+                                -> NominalDiffTime
+                                -> AccessToken
+                                -> [WxppOpenID]
+                                -> m (Map WxppOpenID EndUserQueryResult)
+wxppCachedBatchQueryEndUserInfo cache ttl atk open_ids = do
+  cached_results <- fmap catMaybes $
+    forM open_ids $ \ open_id -> do
+      m_res <- liftIO $ wxppCacheLookupUserInfo cache app_id open_id
+      now <- liftIO getCurrentTime
+      return $ case m_res of
+                  Just ((EndUserQueryResultNotSubscribed {}), _) ->
+                      -- never do negative cache
+                      Nothing
+
+                  Just (qres, ctime) ->
+                      if diffUTCTime now ctime > ttl
+                          then Nothing
+                          else Just (open_id, qres)
+
+                  Nothing -> Nothing
+
+  let cached_open_ids = map fst cached_results
+  let uncached_open_ids = open_ids \\ cached_open_ids
+
+  let split_inputs results xs =
+        let (xs1, xs2) = splitAt wxppBatchQueryEndUserInfoMaxNum xs
+         in if null xs1
+               then reverse results
+               else split_inputs (xs1 : results) xs2
+
+  uncached_results <-
+    fmap mconcat $ forM (split_inputs [] uncached_open_ids) $ \ to_query_open_ids -> do
+      results <- wxppBatchQueryEndUserInfo atk to_query_open_ids
+
+      unless (length results == length to_query_open_ids) $ do
+        $logWarnS wxppLogSource $ "wxppBatchQueryEndUserInfo return unmatched result num: got "
+          <> tshow (length results)
+          <> ", but expected " <> tshow (length to_query_open_ids)
+
+      return results
+
+  let cached_results' = mapFromList cached_results :: Map WxppOpenID EndUserQueryResult
+
+  fmap (mapFromList . catMaybes) $
+    forM open_ids $ \ open_id -> do
+      case lookup open_id cached_results' of
+        Just qres -> return $ Just (open_id, qres)
+        Nothing -> do
+          case lookup open_id uncached_results of
+            Just qres -> do
+              liftIO $ wxppCacheSaveUserInfo cache app_id qres
+              return $ Just (open_id, qres)
+
+            Nothing -> do
+              $logWarnS wxppLogSource $ "failed to find end user info for: " <> unWxppOpenID open_id
+              return Nothing
+
+  where app_id = accessTokenApp atk
 
 
 data GroupBasicInfo = GroupBasicInfo

@@ -101,6 +101,7 @@ library
                        TupleSections
                        RankNTypes
                        DeriveGeneric
+                       DataKinds
 
 
   build-depends:       base >=4.7
