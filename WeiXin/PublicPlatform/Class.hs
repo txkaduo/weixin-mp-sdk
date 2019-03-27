@@ -402,6 +402,9 @@ instance HasWxppOpenID WxppOpenID where
 instance HasWxppOpenID WxppAppOpenID where
   getWxppOpenID (WxppAppOpenID _ oid) = oid
 
+instance HasWxppOpenID EndUserQueryResult where
+  getWxppOpenID = endUserQueryResultOpenID
+
 instance HasWxppOpenID a => HasWxppOpenID (a,b) where
     getWxppOpenID = getWxppOpenID . fst
 
