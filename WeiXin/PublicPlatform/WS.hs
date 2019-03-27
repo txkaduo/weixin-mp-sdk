@@ -27,6 +27,9 @@ import Data.Aeson                           ( withObject, (.:)
                                             , object
                                             )
 
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Encode.Pretty as AP
+
 import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Types
 -- }}}1
@@ -175,21 +178,34 @@ tryWxppWsResultE op_name f =
         >>= either (\e -> throwError $ fromString $ "Got Exception when " <> op_name <> ": " <> show e) return
 
 
-asWxppWsResponseNormal :: (MonadThrow m, FromJSON a) =>
-    Response LB.ByteString -> m (WxppWsResp a)
-asWxppWsResponseNormal r = do
-    -- workaround:
-    -- 平台返回JSON报文时，并不会把 Content-Type 设为 JSON，而是 text/plain
-    -- 所以，先把 response 的 content-type 改了，试一次当前错误报文解释一次
-    liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
+asWxppWsResponseJson :: (MonadThrow m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m a
+asWxppWsResponseJson r = do
+  -- workaround:
+  -- 平台返回JSON报文时，并不会把 Content-Type 设为 JSON，而是 text/plain
+  -- 所以，先把 response 的 content-type 改了，试一次当前错误报文解释一次
+  let r' = alterContentTypeToJson r
+  let body = view responseBody r'
 
-asWxppWsResponseNormal2 :: (MonadThrow m, FromJSON a) =>
-    Response LB.ByteString -> m (WxppWsResp2 a)
-asWxppWsResponseNormal2 r = do
-    -- workaround:
-    -- 平台返回JSON报文时，并不会把 Content-Type 设为 JSON，而是 text/plain
-    -- 所以，先把 response 的 content-type 改了，试一次当前错误报文解释一次
-    liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
+  case A.eitherDecode' body of
+    Left err -> do
+      $logErrorS wxppLogSource $ "Response body cannot be converted to json: " <> fromString err
+        <> ", content was:\n" <> toStrict (decodeUtf8 body)
+      throwM $ JSONError err
+
+    Right jv -> do
+      case A.fromJSON jv of
+        A.Error err -> do
+          $logErrorS wxppLogSource $ "Response body cannot be converted to expected json structure: " <> fromString err
+            <> ", content was:\n" <> toStrict (decodeUtf8 $ AP.encodePretty jv)
+          throwM $ JSONError err
+        A.Success x -> return x
+
+
+asWxppWsResponseNormal :: (MonadThrow m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m (WxppWsResp a)
+asWxppWsResponseNormal = asWxppWsResponseJson
+
+asWxppWsResponseNormal2 :: (MonadThrow m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m (WxppWsResp2 a)
+asWxppWsResponseNormal2 = asWxppWsResponseJson
 
 
 asWxppWsResponseVoid :: (MonadThrow m) =>
@@ -208,7 +224,7 @@ alterContentTypeToJson r =
 
 -- | 解释远程调用的结果，返回正常的值，异常情况会抛出
 -- 抛出的异常主要类型就是 WxppWsCallError 列出的情况
-asWxppWsResponseNormal' :: (MonadThrow m, FromJSON a)
+asWxppWsResponseNormal' :: (MonadThrow m, MonadLogger m, FromJSON a)
                         => Response LB.ByteString
                         -> m a
 asWxppWsResponseNormal' =
@@ -231,7 +247,7 @@ asWxppWsResponseNormal'L resp = do
   asWxppWsResponseNormal' resp `onException` report
 
 
-asWxppWsResponseNormal2' :: (MonadThrow m, FromJSON a) =>
+asWxppWsResponseNormal2' :: (MonadThrow m, MonadLogger m, FromJSON a) =>
     Response LB.ByteString -> m (Text, a)
 asWxppWsResponseNormal2' =
     asWxppWsResponseNormal2

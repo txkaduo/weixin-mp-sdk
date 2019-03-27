@@ -23,7 +23,7 @@ import WeiXin.PublicPlatform.Yesod.Site
 
 -- | 调用中心 wxpp 服务器的接口： 取 AccessToken
 wxppCenterGetAccessToken ::
-    ( MonadIO m, MonadThrow m) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
     UrlText
     -> WxppAppID
     -> m AccessToken
@@ -35,7 +35,7 @@ wxppCenterGetAccessToken base_url app_id = do
 
 -- | 调用中心 wxpp 服务器的接口： 取 UnionID
 wxppCenterLookupUnionID ::
-    ( MonadIO m, MonadThrow m) =>
+    ( MonadIO m, MonadLogger m, MonadThrow m) =>
     UrlText
     -> WxppAppID
     -> WxppOpenID
@@ -48,7 +48,7 @@ wxppCenterLookupUnionID base_url app_id open_id = do
 
 -- | 调用中心 wxpp 服务器的接口： 取 QueryUserInfo
 wxppCenterQueryUserInfo ::
-    (MonadIO m, MonadThrow m) =>
+    (MonadIO m, MonadLogger m, MonadThrow m) =>
     UrlText
     -> WxppAppID
     -> WxppOpenID
@@ -67,7 +67,7 @@ wxppCenterQueryUserInfo base_url app_id open_id = do
 -- XXX: 要访问这个 route，目前要知道一个 app id
 --      但实际上其内部逻辑根本不需要任何 app id
 wxppCenterLookupOpenID ::
-    (MonadIO m, MonadThrow m) =>
+    (MonadIO m, MonadLogger m, MonadThrow m) =>
     UrlText
     -> WxppUnionID
     -> m [(WxppOpenID, WxppAppID)]
