@@ -84,6 +84,7 @@ library
                        WeiXin.PublicPlatform.ThirdParty
                        WeiXin.PublicPlatform.About
                        WeiXin.PublicPlatform
+                       WeiXin.PublicPlatform.MiniProgram
 
   other-modules:       Paths_weixin_mp_sdk
 
