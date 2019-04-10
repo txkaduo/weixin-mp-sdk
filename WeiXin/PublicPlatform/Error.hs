@@ -18,6 +18,7 @@ data WxppError = WxppServerBusy
                 | WxppInvalidMediaId
                 | WxppInvalidAppID
                 | WxppSubscriberRequired
+                | WxppFriendshipRequired
                 | WxppApiCallQuotaExceeded
                 | WxppReplyIsTooLate
                 | WxppNoMassSendQuota   -- ^ "has no masssend quota
@@ -37,7 +38,8 @@ wxppToErrorCode WxppInvalidAppID            = 40013
 wxppToErrorCode WxppInvalidAccessToken      = 40014
 wxppToErrorCode WxppOAuthCodeHasBeenUsed    = 40163
 wxppToErrorCode WxppAccessTokenExpired      = 42001
-wxppToErrorCode WxppSubscriberRequired      = 43005
+wxppToErrorCode WxppSubscriberRequired      = 43004
+wxppToErrorCode WxppFriendshipRequired      = 43005
 wxppToErrorCode WxppApiCallQuotaExceeded    = 45009
 wxppToErrorCode WxppReplyIsTooLate          = 45015
 wxppToErrorCode WxppNoMassSendQuota         = 45028
