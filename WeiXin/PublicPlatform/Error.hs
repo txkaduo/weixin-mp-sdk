@@ -66,3 +66,13 @@ wxppFromErrorCode ec = WxppErrorX $
 
 wxppToErrorCodeX :: WxppErrorX -> Int
 wxppToErrorCodeX = either id wxppToErrorCode . unWxppErrorX
+
+
+class ToWxppErrorCodeX a where
+  toWxppErrorCodeX :: a -> WxppErrorX
+
+instance ToWxppErrorCodeX Int where
+  toWxppErrorCodeX = wxppFromErrorCode
+
+instance ToWxppErrorCodeX WxppError where
+  toWxppErrorCodeX = WxppErrorX . Right
