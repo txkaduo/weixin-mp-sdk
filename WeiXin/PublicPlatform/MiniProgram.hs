@@ -3,7 +3,6 @@ module WeiXin.PublicPlatform.MiniProgram where
 import           ClassyPrelude
 import           Control.Lens          hiding ((.=))
 import           Data.Aeson            as A
-import           Data.Aeson.Types      as A
 import           Network.Wreq          hiding (Proxy)
 import qualified Network.Wreq.Session  as WS
 import           Yesod.Core
@@ -11,7 +10,6 @@ import           Yesod.Core
 import Yesod.Helpers.Utils                  (nullToNothing)
 
 import           WeiXin.PublicPlatform.Class
-import           WeiXin.PublicPlatform.Types
 import           WeiXin.PublicPlatform.WS
 
 data Code2SessionResult =
