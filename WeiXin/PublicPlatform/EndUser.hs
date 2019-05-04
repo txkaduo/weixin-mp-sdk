@@ -2,6 +2,7 @@
 module WeiXin.PublicPlatform.EndUser
     ( wxppQueryEndUserInfo
     , wxppBatchQueryEndUserInfo, wxppBatchQueryEndUserInfoMaxNum
+    , wxppBatchQueryEndUserInfoConduit
     , GetUserResult(..)
     , wxppOpenIdListInGetUserResult
     , wxppGetEndUserSource
@@ -29,7 +30,8 @@ import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
 import qualified Data.Aeson.Extra           as AE
-import Data.Conduit                         (Source, yield)
+import Data.Conduit                         (Source, Conduit, yield, (=$))
+import qualified Data.Conduit.List          as CL
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import Data.List                            ((\\))
 import Data.Proxy
@@ -60,6 +62,7 @@ wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id
 wxppBatchQueryEndUserInfo :: (WxppApiMonad env m)
                           => AccessToken
                           -> [WxppOpenID]
+                          -- ^ CAUTION: must be less than wxppBatchQueryEndUserInfoMaxNum
                           -> m (Map WxppOpenID EndUserQueryResult)
 wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids = do
   (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
@@ -79,6 +82,19 @@ wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids = do
 
 wxppBatchQueryEndUserInfoMaxNum :: Int
 wxppBatchQueryEndUserInfoMaxNum = 100
+
+
+wxppBatchQueryEndUserInfoConduit :: (WxppApiMonad env m)
+                                => AccessToken
+                                -> Conduit WxppOpenID m (Map WxppOpenID EndUserQueryResult)
+wxppBatchQueryEndUserInfoConduit atk = go
+  where go = do
+          part_res <- CL.isolate wxppBatchQueryEndUserInfoMaxNum =$ do
+            CL.consume >>= wxppBatchQueryEndUserInfo atk
+          if null part_res
+             then return ()
+             else yield part_res >> go
+
 
 data GetUserResult = GetUserResult
                         Int             -- total
