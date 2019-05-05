@@ -65,15 +65,18 @@ wxppBatchQueryEndUserInfo :: (WxppApiMonad env m)
                           -- ^ CAUTION: must be less than wxppBatchQueryEndUserInfoMaxNum
                           -> m (Map WxppOpenID EndUserQueryResult)
 wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids = do
-  (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
-  let url = wxppUrlConfSecureApiBase url_conf <> "/user/info/batchget"
-      opts = defaults & param "access_token" .~ [ atk ]
-                      & param "lang" .~ [ "zh_CN" :: Text ]
+  if null open_ids
+     then return mempty
+     else do
+          (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+          let url = wxppUrlConfSecureApiBase url_conf <> "/user/info/batchget"
+              opts = defaults & param "access_token" .~ [ atk ]
+                              & param "lang" .~ [ "zh_CN" :: Text ]
 
-  liftIO (WS.postWith opts sess url $ object [ "user_list" .= map to_jv open_ids ])
-    >>= asWxppWsResponseNormal'
-    >>= return . AE.getSingObject (Proxy :: Proxy "user_info_list")
-    >>= return . mapFromList . map (getWxppOpenID &&& id)
+          liftIO (WS.postWith opts sess url $ object [ "user_list" .= map to_jv open_ids ])
+            >>= asWxppWsResponseNormal'
+            >>= return . AE.getSingObject (Proxy :: Proxy "user_info_list")
+            >>= return . mapFromList . map (getWxppOpenID &&& id)
 
   where to_jv open_id = object [ "lang" .= asText "zh_CN"
                                , "openid" .= open_id
@@ -91,6 +94,7 @@ wxppBatchQueryEndUserInfoConduit atk = go
   where go = do
           part_res <- CL.isolate wxppBatchQueryEndUserInfoMaxNum =$ do
             CL.consume >>= wxppBatchQueryEndUserInfo atk
+
           if null part_res
              then return ()
              else yield part_res >> go
