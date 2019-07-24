@@ -4,7 +4,9 @@
 {-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Misc where
 
+-- {{{1 imports
 import ClassyPrelude hiding (try)
+import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
 import qualified Data.Text                  as T
@@ -25,7 +27,7 @@ import Data.List.NonEmpty                   (NonEmpty)
 import Network.Mime                         (MimeType)
 import Data.Byteable                        (toBytes)
 import Yesod.Form                           (checkMMap, Field, textField, FormMessage)
-import Yesod.Core                           (HandlerSite, PathPiece(..), Yesod, HandlerT)
+import Yesod.Core                           (HandlerSite, PathPiece(..), Yesod)
 import Text.Shakespeare.I18N                (RenderMessage)
 
 import Yesod.Helpers.Logger                 (LoggingTRunner(..))
@@ -43,6 +45,13 @@ import WeiXin.PublicPlatform.ThirdParty
 
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
+
+import Yesod.Compat
+
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+import Control.Concurrent (threadDelay)
+#endif
+-- }}}1
 
 
 aesKeyField :: forall m. (Monad m, RenderMessage (HandlerSite m) FormMessage) => Field m AesKey
@@ -312,7 +321,7 @@ mkWxppTpSub :: ( LoggingTRunner app
             -> WxppMsgProcessor
             -> ( forall master. Yesod master
                     => WxppTpEventNotice
-                    -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
+                    -> SubHandlerOf WxppTpSub master (Either String Text)
                )
             -> WxppTpSub
 mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_tp_evt =
@@ -325,7 +334,7 @@ mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_t
     handle_tp_evt
 
 
-defaultInMsgProcMiddlewares :: forall env m.  (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
+defaultInMsgProcMiddlewares :: forall env m. (WxppApiMonad env m, RunSqlMonad m, ExcSafe.MonadCatch m)
                             => WxppDbRunner
                             -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
                             -> MVar TrackHandledInMsgInnerMap
@@ -355,24 +364,16 @@ defaultInMsgProcMiddlewares db_runner down_media mvar = do
 -- | 如果要计算的操作有异常，记日志并重试
 -- 注意：重试如果失败，还会不断重试
 -- 所以只适合用于 f 本身就是一个大循环的情况
-logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadCatch m, MonadIO m
-#if !MIN_VERSION_classy_prelude(1, 0, 0)
-                            , MonadBaseControl IO m
-#endif
-                            ) =>
-    String      -- ^ 仅用作日志标识
-    -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
-    -> m ()
+logWxppWsExcAndRetryLoop :: (MonadLogger m, MonadIO m, ExcSafe.MonadCatch m)
+                         => String      -- ^ 仅用作日志标识
+                         -> m ()     -- ^ 一个长时间的操作，正常返回代表工作完成
+                         -> m ()
 logWxppWsExcAndRetryLoop op_name f = go
     where
         go = logWxppWsExcThen op_name (const $ liftIO (threadDelay 5000000) >> go) (const $ return ()) f
 
 
-logWxppWsExcThen :: (MonadLogger m, MonadCatch m
-#if !MIN_VERSION_classy_prelude(1, 0, 0)
-                    , MonadBaseControl IO m
-#endif
-                    )
+logWxppWsExcThen :: (MonadLogger m, ExcSafe.MonadCatch m)
                  => String
                  -> (SomeException -> m a)
                                     -- ^ retry when error
@@ -380,7 +381,7 @@ logWxppWsExcThen :: (MonadLogger m, MonadCatch m
                  -> m b              -- ^ original op
                  -> m a
 logWxppWsExcThen op_name on_err on_ok f = do
-    err_or <- tryAny $ tryWxppWsResult f
+    err_or <- ExcSafe.tryAny $ tryWxppWsResult f
     case err_or of
         Left err -> do
             $logErrorS wxppLogSource $ fromString $
@@ -396,7 +397,7 @@ logWxppWsExcThen op_name on_err on_ok f = do
 
 
 -- | 这个函数用于创建一个长期运行的线程
-loopCleanupTimedOutForwardUrl :: (WxppApiMonad env m, MonadCatch m, MonadBaseControl IO m)
+loopCleanupTimedOutForwardUrl :: (WxppApiMonad env m, ExcSafe.MonadCatch m)
                               => (WxppAppID -> IO (Maybe AccessToken))
                               -> MVar ForwardUrlMap
                               -> m ()

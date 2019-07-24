@@ -103,6 +103,7 @@ library
                        RankNTypes
                        DeriveGeneric
                        DataKinds
+                       CPP
 
 
   build-depends:       base >=4.7
@@ -110,7 +111,7 @@ library
                      , classy-prelude >= 0.12.7
                      , classy-prelude-yesod
                      , yesod
-                     , persistent >= 2.0 && < 2.8
+                     , persistent >= 2.0 && < 2.10
                      , yesod-core
                      , yesod-form
                      , shakespeare
@@ -127,7 +128,8 @@ library
                      , wreq
                      , mime-types
                      , lens
-                     , exceptions
+                     , safe-exceptions
+                     , unliftio
                      , http-client
                      , monad-logger
                      , safecopy
@@ -180,6 +182,7 @@ library
                      , binary-orphans
                      , hash-tx-utils
                      , parsec-tx-utils >= 0.3
+                     , yesod-compat
 
   if flag(parsec3)
       build-depends:   parsec3
@@ -205,7 +208,7 @@ library
   -- hs-source-dirs:      
   default-language:    Haskell2010
 
-  ghc-options:         -Wall -j
+  ghc-options:         -Wall -fwarn-redundant-constraints -fno-warn-partial-type-signatures -j
 
 
 executable wxpp-manage
@@ -234,6 +237,7 @@ executable wxpp-manage
                      , semigroups
                      , wreq
                      , data-default
+                     , safe-exceptions
 
   default-extensions:  NoImplicitPrelude
                        CPP

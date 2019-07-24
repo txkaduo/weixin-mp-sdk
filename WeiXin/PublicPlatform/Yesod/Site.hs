@@ -2,15 +2,16 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE UndecidableInstances #-}
 module WeiXin.PublicPlatform.Yesod.Site
     ( module WeiXin.PublicPlatform.Yesod.Site
     , module WeiXin.PublicPlatform.Yesod.Site.Data
     ) where
 
--- {{{1
+-- {{{1 imports
 import ClassyPrelude
 import Yesod
+import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.ByteString.Base64     as B64
@@ -18,7 +19,7 @@ import qualified Data.ByteString.Base64.URL as B64L
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
-import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError)
+import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError, mapExceptT)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 #if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Concurrent.Async             (async)
@@ -67,23 +68,29 @@ import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.OAuth
 import WeiXin.PublicPlatform.ThirdParty
 import WeiXin.PublicPlatform.Utils
+
+import Yesod.Compat
+
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+import Control.Concurrent (threadDelay)
+#endif
+
 -- }}}1
 
 
-withWxppSubHandler :: ( MonadHandler m, HandlerSite m ~ MaybeWxppSub)
-                   => (WxppSub -> m a)
-                   -> m a
+withWxppSubHandler :: (WxppSub -> SubHandlerOf MaybeWxppSub master a)
+                   -> SubHandlerOf MaybeWxppSub master a
 withWxppSubHandler f = do
-    getYesod
+    getSubYesodCompat
         >>= liftIO . unMaybeWxppSub
         >>= maybe notFound return
         >>= f
 
-checkSignature :: (HasWxppToken a, RenderMessage site FormMessage)
+checkSignature :: (HasWxppToken a, RenderMessage master FormMessage)
                => a
                -> Text  -- ^ GET param name of signature
                -> Text  -- ^ signed message text
-               -> HandlerT site (HandlerT master IO) ()
+               -> SubHandlerOf site master ()
 -- {{{1
 checkSignature foundation sign_param msg = do
 
@@ -96,7 +103,7 @@ checkSignature foundation sign_param msg = do
             where
                 sign0 = wxppSignature token tt nn msg
 
-    (tt, nn, sign) <- runInputGet $
+    (tt, nn, sign) <- liftMonadHandlerToSub $ runInputGet $
                         (,,) <$> (TimeStampS <$> ireq textField "timestamp")
                              <*> (Nonce <$> ireq textField "nonce")
                              <*> ireq textField sign_param
@@ -110,32 +117,35 @@ checkSignature foundation sign_param msg = do
 
 
 -- | 用于修改 HandlerT 里日志的实现
-withWxppSubLogging :: LoggingTRunner r
+withWxppSubLogging :: (LoggingTRunner r)
                    => r
-                   -> HandlerT site (HandlerT master m) a
-                   -> HandlerT site (HandlerT master m) a
+                   -> SubHandlerOf site master a
+                   -> SubHandlerOf site master a
 withWxppSubLogging foundation h = do
     runLoggingTWith foundation $ LoggingT $ \log_func -> do
-        withLogFuncInHandlerT log_func h
+        withLogFuncInSubHandler log_func h
 
 
-getMessageR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
-getMessageR = withWxppSubHandler $ \foundation -> do
+getMessageR :: (RenderMessage master FormMessage) => SubHandlerOf MaybeWxppSub master Text
+getMessageR = withWxppSubHandler $ \ foundation -> do
     withWxppSubLogging foundation $ do
         checkSignature foundation "signature" ""
         runInputGet $ ireq textField "echostr"
 
-postMessageR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
-postMessageR = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
+
+postMessageR :: (RenderMessage master FormMessage) => SubHandlerOf MaybeWxppSub master Text
+postMessageR = withWxppSubHandler $ \ foundation -> withWxppSubLogging foundation $ do
   let app_id = getWxppAppID foundation
   realHandlerMsg foundation (ProcAppSingle app_id)
 
+
 realHandlerMsg :: forall site master a.
-               (RenderMessage site FormMessage, HasWxppToken a,
-               HasAesKeys a, HasWxppProcessor a)
+                   ( RenderMessage master FormMessage
+                   , HasWxppToken a, HasAesKeys a, HasWxppProcessor a
+                   )
                => a
                -> ProcAppIdInfo
-               -> HandlerT site (HandlerT master IO) Text
+               -> SubHandlerOf site master Text
 -- {{{1
 realHandlerMsg foundation app_info = do
     checkSignature foundation "signature" ""
@@ -191,12 +201,14 @@ realHandlerMsg foundation app_info = do
                 return ("", Nothing)
 
             Right (Just (decrypted_xml, ime)) -> do
+                log_func <- askLoggerIO
+
                 let user_open_id    = wxppInFromUserName ime
                     target_username = wxppInToUserName ime
 
                 let handle_msg      = wxppMsgHandler processor
-                    try_handle_msg = ExceptT $ do
-                                tryAny (liftIO $ handle_msg app_info decrypted_xml ime)
+                    try_handle_msg = mapExceptT liftIO $ ExceptT $ flip runLoggingT log_func $ do
+                                ExcSafe.tryAny (liftIO $ handle_msg app_info decrypted_xml ime)
                                     >>= \err_or_x -> do
                                             case err_or_x of
                                               Left err -> do
@@ -206,8 +218,8 @@ realHandlerMsg foundation app_info = do
                                               Right x -> return x
 
                 let post_handle_msg = wxppPostProcessInMsg processor
-                    do_post_handle_msg out_res0 = ExceptT $ do
-                        tryAny (liftIO $ post_handle_msg app_info decrypted_xml ime out_res0)
+                    do_post_handle_msg out_res0 = mapExceptT liftIO $ ExceptT $ flip runLoggingT log_func $ do
+                        ExcSafe.tryAny (liftIO $ post_handle_msg app_info decrypted_xml ime out_res0)
                             >>= \err_or_x -> do
                                     case err_or_x of
                                       Left err -> do
@@ -258,7 +270,7 @@ realHandlerMsg foundation app_info = do
         Left err -> do
             $(logErrorS) wxppLogSource $ fromString $
                 "cannot encode outgoing message into XML: " <> err
-            throwM $ HCError $
+            liftIO $ throwIO $ HCError $
                 InternalError "cannot encode outgoing message into XML"
 
         Right (xmls, m_extra_data) -> do
@@ -364,7 +376,7 @@ sessionGetWxppUserU app_id = runMaybeT $ do
   return (WxppAppOpenID app_id open_id, m_union_id)
 
 
-getOAuthCallbackR :: Yesod master => HandlerT MaybeWxppSub (HandlerT master IO) Html
+getOAuthCallbackR :: Yesod master => SubHandlerOf MaybeWxppSub master Html
 -- {{{1
 getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     m_code <- lookupGetParam "code"
@@ -379,7 +391,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     unless (m_expected_state == Just expected_st) $ do
         $logErrorS wxppLogSource $
             "OAuth state check failed, got: " <> oauth_state
-        throwM $ HCError NotAuthenticated
+        liftIO $ throwIO $ HCError NotAuthenticated
 
     let state = fromMaybe state' $ T.stripPrefix ":" state'
 
@@ -387,13 +399,19 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
     case fmap OAuthCode m_code of
         Just code | not (deniedOAuthCode code) -> do
             -- 用户同意授权
-            err_or_atk_info <- tryWxppWsResult $ flip runReaderT api_env $
+
+            -- handler functions in new version yesod may not derive MonadCatch instance
+            -- we need to run wxpp call in (LoggingT IO)
+            log_func <- askLoggerIO
+            err_or_atk_info <- liftIO $ flip runLoggingT log_func $
+                                tryWxppWsResult $ flip runReaderT api_env $
                                   wxppOAuthGetAccessToken app_id secret code
+
             atk_info <- case err_or_atk_info of
                             Left err -> do
                                 $logErrorS wxppLogSource $
                                     "wxppOAuthGetAccessToken failed: " <> tshow err
-                                throwM $ HCError NotAuthenticated
+                                liftIO $ throwIO $ HCError NotAuthenticated
 
                             Right x -> return x
 
@@ -407,7 +425,10 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
                 get_union_id2 = do
                   guard $ any oauthScopeCanGetUserInfo scopes
 
-                  err_or_oauth_user_info <- tryWxppWsResult $ flip runReaderT api_env $ wxppOAuthGetUserInfo' atk_p
+                  err_or_oauth_user_info <- liftIO $ flip runLoggingT log_func $
+                                              tryWxppWsResult $ flip runReaderT api_env $
+                                                wxppOAuthGetUserInfo' atk_p
+
                   case err_or_oauth_user_info of
                     Left err -> do $logErrorS wxppLogSource $ "wxppOAuthGetUserInfo' failed: " <> tshow err
                                    mzero
@@ -441,14 +462,14 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
         _ -> do
             -- 授权失败
-            defaultLayoutSub $ do
+            liftMonadHandlerToSub $ defaultLayout $ do
                 $(widgetFileReload def "oauth/user_denied")
 -- }}}1
 
 
 -- | 比较通用的处理从 oauth 重定向回来时的Handler的逻辑
 -- 如果用户通过授权，则返回 open id 及 oauth token 相关信息
-wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, RenderMessage (HandlerSite m) FormMessage, MonadLogger m)
+wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, MonadLogger m, RenderMessage (HandlerSite m) FormMessage)
                               => SomeWxppApiBroker
                               -> WxppAppID
                               -> m (Maybe (WxppOpenID, OAuthTokenInfo))
@@ -533,7 +554,7 @@ wxppOAuthHandlerGetAccessTokenPkg cache app_id scope = do
 -- }}}1
 
 -- | 演示/测试微信 oauth 授权的页面
-getOAuthTestR :: HandlerT MaybeWxppSub (HandlerT master IO) Text
+getOAuthTestR :: SubHandlerOf MaybeWxppSub master Text
 getOAuthTestR = withWxppSubHandler $ \sub -> do
     let app_id = getWxppAppID sub
     m_oauth_st <- sessionGetWxppUser app_id
@@ -542,9 +563,8 @@ getOAuthTestR = withWxppSubHandler $ \sub -> do
         Just open_id -> return $ "Your open id is: " <> unWxppOpenID open_id
 
 
-checkWaiReqThen ::
-    (WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) a)
-    -> HandlerT MaybeWxppSub (HandlerT master IO) a
+checkWaiReqThen :: (WxppSub -> SubHandlerOf MaybeWxppSub master a)
+                -> SubHandlerOf MaybeWxppSub master a
 checkWaiReqThen f = withWxppSubHandler $ \foundation -> withWxppSubLogging foundation $ do
     b <- waiRequest >>= liftIO . (wxppSubTrustedWaiReq $ wxppSubOptions foundation)
     if b
@@ -552,20 +572,22 @@ checkWaiReqThen f = withWxppSubHandler $ \foundation -> withWxppSubLogging found
         else permissionDenied "denied by security check"
 
 
-mimicInvalidAppID :: HandlerT MaybeWxppSub (HandlerT master IO) a
+mimicInvalidAppID :: SubHandlerOf MaybeWxppSub master a
 mimicInvalidAppID = sendResponse $ toJSON $
                         WxppAppError
                             (WxppErrorX $ Right WxppInvalidAppID)
                             "invalid app id"
 
-mimicServerBusy :: Text -> HandlerT MaybeWxppSub (HandlerT master IO) a
+mimicServerBusy :: Text -> SubHandlerOf MaybeWxppSub master a
 mimicServerBusy s = sendResponse $ toJSON $
                         WxppAppError
                             (WxppErrorX $ Right WxppServerBusy)
                             s
 
-forwardWsResult :: (ToJSON a) =>
-    String -> Either WxppWsCallError a -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+forwardWsResult :: (ToJSON a)
+                => String
+                -> Either WxppWsCallError a
+                -> SubHandlerOf MaybeWxppSub master Value
 -- {{{1
 forwardWsResult op_name res = do
     case res of
@@ -584,7 +606,7 @@ forwardWsResult op_name res = do
 -- | 提供 access-token
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 AccessToken
-getGetAccessTokenR :: HandlerT MaybeWxppSub (HandlerT master IO) Value
+getGetAccessTokenR :: SubHandlerOf MaybeWxppSub master Value
 getGetAccessTokenR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
     liftM toJSON $ getAccessTokenSubHandler' foundation
@@ -593,7 +615,7 @@ getGetAccessTokenR = checkWaiReqThen $ \foundation -> do
 -- | 找 OpenID 对应的 UnionID
 -- 为重用代码，错误报文格式与微信平台接口一样
 -- 逻辑上的返回值是 Maybe WxppUnionID
-getGetUnionIDR :: WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+getGetUnionIDR :: WxppOpenID -> SubHandlerOf MaybeWxppSub master Value
 -- {{{1
 getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
@@ -605,14 +627,13 @@ getGetUnionIDR open_id = checkWaiReqThen $ \foundation -> do
             let app_id = getWxppAppID foundation
             let cache = wxppSubCacheBackend foundation
 
-            (tryWxppWsResult $ liftIO $ wxppCacheLookupUserInfo cache app_id open_id)
+            (liftIO $ tryWxppWsResult $ wxppCacheLookupUserInfo cache app_id open_id)
                 >>= forwardWsResult "wxppCacheLookupUserInfo"
 -- }}}1
 
 
 -- | 初始化 WxppUserCachedInfo 表的数据
-getInitCachedUsersR ::
-    HandlerT MaybeWxppSub (HandlerT master IO) Value
+getInitCachedUsersR :: SubHandlerOf MaybeWxppSub master Value
 -- {{{1
 getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
     alreadyExpired
@@ -629,7 +650,7 @@ getInitCachedUsersR = checkWaiReqThen $ \foundation -> do
 
 -- | 为客户端调用平台的 wxppQueryEndUserInfo 接口
 -- 逻辑返回值是 EndUserQueryResult
-getQueryUserInfoR :: WxppOpenID -> HandlerT MaybeWxppSub (HandlerT master IO) Value
+getQueryUserInfoR :: WxppOpenID -> SubHandlerOf MaybeWxppSub master Value
 -- {{{1
 getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
     alreadyExpired
@@ -640,8 +661,10 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
                 then endUserQueryResultSetUnionID (Just $ fakeUnionID open_id) <$> qres
                 else qres
 
-    tryWxppWsResult
-      (flip runReaderT (wxppSubApiEnv foundation) $ wxppQueryEndUserInfo atk open_id)
+    log_func <- askLoggerIO
+    liftIO (flip runLoggingT log_func $ tryWxppWsResult
+              (flip runReaderT (wxppSubApiEnv foundation) $ wxppQueryEndUserInfo atk open_id)
+           )
       >>= return . fix_uid
       >>= forwardWsResult "wxppQueryEndUserInfo"
 -- }}}1
@@ -650,7 +673,7 @@ getQueryUserInfoR open_id = checkWaiReqThen $ \foundation -> do
 -- | 模仿创建永久场景的二维码
 -- 行为接近微信平台的接口，区别是
 -- 输入仅仅是一个 WxppScene
-postCreateQrCodePersistR :: HandlerT MaybeWxppSub (HandlerT master IO) Value
+postCreateQrCodePersistR :: SubHandlerOf MaybeWxppSub master Value
 -- {{{1
 postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
     let api_env = wxppSubApiEnv foundation
@@ -659,8 +682,9 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
     let sm_mode = wxppSubFakeQRTicket $ wxppSubOptions foundation
     if sm_mode
         then do
-            qrcode_base_url <- withUrlRenderer $ \render ->
-                                    render ShowSimulatedQRCodeR []
+            to_parent <- getRouteToParent
+            render_url <- liftMonadHandlerToSub getUrlRender
+            let qrcode_base_url = render_url $ to_parent ShowSimulatedQRCodeR
 
             let fake_ticket = (scene, qrcode_base_url)
             return $ toJSON $ C8.unpack $ B64L.encode $ LB.toStrict $ A.encode fake_ticket
@@ -674,7 +698,7 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
 
 -- | 返回一个二维码图像
 -- 其内容是 WxppScene 用 JSON 格式表示之后的字节流
-getShowSimulatedQRCodeR :: HandlerT MaybeWxppSub (HandlerT master IO) TypedContent
+getShowSimulatedQRCodeR :: SubHandlerOf MaybeWxppSub master TypedContent
 -- {{{1
 getShowSimulatedQRCodeR = do
     ticket_s <- lookupGetParam "ticket"
@@ -699,9 +723,7 @@ getShowSimulatedQRCodeR = do
 
 
 -- | 返回与输入的 union id 匹配的所有 open id 及 相应的 app_id
-getLookupOpenIDByUnionIDR ::
-    WxppUnionID
-    -> HandlerT WxppSubNoApp (HandlerT master IO) Value
+getLookupOpenIDByUnionIDR :: WxppUnionID -> SubHandlerOf WxppSubNoApp master Value
 getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ \foundation -> do
     alreadyExpired
     liftM toJSON $ liftIO $ wxppSubNoAppUnionIdByOpenId foundation union_id
@@ -710,16 +732,19 @@ getLookupOpenIDByUnionIDR union_id = checkWaiReqThenNA $ \foundation -> do
 -- | 接收第三方平台的事件通知
 -- GET 方法用于echo检验
 -- POST 方法真正处理业务逻辑
-getTpEventNoticeR :: HandlerT WxppTpSub (HandlerT master IO) Text
-getTpEventNoticeR = withSiteLogFuncInHandlerT $ do
-  foundation <- getYesod
-  checkSignature foundation "signature" ""
-  runInputGet $ ireq textField "echostr"
+getTpEventNoticeR :: (RenderMessage master FormMessage) => SubHandlerOf WxppTpSub master Text
+getTpEventNoticeR = do
+  foundation <- getSubYesodCompat
+  withWxppSubLogging foundation $ do
+    checkSignature foundation "signature" ""
+    runInputGet $ ireq textField "echostr"
 
-postTpEventNoticeR :: Yesod master => HandlerT WxppTpSub (HandlerT master IO) Text
+
+postTpEventNoticeR :: (Yesod master, RenderMessage master FormMessage)
+                   => SubHandlerOf WxppTpSub master Text
 -- {{{1
 postTpEventNoticeR = do
-  foundation <- getYesod
+  foundation <- getSubYesodCompat
   req <- waiRequest
   lbs <- liftIO $ lazyRequestBody req
 
@@ -757,7 +782,7 @@ postTpEventNoticeR = do
       Left err -> do
           $(logErrorS) wxppLogSource $ fromString $
               "Cannot handle third-party event notice: " <> err
-          throwM $ HCError $
+          liftIO $ throwIO $ HCError $
               InternalError "Cannot handle third-party event notice"
 
       Right output -> do
@@ -773,53 +798,72 @@ postTpEventNoticeR = do
 -- | 第三方平台接收公众号消息与事件的端点入口
 -- GET 方法用于通讯检测
 -- POST 方法用于业务逻辑
-getTpMessageR :: WxppAppID -> HandlerT WxppTpSub (HandlerT master IO) Text
+getTpMessageR :: (RenderMessage master FormMessage)
+              => WxppAppID -> SubHandlerOf WxppTpSub master Text
 getTpMessageR _auther_app_id = do
-  foundation <- getYesod
+  foundation <- getSubYesodCompat
   checkSignature foundation "signature" ""
   runInputGet $ ireq textField "echostr"
 
-postTpMessageR :: WxppAppID -> HandlerT WxppTpSub (HandlerT master IO) Text
+
+postTpMessageR :: (RenderMessage master FormMessage)
+               => WxppAppID -> SubHandlerOf WxppTpSub master Text
 postTpMessageR auther_app_id = do
-  foundation <- getYesod
+  foundation <- getSubYesodCompat
   let comp_app_id = getWxppAppID foundation
 
   realHandlerMsg foundation (ProcAppThirdParty comp_app_id auther_app_id)
 
 
-instance Yesod master => YesodSubDispatch MaybeWxppSub (HandlerT master IO)
-    where
-        yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
+instance (Yesod master, RenderMessage master FormMessage) =>
+  YesodSubDispatch
+    MaybeWxppSub
+#if MIN_VERSION_yesod(1, 6, 0)
+    master
+#else
+    (HandlerOf master)
+#endif
+  where yesodSubDispatch = $(mkYesodSubDispatch resourcesMaybeWxppSub)
+
+instance
+  YesodSubDispatch
+      WxppSubNoApp
+#if MIN_VERSION_yesod(1, 6, 0)
+      master
+#else
+      (HandlerOf master)
+#endif
+  where yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppSubNoApp)
 
 
-instance YesodSubDispatch WxppSubNoApp (HandlerT master IO)
-    where
-        yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppSubNoApp)
-
-
-instance Yesod master => YesodSubDispatch WxppTpSub (HandlerT master IO)
-    where
-        yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppTpSub)
+instance (Yesod master, RenderMessage master FormMessage)
+  => YesodSubDispatch
+      WxppTpSub
+#if MIN_VERSION_yesod(1, 6, 0)
+      master
+#else
+      (HandlerOf master)
+#endif
+  where yesodSubDispatch = $(mkYesodSubDispatch resourcesWxppTpSub)
 
 --------------------------------------------------------------------------------
 
-checkWaiReqThenNA ::
-    (WxppSubNoApp -> HandlerT WxppSubNoApp (HandlerT master IO) a)
-    -> HandlerT WxppSubNoApp (HandlerT master IO) a
+checkWaiReqThenNA :: (WxppSubNoApp -> SubHandlerOf WxppSubNoApp master a)
+                  -> SubHandlerOf WxppSubNoApp master a
 checkWaiReqThenNA f = do
-    foundation <- getYesod
-    wxppSubNoAppRunLoggingT foundation $ LoggingT $ \log_func -> do
-        withLogFuncInHandlerT log_func $ do
+    foundation <- getSubYesodCompat
+    wxppSubNoAppRunLoggingT foundation $ LoggingT $ \ log_func -> do
+        withLogFuncInSubHandler log_func $ do
             b <- waiRequest >>= liftIO . wxppSubNoAppCheckWaiReq foundation
             if b
                 then f foundation
                 else permissionDenied "denied by security check"
 
-decodePostBodyAsYaml :: (FromJSON a) =>
-    HandlerT MaybeWxppSub (HandlerT master IO) a
+decodePostBodyAsYaml :: (FromJSON a)
+                     => SubHandlerOf MaybeWxppSub master a
 -- {{{1
 decodePostBodyAsYaml = do
-    body <- rawRequestBody $$ sinkLbs
+    body <- runConduit $ rawRequestBody .| sinkLbs
     case decodeEither' (LB.toStrict body) of
         Left err -> do
             $logErrorS wxppLogSource $ fromString $
@@ -831,8 +875,8 @@ decodePostBodyAsYaml = do
 -- }}}1
 
 
-getAccessTokenSubHandler' ::
-    WxppSub -> HandlerT MaybeWxppSub (HandlerT master IO) AccessToken
+getAccessTokenSubHandler' :: WxppSub
+                          -> SubHandlerOf MaybeWxppSub master AccessToken
 getAccessTokenSubHandler' foundation = do
     let cache = wxppSubCacheBackend foundation
     let app_id = getWxppAppID foundation
@@ -845,7 +889,7 @@ fakeUnionID (WxppOpenID x) = WxppUnionID $ "fu_" <> x
 
 
 -- | initialize db table: WxppUserCachedInfo
-initWxppUserDbCacheOfApp :: ( MonadIO m, MonadLogger m, MonadThrow m)
+initWxppUserDbCacheOfApp :: ( MonadIO m, MonadLogger m)
                          => WxppApiEnv
                          -> m AccessToken
                          -> ReaderT WxppDbBackend m Int
@@ -853,10 +897,11 @@ initWxppUserDbCacheOfApp :: ( MonadIO m, MonadLogger m, MonadThrow m)
 initWxppUserDbCacheOfApp api_env get_atk = do
     atk <- lift get_atk
     flip runReaderT api_env $ do
-      wxppGetEndUserSource' (lift $ lift get_atk)
-          =$= CL.concatMap wxppOpenIdListInGetUserResult
-          =$= save_to_db atk
-          $$ CC.length
+      runConduit $
+        wxppGetEndUserSource' (lift $ lift get_atk)
+          .| CL.concatMap wxppOpenIdListInGetUserResult
+          .| save_to_db atk
+          .| CC.length
     where
 
         save_to_db atk = awaitForever $ \open_id -> do
@@ -887,9 +932,8 @@ initWxppUserDbCacheOfApp api_env get_atk = do
 
 -- | 若当前会话未经过微信登录，则调用 yesodComeBackWithWxLogin
 --   否则从会话中取已登录的微信用户信息
-yesodMakeSureInWxLoggedIn :: ( MonadHandler m, Yesod (HandlerSite m)
+yesodMakeSureInWxLoggedIn :: ( MonadHandler m, MonadLoggerIO m
                              , RenderMessage (HandlerSite m) FormMessage
-                             , MonadLogger m, MonadCatch m
                              , HasWxppUrlConfig e, HasWreqSession e
                              , WxppCacheTemp c
                              )
@@ -920,9 +964,8 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
-yesodComeBackWithWxLogin :: ( MonadHandler m, Yesod (HandlerSite m)
+yesodComeBackWithWxLogin :: ( MonadHandler m, MonadLoggerIO m
                             , RenderMessage (HandlerSite m) FormMessage
-                            , MonadLogger m, MonadCatch m
                             , HasWxppUrlConfig e, HasWreqSession e
                             , WxppCacheTemp c
                             )
@@ -953,8 +996,10 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
                     throwError $ asString "no secret"
                   Just x -> return x
 
-      err_or_atk_info <- tryWxppWsResult $ flip runReaderT wx_api_env $
+      log_func <- askLoggerIO
+      err_or_atk_info <- liftIO $ flip runLoggingT log_func $ tryWxppWsResult $ flip runReaderT wx_api_env $
                           wxppOAuthGetAccessToken app_id secret code
+
       case err_or_atk_info of
         Left err -> do
           if fmap wxppToErrorCodeX (wxppCallWxError err) == Just (wxppToErrorCode WxppOAuthCodeHasBeenUsed)
@@ -974,9 +1019,8 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
-yesodComeBackWithWxLogin' :: ( MonadHandler m, Yesod (HandlerSite m)
+yesodComeBackWithWxLogin' :: ( MonadHandler m, MonadLoggerIO m
                             , RenderMessage (HandlerSite m) FormMessage
-                            , MonadLogger m, MonadCatch m
                             , HasWxppUrlConfig e, HasWreqSession e
                             , WxppCacheTemp c
                             )
@@ -1035,9 +1079,11 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
                   let oauth_atk_pkg = getOAuthAccessTokenPkg (app_id, oauth_atk_info)
                       lang = "zh_CN"
 
-                  oauth_user_info <- flip runReaderT wx_api_env $
+                  log_func <- askLoggerIO
+                  oauth_user_info <- mapExceptT (liftIO . flip runLoggingT log_func . flip runReaderT wx_api_env) $
                                         tryWxppWsResultE "wxppOAuthGetUserInfo" $
                                           wxppOAuthGetUserInfo lang oauth_atk_pkg
+
                   liftIO $ wxppCacheAddSnsUserInfo cache app_id lang oauth_user_info
                   return $ (open_id, Just oauth_user_info)
 
@@ -1046,7 +1092,7 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
 
       case err_or_wx_id of
         Left err      -> do $logErrorS wxppLogSource $ "WX api error: " <> fromString err
-                            throwM $ userError "微信接口错误，请稍后重试"
+                            liftIO $ throwIO $ userError "微信接口错误，请稍后重试"
 
         Right Nothing -> start_oauth is_client_wx
 

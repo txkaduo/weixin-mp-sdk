@@ -1,5 +1,6 @@
 module Main where
 
+-- {{{1
 import ClassyPrelude
 #if !MIN_VERSION_optparse_applicative(0, 13, 0)
     hiding ((<>))
@@ -16,7 +17,7 @@ import qualified Data.Text.IO               as T
 import qualified Data.Map.Lazy              as LM
 import Network.Mime                         (defaultMimeMap, MimeType)
 import qualified Network.Wreq.Session       as WS
-import System.IO                            (hFlush, openTempFile, readLn, hSeek, SeekMode(..))
+import System.IO                            (openTempFile, readLn, SeekMode(..))
 import System.Directory                     (getTemporaryDirectory, removeFile)
 import System.Process                       (callProcess)
 import System.Environment                   (lookupEnv)
@@ -29,6 +30,13 @@ import qualified Data.Conduit.List          as CL
 import System.Log.FastLogger                (pushLogStr, newStderrLoggerSet, LoggerSet)
 
 import WeiXin.PublicPlatform
+
+#if !MIN_VERSION_classy_prelude(1, 5, 0)
+import System.IO                            (hFlush, hSeek)
+#endif
+
+import qualified Control.Exception.Safe as ExcSafe
+-- }}}1
 
 data ManageCmd = QueryAutoReplyRules
                 | QueryOriginMenu
@@ -204,7 +212,7 @@ optionsParse = Options
                 <*> manageCmdParser
 
 
-start :: (MonadLogger m, MonadCatch m, MonadIO m)
+start :: (MonadLogger m, MonadIO m, ExcSafe.MonadCatch m)
       => Options
       -> WxppApiEnv
       -> m ()
@@ -216,7 +224,7 @@ start opts api_env = do
                 Nothing -> do
                     case m_app_secret of
                         Nothing -> do
-                            throwM $ userError "need either app secret or access token"
+                            liftIO $ throwIO $ userError "need either app secret or access token"
                         Just app_secret -> do
                             AccessTokenResp atk_p _ttl <- flip runReaderT api_env $
                                                             refreshAccessToken' app_id app_secret
@@ -315,20 +323,20 @@ start opts api_env = do
 
         ListAllDurableMedia mtype -> do
             atk <- get_atk
-            flip runReaderT api_env $ do
+            flip runReaderT api_env $ runConduit $ do
               wxppBatchGetDurableToSrc (wxppBatchGetDurableMedia atk mtype 20)
-                $= CL.map toJSON
-                $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
+                .| CL.map toJSON
+                .| CL.mapM_ (liftIO . B.putStr . Y.encode)
 
         GetAllDurableNews show_id_only -> do
             atk <- get_atk
-            flip runReaderT api_env $ do
+            flip runReaderT api_env $ runConduit $ do
               wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
-                $=  CL.map (if show_id_only
+                .|  CL.map (if show_id_only
                                 then toJSON . unWxppDurableMediaID . wxppBatchGetDurableNewsItemID
                                 else toJSON
                             )
-                $$ CL.mapM_ (liftIO . B.putStr . Y.encode)
+                .| CL.mapM_ (liftIO . B.putStr . Y.encode)
 
         SearchDurableNewsByTitle edit_mode keyword -> do
             atk <- get_atk
@@ -336,14 +344,14 @@ start opts api_env = do
                     let articles = wxppBatchGetDurableNewsItemContent item
                     in any (T.isInfixOf keyword . wxppDurableArticleTitle . wxppDurableArticleSA) articles
 
-            results <- flip runReaderT api_env $ do
+            results <- flip runReaderT api_env $ runConduit $ do
               wxppBatchGetDurableToSrc (wxppBatchGetDurableNews atk 20)
-                $= (awaitForever $ \x -> do
+                .| (awaitForever $ \x -> do
                         liftIO $ putStr "." >> hFlush stdout
                         yield x
                 )
-                $= CL.filter has_keyword
-                $$ CL.consume
+                .| CL.filter has_keyword
+                .| CL.consume
 
             if edit_mode
                 then do
@@ -375,10 +383,10 @@ editNewsDurable :: (WxppApiMonad env m) =>
 editNewsDurable atk mid articles = do
     let go bs = do
             bs' <- liftIO $ editWithEditor bs
-            case Y.decodeEither bs' of
+            case Y.decodeEither' bs' of
                 Left err -> do
                     answer <- liftIO $ do
-                        putStrLn $ fromString err
+                        putStrLn $ tshow err
                         putStr "try again?"
                         hFlush stdout
                         T.getLine

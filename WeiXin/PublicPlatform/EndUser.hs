@@ -21,6 +21,7 @@ module WeiXin.PublicPlatform.EndUser
     , wxppBatchSetUserGroup
     ) where
 
+-- {{{1 imports
 import ClassyPrelude hiding ((\\))
 import Network.Wreq hiding (Proxy)
 import qualified Network.Wreq.Session       as WS
@@ -30,16 +31,20 @@ import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
 import qualified Data.Aeson.Extra           as AE
-import Data.Conduit                         (Source, Conduit, yield, (=$))
 import qualified Data.Conduit.List          as CL
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import Data.List                            ((\\))
 import Data.Proxy
 
+import Data.Conduit
+
 import Yesod.Helpers.Utils                  (nullToNothing)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
+
+import Yesod.Compat
+-- }}}1
 
 
 -- | 调用服务器接口，查询用户基础信息
@@ -88,11 +93,11 @@ wxppBatchQueryEndUserInfoMaxNum = 100
 
 
 wxppBatchQueryEndUserInfoConduit :: (WxppApiMonad env m)
-                                => AccessToken
-                                -> Conduit WxppOpenID m (Map WxppOpenID EndUserQueryResult)
+                                 => AccessToken
+                                 -> ConduitC WxppOpenID m (Map WxppOpenID EndUserQueryResult)
 wxppBatchQueryEndUserInfoConduit atk = go
   where go = do
-          part_res <- CL.isolate wxppBatchQueryEndUserInfoMaxNum =$ do
+          part_res <- CL.isolate wxppBatchQueryEndUserInfoMaxNum .| do
             CL.consume >>= wxppBatchQueryEndUserInfo atk
 
           if null part_res
@@ -131,7 +136,7 @@ wxppOpenIdListInGetUserResult (GetUserResult _ _ x _) = x
 wxppGetEndUserSource' :: (WxppApiMonad env m)
                      => m AccessToken
                      -- ^ 我们要反复取用 access token,　而且不确定用多长时间
-                     -> Source m GetUserResult
+                     -> SourceC m GetUserResult
 wxppGetEndUserSource' get_atk = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
 
@@ -157,7 +162,7 @@ wxppGetEndUserSource' get_atk = do
 {-# DEPRECATED  wxppGetEndUserSource "use wxppGetEndUserSource' instead" #-}
 wxppGetEndUserSource :: (WxppApiMonad env m)
                      => AccessToken
-                     -> Source m GetUserResult
+                     -> SourceC m GetUserResult
 wxppGetEndUserSource = wxppGetEndUserSource' . return
 
 
@@ -352,7 +357,7 @@ wxppCreateUserGroup (AccessToken { accessTokenData = atk }) name = do
         $logErrorS wxppLogSource $ "creating user group but get different name: "
                     <> "expecting " <> name
                     <> ", but got " <> name'
-        throwM $ userError "unexpected group name returned"
+        liftIO $ throwIO $ userError "unexpected group name returned"
     return grp_id
 
 

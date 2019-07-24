@@ -7,6 +7,8 @@ import           Data.Char           (chr, isDigit)
 import           Network.Wai         (requestHeaders)
 
 import           Yesod.Helpers.JSend
+
+import           Yesod.Compat
 -- }}}1
 
 -- | 小工具: 显示一个页面，提示用户须在微信内打开当前页面
@@ -80,7 +82,7 @@ promptReqOpenInWx = do
 -- }}}1
 
 
-promptReqOpenInWxTC :: Yesod site => HandlerT site IO TypedContent
+promptReqOpenInWxTC :: Yesod site => HandlerOf site TypedContent
 -- {{{1
 promptReqOpenInWxTC = do
   selectRep $ do
@@ -97,7 +99,7 @@ promptReqOpenInWxTC = do
 
 
 -- | shortcircuited if not opened in WX
-forceReqOpenInWxTC :: Yesod site => HandlerT site IO ()
+forceReqOpenInWxTC :: Yesod site => HandlerOf site ()
 -- {{{1
 forceReqOpenInWxTC = do
   is_client_wx <- isJust <$> handlerGetWeixinClientVersion

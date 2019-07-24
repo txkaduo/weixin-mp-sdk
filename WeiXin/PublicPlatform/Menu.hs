@@ -3,7 +3,9 @@
 {-#LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Menu where
 
+-- {{{1 imports
 import ClassyPrelude
+import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
@@ -24,6 +26,10 @@ import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+import Control.Concurrent (threadDelay)
+#endif
+-- }}}1
 
 -- | result in query menu
 data MenuDef = MenuDef [MenuItem]
@@ -98,7 +104,7 @@ wxppDeleteMenu (AccessToken { accessTokenData = atk }) = do
 
 
 -- | 根据指定 YAML 文件配置调用远程接口，修改菜单
-wxppCreateMenuWithYaml :: (WxppApiMonad env m, MonadCatch m)
+wxppCreateMenuWithYaml :: (WxppApiMonad env m, ExcSafe.MonadCatch m)
                        => AccessToken
                        -> NonEmpty FilePath
                        -> FilePath
@@ -112,7 +118,7 @@ wxppCreateMenuWithYaml access_token data_dirs fp = runExceptT $ do
                 "Failed to parse menu yml: " <> fromString (show err)
             throwE $ "Failed to parse yml: " <> show err
         Right menu  -> do
-            err_or <- tryWxppWsResult $
+            err_or <- lift $ tryWxppWsResult $
                             if null menu
                                 then wxppDeleteMenu access_token
                                 else wxppCreateMenu access_token menu
@@ -134,7 +140,7 @@ liftBaseOpDiscard f g = liftBaseWith $ \runInBase -> f $ void . runInBase . g
 
 -- | 不断地监护菜单配置文件变化，自动修改微信的菜单
 -- 不返回，直至 block_until_exit 参数的计算完成
-wxppWatchMenuYaml :: (WxppApiMonad env m, MonadMask m, MonadBaseControl IO m)
+wxppWatchMenuYaml :: (WxppApiMonad env m, ExcSafe.MonadMask m, MonadBaseControl IO m)
                   => m (Maybe AccessToken)
                   -> IO ()        -- ^ bloack until exit
                   -> NonEmpty FilePath
@@ -144,7 +150,7 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
     -- 主动加载一次菜单配置
     load
 
-    bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
+    ExcSafe.bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
         fp' <- liftM catMaybes $ forM (toList fp) $ \p -> do
             err_or <- liftIO $ tryIOError $ canonicalizePath p
             case err_or of
@@ -230,7 +236,7 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
 
 
 -- | like wxppWatchMenuYaml, but watch for many weixin app all at once
-wxppWatchMenuYamlOnSignal :: forall env m. (WxppApiMonad env m, MonadMask m, MonadBaseControl IO m)
+wxppWatchMenuYamlOnSignal :: forall env m. (WxppApiMonad env m, ExcSafe.MonadMask m, MonadBaseControl IO m)
                           => IO ()        -- ^ bloack until exit
                           -> FilePath
                           -> (WxppAppID -> IO (Maybe AccessToken))
@@ -300,7 +306,7 @@ wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event
                         WxppSignalRemoveApp app_id -> remove_app app_id
                     loop mgr
 
-    bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
+    ExcSafe.bracket (liftIO $ FN.startManagerConf watch_cfg) (liftIO . FN.stopManager) $ \mgr -> do
         loop mgr
 
     where

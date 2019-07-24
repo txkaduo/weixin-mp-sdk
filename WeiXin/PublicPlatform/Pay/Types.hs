@@ -157,7 +157,7 @@ newtype WxPayMoneyAmount = WxPayMoneyAmount { unWxPayMoneyAmount :: Int }
 
 
 -- | 从单位是元的数字转成 WxPayMoneyAmount
-wxPayMoneyAmountFromYuanEither :: (Show a, Num a, RealFrac a, IsString s)
+wxPayMoneyAmountFromYuanEither :: (Show a, RealFrac a, IsString s)
                                => a
                                -> Either s WxPayMoneyAmount
 wxPayMoneyAmountFromYuanEither y =
@@ -170,7 +170,7 @@ wxPayMoneyAmountFromYuanEither y =
     fen = y * fromIntegral (100 :: Int)
     fen_int = round fen
 
-wxPayMoneyAmountFromYuan :: (Show a, Num a, RealFrac a)
+wxPayMoneyAmountFromYuan :: (Show a, RealFrac a)
                          => a
                          -> WxPayMoneyAmount
 wxPayMoneyAmountFromYuan y =

@@ -1,10 +1,11 @@
 module WeiXin.PublicPlatform.Conversation.Message where
 
-import ClassyPrelude hiding (catchIOError)
+-- {{{1 imports
+import ClassyPrelude
+import qualified Control.Exception.Safe as ExcSafe
 import Language.Haskell.TH
 import Control.Monad.Logger
 import Control.Monad.Except
-import Control.Monad.Catch                  (catchIOError)
 import Data.List.NonEmpty                   as LNE hiding (insert)
 
 import WeiXin.PublicPlatform.Conversation
@@ -12,9 +13,10 @@ import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
+-- }}}1
 
 
-type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, MonadCatch m)
+type LoadMsgMonad m = (MonadIO m, MonadLoggerIO m, ExcSafe.MonadCatch m)
 
 type LoadMsgEnv r = ( HasWxppOutMsgDir r
                     , HasSomeWxppCacheBackend r
@@ -83,7 +85,7 @@ loadTalkMessageTH :: FilePath -> FilePath -> Q Exp
 loadTalkMessageTH default_msgs_dir sub_path = do
                         fallback_v <- runIO $ loadTalkMsgHelper default_msgs_dir sub_path
                         [| \env -> loadTalkMessage_IOE env sub_path
-                                        `catchIOError`
+                                        `ExcSafe.catch`
                                             \ err -> do
                                                 unless (isDoesNotExistError err) $ do
                                                     $logErrorS wxppLogSource $ fromString $
@@ -96,7 +98,7 @@ loadTalkMessageTH' :: FilePath -> FilePath -> Q Exp
 loadTalkMessageTH' default_msgs_dir sub_path = do
                         fallback_v <- runIO $ loadTalkMsgHelper default_msgs_dir sub_path
                         [| \env -> loadTalkMessage_IOE' env sub_path
-                                        `catchIOError`
+                                        `ExcSafe.catch`
                                             \ err -> do
                                                 unless (isDoesNotExistError err) $ do
                                                     $logErrorS wxppLogSource $ fromString $

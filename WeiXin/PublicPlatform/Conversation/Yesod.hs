@@ -4,6 +4,7 @@ module WeiXin.PublicPlatform.Conversation.Yesod where
 
 -- {{{1 imports
 import ClassyPrelude.Yesod hiding (Proxy, proxy)
+import qualified Control.Exception.Safe as ExcSafe
 import Data.Proxy
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Text                  as T
@@ -23,6 +24,8 @@ import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Media
+
+import Yesod.Compat
 -- }}}1
 
 
@@ -66,7 +69,7 @@ abortCurrentWxppTalkState common_env lookup_se initiator app_id open_id = do
 -- }}}1
 
 
-wxppExecTalkAbortForRecord :: (MonadLogger m, MonadIO m)
+wxppExecTalkAbortForRecord :: (MonadLogger m)
                            => r
                            -> (Text -> Maybe (WxppTalkerAbortStateEntry r m))
                            -- ^ lookup WxppTalkerAbortStateEntry by state's type string
@@ -219,7 +222,8 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
     -- 为保证下面的 SQL 不会从一个太大集合中查找
     let too_old = flip addUTCTime now $ negate $ chk_ttl
 
-    infos <- selectSource
+    infos <- runConduit $
+              selectSource
                 [ WxppTalkStateDone       ==. False
                 , WxppTalkStateAborted    ==. False
                 , WxppTalkStateAppId      ==. app_id
@@ -227,8 +231,8 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
                 , WxppTalkStateUpdatedTime >. too_old
                 ]
                 []
-                $= CL.map (id &&& (wxppTalkStateOpenId . entityVal))
-                $$ CL.consume
+                .| CL.map (id &&& (wxppTalkStateOpenId . entityVal))
+                .| CL.consume
 
     -- 一次性用一个 SQL 更新
     updateWhere
@@ -302,7 +306,7 @@ instance JsonConfigable (WxppTalkHandlerGeneral r m) where
 
 type instance WxppInMsgProcessResult (WxppTalkHandlerGeneral r m) = WxppInMsgHandlerResult
 
-instance (MonadBaseControl IO m, WxppApiMonad env m) =>
+instance (WxppApiMonad env m, RunSqlMonad m) =>
     IsWxppInMsgProcessor m (WxppTalkHandlerGeneral r m)
     where
     processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache app_info _bs ime =
@@ -372,7 +376,7 @@ instance
     , WxTalkerState (r, r2) (ReaderT WxppDbBackend m) s
     , WxTalkerFreshState (r, r2) (ReaderT WxppDbBackend m) s
     , r2 ~ WxppTalkStateExtraEnv s
-    , MonadBaseControl IO m, MonadIO m, MonadLogger m
+    , MonadIO m, MonadLogger m, RunSqlMonad m
     ) =>
     IsWxppInMsgProcessor m (WxppTalkInitiator r s)
     where
@@ -436,7 +440,7 @@ type instance WxppInMsgProcessResult (WxppTalkEvtKeyInitiator r m) = WxppInMsgHa
 
 instance
     ( HasWxppAppID r
-    , MonadBaseControl IO m, MonadIO m, MonadLogger m
+    , RunSqlMonad m, MonadIO m, MonadLogger m
     ) =>
     IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
     where
@@ -516,7 +520,7 @@ instance JsonConfigable (WxppTalkTerminator r m) where
 
 type instance WxppInMsgProcessResult (WxppTalkTerminator r m) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadBaseControl IO m, MonadCatch m) =>
+instance (WxppApiMonad env m, RunSqlMonad m, ExcSafe.MonadCatch m) =>
   IsWxppInMsgProcessor m (WxppTalkTerminator r m) where
     processInMsg (WxppTalkTerminator msg_dirs db_runner common_env entries get_outmsg) cache app_info _bs ime =
 -- {{{1

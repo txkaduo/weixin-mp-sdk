@@ -21,6 +21,8 @@ import Data.Aeson.TH                        (deriveJSON, defaultOptions)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.InMsgHandler
+
+import Yesod.Compat
 -- }}}1
 
 class TalkerState a where
@@ -46,14 +48,14 @@ instance TalkerState SomeTalkerState where
 talkerRun :: (Monad m, TalkerState a) =>
     (m a)
     -> (a -> m ())
-    -> Conduit Text m Text
+    -> ConduitC Text m Text
 talkerRun = talkerRun' False
 
 talkerRun' :: (Monad m, TalkerState a) =>
     Bool
     -> (m a)
     -> (a -> m ())
-    -> Conduit Text m Text
+    -> ConduitC Text m Text
 talkerRun' skip_first_prompt get_state put_state =
     if skip_first_prompt
         then chk_wait_and_go
@@ -92,7 +94,7 @@ talkerRun' skip_first_prompt get_state put_state =
 
 
 talkerStateRunner :: (Monad m, TalkerState a) =>
-    Conduit Text (StateT a m) Text
+    ConduitC Text (StateT a m) Text
 talkerStateRunner = talkerRun get put
 
 
@@ -112,7 +114,7 @@ conversationInputOneStep get_st set_st m_input = do
                         Nothing -> return ()
                         Just x -> yield x
     let cond = talkerRun' (isJust m_input) get_st set_st
-    send_intput =$= cond $$ CL.consume
+    runConduit $ send_intput .| cond .| CL.consume
 
 
 type WxTalkerMonad r m = ReaderT r (ExceptT String m)
@@ -185,7 +187,7 @@ wxTalkerRun :: (Monad m, Eq a, WxTalkerState r m a)
             => Bool
             -> (WxTalkerMonad r m (Maybe a))
             -> (a -> WxTalkerMonad r m ())
-            -> Conduit WxppInMsgEntity (WxTalkerMonad r m) (Maybe WxppOutMsg)
+            -> ConduitC WxppInMsgEntity (WxTalkerMonad r m) (Maybe WxppOutMsg)
 -- {{{1
 wxTalkerRun skip_first_prompt get_state put_state =
     if skip_first_prompt
@@ -243,7 +245,7 @@ wxTalkerInputOneStep :: (Monad m, WxTalkerState r m s, Eq s) =>
         -- ^ 状态机的输出文字
 -- {{{1
 wxTalkerInputOneStep get_st set_st env m_input = flip runWxTalkerMonad env $ do
-    send_intput =$= cond $$ CL.consume
+    runConduit $ send_intput .| cond .| CL.consume
     where
         send_intput = case m_input of
                         Nothing -> return ()

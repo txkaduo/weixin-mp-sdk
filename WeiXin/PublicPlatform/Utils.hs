@@ -7,6 +7,7 @@ module  WeiXin.PublicPlatform.Utils
   ) where
 
 import ClassyPrelude
+import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.QRCode                as QR   -- haskell-qrencode
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString            as B
@@ -31,9 +32,6 @@ import Data.Aeson.Types                     (Parser)
 import Data.Aeson
 import Data.Yaml                            (ParseException, prettyPrintParseException)
 import qualified Data.Yaml                  as Yaml
-#if !MIN_VERSION_classy_prelude(1, 0, 0)
-import Control.Monad.Catch                  ( Handler(..) )
-#endif
 import Data.List.NonEmpty                   as LNE hiding (length, (!!), filter)
 import Numeric                              (readDec, readFloat)
 
@@ -127,7 +125,7 @@ mkDelayedYamlLoader fp = do
             Left first_err  -> do
                 let is_does_not_exist_err (Left ioe) = isDoesNotExistError ioe
                     is_does_not_exist_err (Right _)  = False
-                let go []       last_err    = either throwM (return . Left) last_err
+                let go []       last_err    = either (liftIO . throwIO) (return . Left) last_err
                     go (x:xs)   last_err    = do
                         try_dir x
                             >>= either
@@ -166,7 +164,7 @@ runDelayedYamlLoaderExcL :: (MonadIO m) =>
     -> m a
 runDelayedYamlLoaderExcL base_dir_list get_ext = liftIO $
     runReaderT get_ext base_dir_list
-        >>= either throwM return
+        >>= either (liftIO . throwIO) return
 
 runDelayedYamlLoaderExc :: (MonadIO m) =>
     FilePath    -- ^ 消息文件存放目录
@@ -198,7 +196,7 @@ mkDelayedCachedYamlLoader :: ( FromJSON a, CachedYamlInfoState s)
 mkDelayedCachedYamlLoader fp base_dir_list = do
   full_path <- liftIO (findFirstMatchedFile base_dir_list fp)
                 >>= maybe
-                    (throwM $ mkIOError doesNotExistErrorType "mkDelayedCachedYamlLoader" Nothing (Just fp))
+                    (liftIO $ throwIO $ mkIOError doesNotExistErrorType "mkDelayedCachedYamlLoader" Nothing (Just fp))
                     return
 
   bs <- liftIO $ B.readFile full_path
@@ -211,12 +209,12 @@ mkDelayedCachedYamlLoader fp base_dir_list = do
             return jv
 
           _ -> do
-            new_jv <- either (throwM . YamlFileParseException full_path) return $ Y.decodeEither' bs
+            new_jv <- either (liftIO . throwIO . YamlFileParseException full_path) return $ Y.decodeEither' bs
             st SV.$~! (HM.insert full_path (md5sum, new_jv))
             return new_jv
 
   case A.fromJSON jv of
-    A.Error err -> throwM $ YamlFileParseException full_path (Y.AesonException err)
+    A.Error err -> liftIO $ throwIO $ YamlFileParseException full_path (Y.AesonException err)
     A.Success x -> return x
 
 
@@ -246,11 +244,11 @@ parseMsgErrorToString (Left err)    = Left $ "failed to parse from file: " ++ sh
 parseMsgErrorToString (Right x)     = Right x
 
 unifyExcHandler :: (Show e, Monad m)
-                => Handler m (Either e a)
-                -> Handler m (Either String a)
+                => ExcSafe.Handler m (Either e a)
+                -> ExcSafe.Handler m (Either String a)
 unifyExcHandler =
 #if MIN_VERSION_classy_prelude(1, 0, 0)
-  \(Handler f) -> Handler $ fmap (either (Left . show) Right) . f
+  \ (ExcSafe.Handler f) -> ExcSafe.Handler $ fmap (either (Left . show) Right) . f
 #else
   fmap $ either (Left . show) Right
 #endif
@@ -325,7 +323,7 @@ loadWreqResponseContentAndMime :: (MonadIO m)
                                 -> m FileContentAndMime
 loadWreqResponseContentAndMime h = liftIO $ do
     lbs <- LB.hGetContents h
-    either (const $ throwM $ userError "cannot decode file as FileContentAndMime") return $ S.decodeLazy lbs
+    either (const $ throwIO $ userError "cannot decode file as FileContentAndMime") return $ S.decodeLazy lbs
 
 
 simpleParseDec :: (Eq a, Num a) => String -> Maybe a

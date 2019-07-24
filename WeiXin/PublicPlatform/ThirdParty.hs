@@ -7,6 +7,7 @@ module WeiXin.PublicPlatform.ThirdParty
   , module WeiXin.PublicPlatform.ThirdParty
   ) where
 
+-- {{{1 imports
 import           ClassyPrelude
 import           Control.Arrow         (left)
 import           Control.DeepSeq       (NFData)
@@ -16,7 +17,6 @@ import           Control.Monad.Except
 import           Control.Monad.Reader  (asks)
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
-import           Data.Conduit          (Source)
 import           Data.Int              (Int8)
 import           Data.Proxy            (Proxy (..))
 import           Data.Time             (NominalDiffTime, addUTCTime)
@@ -27,13 +27,16 @@ import           Text.Blaze.Html       (ToMarkup (..))
 import           Text.Shakespeare.I18N (ToMessage (..))
 import           Text.XML.Cursor
 
-import           Yesod.Core            (MonadBaseControl, MonadResource)
+import           Control.Monad.Trans.Resource
 import           Yesod.Helpers.Utils   (queryTextSetParam, urlUpdateQueryText)
 
 import           WeiXin.PublicPlatform.Class
 import           WeiXin.PublicPlatform.Utils
 import           WeiXin.PublicPlatform.WS
 import           WeiXin.PublicPlatform.XmlUtils
+
+import Yesod.Compat
+-- }}}1
 
 
 -- | component_verify_ticket
@@ -584,13 +587,7 @@ instance FromJSON AuthorizationPack where
 -- }}}1
 
 -- | 调用远程接口:授权公众号帐号基本信息
-wxppTpGetAuthorizationInfo :: ( WxppApiMonad env m
-#if MIN_VERSION_classy_prelude(1, 0, 0)
-                              , MonadMask m
-#else
-                              , MonadCatch m
-#endif
-                              )
+wxppTpGetAuthorizationInfo :: ( WxppApiMonad env m, MaskExceptionMonad m)
                            => WxppTpAccessToken
                            -> WxppAppID
                            -> m AuthorizationPack
@@ -782,9 +779,9 @@ class WxppTpTokenReader a where
                                  -> IO (Maybe WxppTpAuthorizerTokens)
 
   -- | 取第三方平台相关的所有已保存的授权方令牌
-  wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, MonadBaseControl IO m)
+  wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, RunSqlMonad m)
                                     => a
-                                    -> Source m ( WxppAppID   -- our app id: component app id
+                                    -> SourceC m ( WxppAppID   -- our app id: component app id
                                                 , WxppTpAuthorizerTokens
                                                 )
 
@@ -821,7 +818,7 @@ wxppTpTokenGetComponentAccessTokenE x comp_app_id = do
       return atk
 
 
-wxppTpTokenGetComponentAccessToken' :: (MonadError e m, MonadIO m, IsString e, WxppTpTokenReader a)
+wxppTpTokenGetComponentAccessToken' :: (MonadError e m, MonadIO m, WxppTpTokenReader a)
                                     => a
                                     -> WxppAppID
                                     -> m (Maybe WxppTpAccessToken)
@@ -933,7 +930,7 @@ wxppTpRefreshComponentAccessTokenIfNeeded cache dt app_id secret = do
     m_ticket <- liftIO $ wxppTpTokenGetVeriyTicket cache app_id
     case m_ticket of
       Nothing -> do
-        throwM $ userError $ "no component ticket available for app: "
+        liftIO $ throwIO $ userError $ "no component ticket available for app: "
                               <> unpack (unWxppAppID app_id)
 
       Just ticket -> do

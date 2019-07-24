@@ -5,14 +5,15 @@
 {-# LANGUAGE UndecidableInstances #-}
 module WeiXin.PublicPlatform.InMsgHandler where
 
-import ClassyPrelude hiding (catch)
+-- {{{1 imports
+import ClassyPrelude
+import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq hiding (Proxy)
 import Control.Lens hiding ((<.>), op)
 import Data.Proxy
 import Control.DeepSeq                      (($!!))
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
-import Control.Monad.Catch                  ( catchAll )
 import Control.Monad.Trans.Maybe
 import qualified Data.Text                  as T
 import qualified Data.ByteString.Lazy       as LB
@@ -26,7 +27,6 @@ import Data.Time                            (NominalDiffTime)
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
 import Text.Regex.TDFA.TDFA                 ( examineDFA)
 import Text.Regex.TDFA.String               (compile, execute)
-import Control.Monad.Catch                  (catch)
 import System.Directory                     (canonicalizePath)
 import System.FilePath                      (splitDirectories)
 
@@ -38,7 +38,7 @@ import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Media
 import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.Utils
-
+-- }}}1
 
 
 -- | 对收到的消息处理的函数
@@ -376,9 +376,9 @@ onErrorProcessInMsgByMiddlewares xs app_info bs ime err =
   forM_ xs $ \(SomeWxppInMsgProcMiddleware x) -> onProcInMsgError x app_info bs ime err
 
 
-tryYamlExcE :: MonadCatch m => ExceptT String m b -> ExceptT String m b
+tryYamlExcE :: ExcSafe.MonadCatch m => ExceptT String m b -> ExceptT String m b
 tryYamlExcE f =
-    f `catch` (\e -> throwE $ show (e :: ParseException))
+    f `ExcSafe.catch` (\ e -> throwE $ show (e :: ParseException))
 
 parseWxppOutMsgLoader :: Object -> Parser WxppOutMsgLoader
 parseWxppOutMsgLoader obj = do
@@ -416,7 +416,7 @@ instance JsonConfigable WelcomeSubscribe where
 
 type instance WxppInMsgProcessResult WelcomeSubscribe = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WelcomeSubscribe
     where
 
@@ -427,8 +427,8 @@ instance (WxppApiMonad env m, MonadCatch m) =>
                     _                                                   -> return False
         if is_subs
             then do
-                let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
-                                    wxppCacheGetAccessToken cache app_id)
+                let get_atk = (tryWxppWsResultE "getting access token" $
+                                    liftIO $ wxppCacheGetAccessToken cache app_id)
                                 >>= maybe (throwE $ "no access token available") (return . fst)
                 outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs get_outmsg
                 liftM (return . (primary,) . Just) $ tryWxppWsResultE "fromWxppOutMsgL" $
@@ -454,7 +454,7 @@ instance JsonConfigable WxppInMsgMenuItemClickSendMsg where
 
 type instance WxppInMsgProcessResult WxppInMsgMenuItemClickSendMsg = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgMenuItemClickSendMsg
     where
 
@@ -469,8 +469,8 @@ instance (WxppApiMonad env m, MonadCatch m) =>
         case m_fp of
             Nothing -> return []
             Just fp' -> do
-                let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
-                                    wxppCacheGetAccessToken cache app_id)
+                let get_atk = (tryWxppWsResultE "getting access token" $
+                                    liftIO $ wxppCacheGetAccessToken cache app_id)
                                 >>= maybe (throwE $ "no access token available") (return . fst)
                 let fp = setExtIfNotExist "yml" $ T.unpack fp'
                 outmsg <- ExceptT $ runDelayedYamlLoaderL msg_dirs $ mkDelayedYamlLoader fp
@@ -551,7 +551,7 @@ instance JsonConfigable WxppInMsgSendAsRequested where
 
 type instance WxppInMsgProcessResult WxppInMsgSendAsRequested = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgSendAsRequested
     where
 
@@ -597,7 +597,7 @@ instance JsonConfigable WxppInMsgShowWxppID where
 
 type instance WxppInMsgProcessResult WxppInMsgShowWxppID = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgShowWxppID
     where
 
@@ -640,7 +640,7 @@ instance JsonConfigable WxppInMsgForwardAsJson where
 
 type instance WxppInMsgProcessResult WxppInMsgForwardAsJson = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardAsJson
     where
 
@@ -654,9 +654,10 @@ instance (WxppApiMonad env m, MonadCatch m) =>
                     wxppCachedQueryEndUserInfo cache ttl atk open_id
         let fwd_env = WxppForwardedEnv qres atk
         let fwd_msg = (ime, fwd_env)
-        (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
-                >>= liftM (view responseBody) . asJSON)
-                `catchAll` handle_exc
+        (r, m_exp) <- (liftIO $
+                        (postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
+                        >>= liftM (view responseBody) . asJSON
+                      ) `ExcSafe.catchAny` handle_exc
 
         -- 对方返回会话的过期时间如果是 Nothing，代表会话结束
         case m_exp of
@@ -695,7 +696,7 @@ instance JsonConfigable WxppInMsgForwardDyn where
 
 type instance WxppInMsgProcessResult WxppInMsgForwardDyn = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardDyn
     where
 
@@ -733,7 +734,7 @@ instance JsonConfigable WxppInMsgForwardScene where
 
 type instance WxppInMsgProcessResult WxppInMsgForwardScene = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m WxppInMsgForwardScene
     where
 
@@ -751,9 +752,9 @@ instance (WxppApiMonad env m, MonadCatch m) =>
                             wxppCachedQueryEndUserInfo cache ttl atk open_id
                 let fwd_env = WxppForwardedEnv qres atk
                 let fwd_msg = ((scene, ticket), fwd_env)
-                (r, m_exp) <- ((liftIO $ postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
+                (r, m_exp) <- (liftIO $ (postWith opts (T.unpack $ unUrlText url) $ toJSON fwd_msg)
                                 >>= liftM (view responseBody) . asJSON)
-                                `catchAll` handle_exc
+                                `ExcSafe.catchAny` handle_exc
 
                 -- 对方返回会话的过期时间如果是 Nothing，代表会话结束
                 case m_exp of
@@ -1102,7 +1103,7 @@ instance JsonConfigable ConstResponse where
 
 type instance WxppInMsgProcessResult ConstResponse = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, MonadCatch m) =>
+instance (WxppApiMonad env m, ExcSafe.MonadCatch m) =>
     IsWxppInMsgProcessor m ConstResponse
     where
 
@@ -1213,7 +1214,7 @@ instance IsWxppInMsgProcessor m (WxppInMsgProcessorFunc m h) where
 -- | 用于解释 SomeWxppInMsgHandler 的类型信息
 -- 结果中不包含 WxppInMsgParseScanCodePush, WxppInMsgParseScanCodeWaitMsg
 -- 因为不想传入太多不相关的参数
-allBasicWxppInMsgHandlerPrototypes :: ( WxppApiMonad env m, MonadCatch m )
+allBasicWxppInMsgHandlerPrototypes :: ( WxppApiMonad env m, ExcSafe.MonadCatch m )
                                    => NonEmpty FilePath
                                    -> MVar ForwardUrlMap
                                    -> [WxppInMsgHandlerPrototype m]

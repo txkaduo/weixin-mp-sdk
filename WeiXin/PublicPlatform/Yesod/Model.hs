@@ -2,6 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module WeiXin.PublicPlatform.Yesod.Model where
 
+-- {{{1
 import ClassyPrelude.Yesod
 import qualified Data.Conduit.List          as CL
 import qualified Data.ByteString.Lazy       as LB
@@ -11,11 +12,13 @@ import Database.Persist.Sql                 (Migration)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
-
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.Message        (wxppInMsgEntityFromLbs)
 import WeiXin.PublicPlatform.ThirdParty
+
+import Yesod.Compat
+-- }}}1
 
 
 wxppSubModelsDefBasic ::
@@ -48,7 +51,7 @@ type WxppDbBackend = PersistEntityBackend WxppInMsgRecord
 
 newtype WxppDbRunner = WxppDbRunner {
                                 runWxppDB ::
-                                    forall a m. (MonadIO m, MonadBaseControl IO m) =>
+                                    forall a m. (MonadIO m, RunSqlMonad m) =>
                                         ReaderT WxppDbBackend m a -> m a
                                 }
 
@@ -238,15 +241,16 @@ instance WxppCacheTemp WxppDbRunner where
 
     wxppCacheGetOAuthAccessToken (WxppDbRunner run_db) app_id open_id req_scopes = do
         now <- liftIO getCurrentTime
-        runResourceT $ run_db $ do
-            selectSource
+        runResourceT $ run_db $
+            runConduit $
+              selectSource
                     [ WxppCachedOAuthTokenApp ==. app_id
                     , WxppCachedOAuthTokenOpenId ==. open_id
                     , WxppCachedOAuthTokenExpiryTime >. now
                     ]
                     [ Desc WxppCachedOAuthTokenId ]
-                =$= check_scopes
-                $$ CL.head
+                .| check_scopes
+                .| CL.head
         where
             check_scopes = awaitForever $ \(Entity rec_id rec) -> do
                 has_scopes <- lift $
@@ -347,11 +351,10 @@ wxppSourceInMsgEntityFromHistory :: ( MonadResource m
                                     )
                                  => [Filter WxppInMsgRecord]
                                  -> [SelectOpt WxppInMsgRecord]
-                                 -> Source m (Either String (UTCTime, (Maybe WxppAppID, WxppInMsgEntity)))
+                                 -> SourceC m (Either String (UTCTime, (Maybe WxppAppID, WxppInMsgEntity)))
 
 wxppSourceInMsgEntityFromHistory filters opts = do
-  selectSource filters opts
-    =$= CL.map parse_ime
+  selectSource filters opts .| CL.map parse_ime
   where
     parse_ime (Entity _ rec) = do
       ime <- wxppInMsgEntityFromLbs $ LB.fromStrict $ wxppInMsgRecordBlob rec

@@ -1,7 +1,7 @@
 module WeiXin.PublicPlatform.JS where
 
 -- {{{1 imports
-import ClassyPrelude hiding (catch)
+import ClassyPrelude
 import qualified Crypto.Hash.SHA1           as SHA1
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Base16     as B16

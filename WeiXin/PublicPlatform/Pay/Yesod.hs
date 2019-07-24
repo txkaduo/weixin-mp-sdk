@@ -1,9 +1,11 @@
 {-# LANGUAGE CPP #-}
 module WeiXin.PublicPlatform.Pay.Yesod where
 
+-- {{{1 imports
 import ClassyPrelude.Yesod
 
 import           Control.Monad.Except
+import           Control.Monad.Logger
 import           Data.Conduit.Binary  (sinkLbs)
 import           Text.XML             (renderText)
 import           Yesod.Helpers.Utils    (randomString)
@@ -12,15 +14,12 @@ import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Pay.Types
 import WeiXin.PublicPlatform.Pay.Function
 
+import Yesod.Compat as YC
+-- }}}1
+
 
 -- | 用于实现主动通知接口
-yesodHandleWxUserPayNotify :: (MonadHandler m, MonadLogger m
-#if MIN_VERSION_classy_prelude(1, 0, 0)
-                              , MonadCatch m
-#else
-                              , MonadBaseControl IO m
-#endif
-                              )
+yesodHandleWxUserPayNotify :: (MonadLoggerIO m, MonadHandler m, MonadHandlerCatch m)
                            => WxPayAppKey
                            -> ( WxppAppID
                                  -> WxPayMchID
@@ -28,10 +27,11 @@ yesodHandleWxUserPayNotify :: (MonadHandler m, MonadLogger m
                                  -> m ()
                               )
                            -> m RepXml
-yesodHandleWxUserPayNotify app_key handle_notify = do
 -- {{{1
-  lbs <- rawRequestBody $$ sinkLbs
-  let parse_params = runExceptT $ do
+yesodHandleWxUserPayNotify app_key handle_notify = do
+  lbs <- runConduit $ rawRequestBody .| sinkLbs
+  log_func <- askLoggerIO
+  let parse_params = liftIO $ flip runLoggingT log_func $ runExceptT $ do
         input_params <- ExceptT $ wxPayParseInputXmlLbs (Just app_key) lbs
 
         app_id <- fmap WxppAppID $
@@ -75,7 +75,7 @@ yesodHandleWxUserPayNotify app_key handle_notify = do
                ]
 
     Right ((app_id, mch_id), pay_stat) -> do
-      err_or2 <- tryAny $ handle_notify app_id mch_id pay_stat
+      err_or2 <- YC.tryAny $ handle_notify app_id mch_id pay_stat
       case err_or2 of
         Left err -> do
           $logErrorS wxppLogSource $ "Pay notification: failed to handle: " <> tshow err

@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module WeiXin.PublicPlatform.Conversation.Misc where
 
+-- {{{1 imports
 import ClassyPrelude
 import Data.Proxy
 import qualified Data.Text                  as T
@@ -16,6 +17,7 @@ import WeiXin.PublicPlatform.Conversation.TextParser
 import WeiXin.PublicPlatform.Conversation.Message
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
+-- }}}1
 
 
 data CommonTalkEnv = CommonTalkEnv

@@ -8,10 +8,11 @@ module WeiXin.PublicPlatform.Yesod.Site.Function
     , module WeiXin.PublicPlatform.Yesod.Site.Data
     )where
 
--- {{{1
+-- {{{1 imports
 import ClassyPrelude
 import Yesod
 import Control.Lens
+import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
@@ -31,6 +32,8 @@ import WeiXin.PublicPlatform.EndUser
 import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Model
+
+import Yesod.Compat
 -- }}}1
 
 
@@ -56,19 +59,16 @@ instance JsonConfigable (StoreInMsgToDB m) where
     parseWithExtraData _ (x,y) _obj = return $ StoreInMsgToDB x y
 
 
-instance (MonadIO m, MonadLogger m
-    , MonadBaseControl IO m
-    ) => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
-
+instance (MonadIO m, MonadLogger m)
+  => IsWxppInMsgProcessor m (StoreInMsgToDB m) where
     processInMsg (StoreInMsgToDB {}) _cache _app_info _bs _ime = do
         $logWarnS wxppLogSource $
             "StoreInMsgToDB now do nothing when used as incoming message handler"
         return $ Right []
 
 
-instance (MonadIO m, MonadLogger m
-    , MonadBaseControl IO m
-    ) => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
+instance (MonadIO m, MonadLogger m, RunSqlMonad m)
+  => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
     preProcInMsg (StoreInMsgToDB db_runner media_downloader) _cache app_info bs ime = runMaybeT $ do
         now <- liftIO getCurrentTime
         (msg_record_id, (is_video, mids)) <- mapMaybeT (runWxppDB db_runner) $ do
@@ -140,11 +140,7 @@ instance JsonConfigable CacheAppOpenIdToUnionId where
     parseWithExtraData _ x _obj = return $ CacheAppOpenIdToUnionId x
 
 
-instance (MonadIO m
-    , MonadLogger m
-    , MonadBaseControl IO m
-    ) => IsWxppInMsgProcessor m CacheAppOpenIdToUnionId where
-
+instance (MonadIO m , MonadLogger m) => IsWxppInMsgProcessor m CacheAppOpenIdToUnionId where
     processInMsg (CacheAppOpenIdToUnionId {}) _cache _app_info _bs _ime = runExceptT $ do
         $logWarnS wxppLogSource $
             "CacheAppOpenIdToUnionId now do nothing when used as incoming message handler"
@@ -152,9 +148,8 @@ instance (MonadIO m
 
 
 instance (WxppApiMonad env m
-    , MonadCatch m
+    , ExcSafe.MonadCatch m
     , Functor m
-    , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m CacheAppOpenIdToUnionId where
 
     preProcInMsg (CacheAppOpenIdToUnionId db_runner) cache app_info bs ime = do
@@ -177,7 +172,7 @@ instance (WxppApiMonad env m
                 let m_uid = endUserQueryResultUnionID qres
                 now <- liftIO getCurrentTime
 
-                lift $ runWxppDB db_runner $ do
+                liftIO $ runWxppDB db_runner $ do
                     void $ insertOrUpdate
                         (WxppUserCachedInfo app_id open_id m_uid now)
                         [ WxppUserCachedInfoUnionId =. m_uid
@@ -221,7 +216,6 @@ instance JsonConfigable TrackHandledInMsg where
 
 instance (MonadIO m
     , MonadLogger m
-    , MonadBaseControl IO m
     ) => IsWxppInMsgProcMiddleware m TrackHandledInMsg where
 
     preProcInMsg (TrackHandledInMsg _ map_mar) _cache app_info bs ime = do
@@ -321,8 +315,9 @@ trackHandleInMsgSaveResult slow_threshold app_id map_mvar ime m_err = do
 -- | 下载多媒体文件，保存至数据库
 downloadSaveMediaToDB ::
     ( MonadLogger m
-    , MonadCatch m
+    , RunSqlMonad m
     , MonadIO m
+    , ExcSafe.MonadCatch m
 #if MIN_VERSION_persistent(2, 0, 0)
     , PersistUnique backend
     , backend ~ PersistEntityBackend WxppStoredMedia
@@ -369,7 +364,7 @@ downloadSaveMediaToDB api_env if_ssl atk msg_id media_id = do
 wxppUserLatestActiveTime :: (MonadIO m, MonadResource m) =>
     UTCTime         -- ^ 只检查过去一段时间内的消息历史
     -> WxppAppID
-    -> Source (ReaderT WxppDbBackend m) (WxppOpenID, UTCTime)
+    -> SourceC (ReaderT WxppDbBackend m) (WxppOpenID, UTCTime)
 -- {{{1
 wxppUserLatestActiveTime start_time app_id = do
     open_id_fn <- lift $ getFieldName WxppInMsgRecordFrom
@@ -387,16 +382,16 @@ wxppUserLatestActiveTime start_time app_id = do
                     <> created_time_fn <> ">= ?"
                     <> " GROUP BY " <> open_id_fn
     rawQuery query [ toPersistValue app_id, toPersistValue start_time]
-        $= CL.mapM (\x -> case x of
+        .| CL.mapM (\x -> case x of
                         [v1, v2]    -> return $
                                             (,) <$> fromPersistValue v1
                                                 <*> fromPersistValue v2
 
-                        _       -> throwM $ PersistMarshalError $
+                        _       -> liftIO $ throwIO $ PersistMarshalError $
                                             "Expecting 2 columns, but got "
                                                 <> (fromString $ show $ length x)
                     )
-        =$= CL.mapM (either (throwM . PersistMarshalError) return)
+        .| CL.mapM (either (liftIO . throwIO . PersistMarshalError) return)
 -- }}}1
 
 -- vim: set foldmethod=marker:

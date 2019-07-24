@@ -4,7 +4,9 @@ module WeiXin.PublicPlatform.Material
     , module WeiXin.PublicPlatform.Class
     ) where
 
-import ClassyPrelude hiding (catch)
+-- {{{1 imports
+import ClassyPrelude
+import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
@@ -17,7 +19,6 @@ import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.CaseInsensitive       as CI
 import qualified Data.Text                  as T
-import Control.Monad.Catch                  (catch)
 import Network.Mime                         (MimeType)
 -- import Data.Yaml                            (ParseException)
 import Data.Conduit
@@ -29,6 +30,9 @@ import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Utils
+
+import Yesod.Compat
+-- }}}1
 
 -- | 查询永久素材中的图文消息中的文章，出现在从服务器返回的数据中
 -- 与 WxppDurableArticle 几乎一样，区别只是
@@ -161,7 +165,7 @@ wxppUploadDurableMediaNonVideo :: (WxppApiMonad env m)
 wxppUploadDurableMediaNonVideo atk mtype fp = do
     case mtype of
         WxppMediaTypeVideo ->
-            throwM $ userError
+            liftIO $ throwIO $ userError
                 "wxppUploadDurableMediaNonVideo cannot be used to upload video."
         _   -> return ()
     wxppUploadDurableMediaInternal atk mtype Nothing fp
@@ -177,7 +181,7 @@ wxppUploadDurableMediaNonVideoLBS :: (WxppApiMonad env m)
 wxppUploadDurableMediaNonVideoLBS atk mtype fp lbs = do
     case mtype of
         WxppMediaTypeVideo ->
-            throwM $ userError
+            liftIO $ throwIO $ userError
                 "wxppUploadDurableMediaNonVideo cannot be used to upload video."
         _   -> return ()
     wxppUploadDurableMediaInternalLBS atk mtype Nothing
@@ -218,7 +222,7 @@ instance FromJSON WxppGetDurableResult where
 
 
 -- | 获取永久素材
-wxppGetDurableMedia :: (WxppApiMonad env m, MonadCatch m)
+wxppGetDurableMedia :: (WxppApiMonad env m, ExcSafe.MonadCatch m)
                     => AccessToken
                     -> WxppDurableMediaID
                     -> m WxppGetDurableResult
@@ -229,7 +233,7 @@ wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID 
 
     r <- liftIO $ WS.postWith opts sess url $ object [ "media_id" .= mid ]
     asWxppWsResponseNormal' r
-        `catch`
+        `ExcSafe.catch`
         (\(_ :: JSONError) -> do
             let resp_headers = r ^. responseHeaders
             $logDebugS wxppLogSource $ T.append "get_material api response headers:\n" $
@@ -248,24 +252,24 @@ wxppGetDurableMedia (AccessToken { accessTokenData = atk }) (WxppDurableMediaID 
                         (r ^. responseBody)
             )
 
-wxppGetDurableMediaMaybe :: (WxppApiMonad env m, MonadCatch m)
+wxppGetDurableMediaMaybe :: (WxppApiMonad env m, ExcSafe.MonadCatch m)
                          => AccessToken
                          -> WxppDurableMediaID
                          -> m (Maybe WxppGetDurableResult)
 wxppGetDurableMediaMaybe atk mid = do
     (liftM Just $ wxppGetDurableMedia atk mid)
-        `catch` \e -> do
+        `ExcSafe.catch` \e -> do
             case e of
                 WxppAppError xerr _
                     | wxppToErrorCodeX xerr == wxppToErrorCode WxppInvalidMediaId
                         -> return Nothing
-                _ -> throwM e
+                _ -> liftIO $ throwIO e
 
 
 -- | 组合了 wxppUploadDurableNews 与 wxppGetDurableMedia
 -- 把 WxppDurableNews 保存至素材库后，再取出来，从而知道每个图文的URL
 -- 再生成一个 WxppOutMsg
-wxppUploadDurableNewsThenMakeOutMsg :: (WxppApiMonad env m, MonadCatch m)
+wxppUploadDurableNewsThenMakeOutMsg :: (WxppApiMonad env m, ExcSafe.MonadCatch m)
                                     => AccessToken
                                     -> [(WxppDurableArticle, Maybe UrlText)]
                                     -> m (WxppDurableMediaID, WxppOutMsg)
@@ -281,7 +285,7 @@ wxppUploadDurableNewsThenMakeOutMsg atk article_and_url = do
                                 wxppMakeArticleByDurableArticleS m_pic_url article_s
 
         _ -> do
-            throwM $ userError $
+            liftIO $ throwIO $ userError $
                 "wxppGetDurableMedia return unexpected result, should be a WxppGetDurableNews"
                 <> ", but got " <> show get_result
 
@@ -435,7 +439,7 @@ wxppBatchGetDurableToSrc' :: (WxppApiMonad env m)
                           => (Int
                                  -> m (WxppBatchGetDurableResult a)
                              )   -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
-                          -> Source m (WxppBatchGetDurableResult a)
+                          -> SourceC m (WxppBatchGetDurableResult a)
 wxppBatchGetDurableToSrc' get_by_offset = go 0
     where
         go offset = do
@@ -452,9 +456,9 @@ wxppBatchGetDurableToSrc :: (WxppApiMonad env m)
                          => (Int
                               -> m (WxppBatchGetDurableResult a)
                          )    -- ^ 这个函数可以从前面的函数应用上部分参数后得到, Int 参数是 offset
-                         -> Source m a
+                         -> SourceC m a
 wxppBatchGetDurableToSrc get_by_offset =
-    wxppBatchGetDurableToSrc' get_by_offset =$ CL.concatMap wxppBatchGetDurableResultItems
+    wxppBatchGetDurableToSrc' get_by_offset .| CL.concatMap wxppBatchGetDurableResultItems
 
 -- | 修改一个图文类型的永久素材: 只能修改其中一个文章
 wxppReplaceArticleOfDurableNews :: (WxppApiMonad env m)

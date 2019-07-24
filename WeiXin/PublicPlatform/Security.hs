@@ -3,7 +3,9 @@ module WeiXin.PublicPlatform.Security
     , module WeiXin.PublicPlatform.Types
     ) where
 
+-- {{{1 imports
 import ClassyPrelude
+import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens
@@ -33,7 +35,7 @@ import qualified Data.Attoparsec.ByteString as AttoB
 import WeiXin.PublicPlatform.Types
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
-
+-- }}}1
 
 wxppSignature :: Token -> TimeStampS -> Nonce -> Text -> ByteString
 wxppSignature (Token token) (TimeStampS tt) (Nonce nn) msg =
@@ -76,7 +78,8 @@ refreshAccessToken' app_id app_secret = do
     return atk
 
 
-wxppAcquireAndSaveAccessToken :: (WxppApiMonad env m, MonadCatch m
+wxppAcquireAndSaveAccessToken :: (WxppApiMonad env m
+                                 , ExcSafe.MonadCatch m
                                  , WxppCacheTokenUpdater c)
                               => c
                               -> WxppAppID

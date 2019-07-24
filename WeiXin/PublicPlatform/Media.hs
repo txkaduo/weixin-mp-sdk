@@ -6,12 +6,8 @@ module WeiXin.PublicPlatform.Media
     ) where
 
 -- {{{1 imports
-#if MIN_VERSION_classy_prelude(1, 0, 0)
 import ClassyPrelude
-#else
-import ClassyPrelude hiding (catch)
-#endif
-
+import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.Text                  as T
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
@@ -20,9 +16,6 @@ import Control.Monad.Logger
 import Control.Monad.Reader                 (asks)
 import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
-#if !MIN_VERSION_classy_prelude(1, 0, 0)
-import Control.Monad.Catch                  (catch, catches, Handler(..))
-#endif
 import Data.Yaml                            (ParseException)
 import Data.List.NonEmpty                   as LNE
 import Data.Aeson                           (FromJSON(..), withObject, (.:), Value)
@@ -68,7 +61,7 @@ instance FromJSON DownloadMediaJsResult where
 
 
 -- | 下载一个多媒体文件
-wxppDownloadMedia :: ( WxppApiMonad env m, MonadCatch m )
+wxppDownloadMedia :: ( WxppApiMonad env m, ExcSafe.MonadCatch m )
                   => Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
                   -> AccessToken
                   -> WxppBriefMediaID
@@ -88,14 +81,14 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
     -- 但 content-type 的内容严格地说不是一个简单的字串比较就了事的
     -- rb ^. responseHeader "Content-Type"
     -- 这里使用的方法是先测试一下当作错误报告的 json 解释，不行就认为是正常返回
-    let as_json = liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb
+    let as_json = liftIO $ liftM (view responseBody) $ asJSON $ alterContentTypeToJson rb
         handle_json = \ (jv :: Value) -> do
           -- 至此，说明报文真的是个json，而且不是错误报文
           case A.fromJSON jv of
             A.Error _ -> do
               $logErrorS wxppLogSource $ "cannot parse download media respnose: "
                                           <> toStrict (decodeUtf8 (encodePretty jv))
-              throwM $ userError "cannot parse download media respnose."
+              liftIO $ throwIO $ userError "cannot parse download media respnose."
 
             A.Success js_res -> do
               case js_res of
@@ -103,8 +96,8 @@ wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
                   $logDebugS wxppLogSource $ "Download video media from: " <> down_url
                   liftIO $ WS.get sess (unpack url)
 
-    (as_json >>= either throwM handle_json . unWxppWsResp)
-                `catch`
+    (as_json >>= either (liftIO . throwIO) handle_json . unWxppWsResp)
+                `ExcSafe.catch`
                     (\(_ :: JSONError) -> return rb)
 -- }}}1
 
@@ -335,7 +328,7 @@ fromWxppOutMsgL _ _       _   WxppOutMsgTransferToCustomerServiceL =
 -- }}}1
 
 
-fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTemp c)
+fromWxppOutMsgL' :: (WxppApiMonad env m, ExcSafe.MonadCatch m, WxppCacheTemp c)
                  => NonEmpty FilePath
                  -> c
                  -> m AccessToken
@@ -343,8 +336,8 @@ fromWxppOutMsgL' :: (WxppApiMonad env m, MonadCatch m, WxppCacheTemp c)
                  -> m (Either String WxppOutMsg)
 -- {{{1
 fromWxppOutMsgL' fp cache get_atk out_msg_l =
-    (liftM Right $ fromWxppOutMsgL fp cache get_atk out_msg_l) `catches`
-        (Handler h_yaml_exc : fmap unifyExcHandler wxppWsExcHandlers)
+    (liftM Right $ fromWxppOutMsgL fp cache get_atk out_msg_l) `ExcSafe.catches`
+        (ExcSafe.Handler h_yaml_exc : fmap unifyExcHandler wxppWsExcHandlers)
     where
         h_yaml_exc e = return $ Left $ show (e :: ParseException)
 -- }}}1

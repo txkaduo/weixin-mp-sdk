@@ -4,6 +4,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module WeiXin.PublicPlatform.Yesod.Site.Data where
 
+-- {{{1 imports
 import ClassyPrelude
 import qualified Data.ByteString.Lazy as LB
 import Yesod
@@ -20,6 +21,9 @@ import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.ThirdParty
 import WeiXin.PublicPlatform.Yesod.Types
 import WeiXin.PublicPlatform.Yesod.Model
+
+import Yesod.Compat
+-- }}}1
 
 
 
@@ -171,7 +175,8 @@ data WxppTpSub = WxppTpSub
   -- ^ 处理公众号消息事件的逻辑
   , wxppTpSubHandlerEventNotice :: forall master. Yesod master
                                 => WxppTpEventNotice
-                                -> HandlerT WxppTpSub (HandlerT master IO) (Either String Text)
+                                -> SubHandlerOf WxppTpSub master (Either String Text)
+
   -- ^ 处理第三方平台事件通知的逻辑
   }
 

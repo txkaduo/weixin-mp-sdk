@@ -3,20 +3,14 @@
 module WeiXin.PublicPlatform.WS where
 
 -- {{{1 imports
-import ClassyPrelude hiding (catch, onException)
+import ClassyPrelude
 import Network.Wreq
 import Control.Monad.Except
 import Control.Monad.Logger
 import Control.Lens hiding ((.=))
 import qualified Data.ByteString.Lazy       as LB
+import qualified Control.Exception.Safe     as ExcSafe
 
-#if MIN_VERSION_classy_prelude(1, 0, 0)
-import ClassyPrelude                        (onException)
-#else
-import Control.Monad.Catch                  ( Handler(..), catches, onException )
-#endif
-
---import Control.Monad.Trans.Control          (MonadBaseControl)
 
 import Network.HTTP.Client                  (HttpException(..))
 import qualified Network.Wreq.Session       as WS
@@ -32,6 +26,8 @@ import qualified Data.Aeson.Encode.Pretty as AP
 
 import WeiXin.PublicPlatform.Error
 import WeiXin.PublicPlatform.Types
+
+import Yesod.Compat
 -- }}}1
 
 
@@ -71,7 +67,7 @@ instance HasWxppApiEnv WxppApiEnv where
   getWxppApiEnv = id
 
 
-type WxppApiMonad r m = ( MonadIO m, MonadLogger m, MonadThrow m
+type WxppApiMonad r m = ( MonadIO m, MonadLogger m
                         , MonadReader r m
                         , HasWreqSession r
                         , HasWxppUrlConfig r
@@ -160,25 +156,31 @@ wxppCallWxError (WxppWsErrorApp (WxppAppError err _msg)) = Just err
 wxppCallWxError _ = Nothing
 
 
-wxppWsExcHandlers :: Monad m => [Handler m (Either WxppWsCallError a)]
-wxppWsExcHandlers = [ Handler h1, Handler h2, Handler h3 ]
+wxppWsExcHandlers :: Monad m => [ExcSafe.Handler m (Either WxppWsCallError a)]
+wxppWsExcHandlers = [ ExcSafe.Handler h1, ExcSafe.Handler h2, ExcSafe.Handler h3 ]
     where
         h1 = return . Left . WxppWsErrorHttp
         h2 = return . Left . WxppWsErrorJson
         h3 = return . Left . WxppWsErrorApp
 
-tryWxppWsResult :: MonadCatch m =>
-    m a -> m (Either WxppWsCallError a)
-tryWxppWsResult f = liftM Right f `catches` wxppWsExcHandlers
+tryWxppWsResult :: ExcSafe.MonadCatch m => m a -> m (Either WxppWsCallError a)
+tryWxppWsResult f = liftM Right f `ExcSafe.catches` wxppWsExcHandlers
 
-tryWxppWsResultE :: (MonadCatch m, MonadError e m, IsString e) =>
-    String -> m b -> m b
+
+tryWxppWsResultE :: (ExcSafe.MonadCatch m, IsString e)
+                 => String -> ExceptT e m b -> ExceptT e m b
 tryWxppWsResultE op_name f =
+-- Because there is no instance MonadUnliftIO (ExceptT e m)
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+  lift (tryWxppWsResult $ runExceptT f)
+    >>= either (\e -> throwError $ fromString $ "Got Exception when " <> op_name <> ": " <> show e) return
+    >>= either throwError return
+#else
     tryWxppWsResult f
         >>= either (\e -> throwError $ fromString $ "Got Exception when " <> op_name <> ": " <> show e) return
+#endif
 
-
-asWxppWsResponseJson :: (MonadThrow m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m a
+asWxppWsResponseJson :: (MonadIO m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m a
 asWxppWsResponseJson r = do
   -- workaround:
   -- 平台返回JSON报文时，并不会把 Content-Type 设为 JSON，而是 text/plain
@@ -190,31 +192,30 @@ asWxppWsResponseJson r = do
     Left err -> do
       $logErrorS wxppLogSource $ "Response body cannot be converted to json: " <> fromString err
         <> ", content was:\n" <> toStrict (decodeUtf8 body)
-      throwM $ JSONError err
+      liftIO $ throwIO $ JSONError err
 
     Right jv -> do
       case A.fromJSON jv of
         A.Error err -> do
           $logErrorS wxppLogSource $ "Response body cannot be converted to expected json structure: " <> fromString err
             <> ", content was:\n" <> toStrict (decodeUtf8 $ AP.encodePretty jv)
-          throwM $ JSONError err
+          liftIO $ throwIO $ JSONError err
         A.Success x -> return x
 
 
-asWxppWsResponseNormal :: (MonadThrow m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m (WxppWsResp a)
+asWxppWsResponseNormal :: (MonadIO m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m (WxppWsResp a)
 asWxppWsResponseNormal = asWxppWsResponseJson
 
-asWxppWsResponseNormal2 :: (MonadThrow m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m (WxppWsResp2 a)
+asWxppWsResponseNormal2 :: (MonadIO m, MonadLogger m, FromJSON a) => Response LB.ByteString -> m (WxppWsResp2 a)
 asWxppWsResponseNormal2 = asWxppWsResponseJson
 
 
-asWxppWsResponseVoid :: (MonadThrow m) =>
-    Response LB.ByteString -> m ()
+asWxppWsResponseVoid :: (MonadIO m) => Response LB.ByteString -> m ()
 asWxppWsResponseVoid r = do
     err_resp@(WxppAppError err _msg) <-
-        liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
+        liftIO $ liftM (view responseBody) $ asJSON (alterContentTypeToJson r)
     when ( err /= WxppErrorX (Right WxppNoError) ) $ do
-        throwM err_resp
+        liftIO $ throwIO err_resp
 
 alterContentTypeToJson :: Response body -> Response body
 alterContentTypeToJson r =
@@ -224,19 +225,17 @@ alterContentTypeToJson r =
 
 -- | 解释远程调用的结果，返回正常的值，异常情况会抛出
 -- 抛出的异常主要类型就是 WxppWsCallError 列出的情况
-asWxppWsResponseNormal' :: (MonadThrow m, MonadLogger m, FromJSON a)
+asWxppWsResponseNormal' :: (MonadIO m, MonadLogger m, FromJSON a)
                         => Response LB.ByteString
                         -> m a
 asWxppWsResponseNormal' =
-    asWxppWsResponseNormal >=> either throwM return . unWxppWsResp
+    asWxppWsResponseNormal >=> either (liftIO . throwIO) return . unWxppWsResp
 
 
 -- | Like asWxppWsResponseNormal', but log responseBody when got exception
-asWxppWsResponseNormal'L :: ( MonadThrow m, FromJSON a, MonadLogger m
-                            , MonadCatch m
-#if MIN_VERSION_classy_prelude(1, 0, 0)
-                            , MonadMask m
-#endif
+asWxppWsResponseNormal'L :: ( FromJSON a, MonadLogger m
+                            , MaskExceptionMonad m
+                            , MonadIO m
                             )
                          => Response LB.ByteString
                          -> m a
@@ -247,11 +246,12 @@ asWxppWsResponseNormal'L resp = do
   asWxppWsResponseNormal' resp `onException` report
 
 
-asWxppWsResponseNormal2' :: (MonadThrow m, MonadLogger m, FromJSON a) =>
-    Response LB.ByteString -> m (Text, a)
+asWxppWsResponseNormal2' :: (MonadIO m, MonadLogger m, FromJSON a)
+                         => Response LB.ByteString
+                         -> m (Text, a)
 asWxppWsResponseNormal2' =
     asWxppWsResponseNormal2
-        >=> either throwM return . unWxppWsResp2
+        >=> either (liftIO . throwIO) return . unWxppWsResp2
 
 
 -- vim: set foldmethod=marker:
