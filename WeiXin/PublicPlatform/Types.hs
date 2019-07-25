@@ -564,7 +564,7 @@ instance FromJSON WxppAppConf where
                     secret <- fmap WxppAppSecret $ obj .: "secret"
                     app_token <- fmap Token $ obj .: "token"
                     aes_key_lst <- obj .: "aes-key"
-                                    >>= return . filter (not . T.null) . map T.strip
+                                    >>= return . filter (not . T.null) . map (T.strip . fromMaybe "")
                                     >>= mapM parseAesKeyFromText
                     let (ak1, backup_aks) =
                                 case aes_key_lst of
