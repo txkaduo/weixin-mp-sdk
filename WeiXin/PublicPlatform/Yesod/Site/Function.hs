@@ -14,6 +14,7 @@ import Yesod
 import Control.Lens
 import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq
+import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Control.DeepSeq                      (($!!))
@@ -67,11 +68,12 @@ instance (MonadIO m, MonadLogger m)
         return $ Right []
 
 
-instance (MonadIO m, MonadLogger m, RunSqlMonad m)
+instance (MonadIO m, MonadLoggerIO m)
   => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
     preProcInMsg (StoreInMsgToDB db_runner media_downloader) _cache app_info bs ime = runMaybeT $ do
         now <- liftIO getCurrentTime
-        (msg_record_id, (is_video, mids)) <- mapMaybeT (runWxppDB db_runner) $ do
+        log_func <- askLoggerIO
+        (msg_record_id, (is_video, mids)) <- mapMaybeT (liftIO . flip runLoggingT log_func . runWxppDB db_runner) $ do
             let m_to        = Just $ wxppInToUserName ime
                 m_from      = Just $ wxppInFromUserName ime
                 m_ctime     = Just $ wxppInCreatedTime ime
@@ -316,7 +318,6 @@ trackHandleInMsgSaveResult slow_threshold app_id map_mvar ime m_err = do
 downloadSaveMediaToDB ::
     ( MonadLogger m
     , RunSqlMonad m
-    , MonadIO m
     , ExcSafe.MonadCatch m
 #if MIN_VERSION_persistent(2, 0, 0)
     , PersistUnique backend

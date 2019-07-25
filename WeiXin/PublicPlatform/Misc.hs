@@ -334,7 +334,7 @@ mkWxppTpSub foundation my_app_id my_app_token my_app_aes_keys processor handle_t
     handle_tp_evt
 
 
-defaultInMsgProcMiddlewares :: forall env m. (WxppApiMonad env m, RunSqlMonad m, ExcSafe.MonadCatch m)
+defaultInMsgProcMiddlewares :: forall env m. (WxppApiMonad env m, ExcSafe.MonadCatch m, MonadLoggerIO m)
                             => WxppDbRunner
                             -> (Bool -> WxppInMsgRecordId -> WxppBriefMediaID -> IO ())
                             -> MVar TrackHandledInMsgInnerMap
