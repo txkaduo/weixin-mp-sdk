@@ -5,6 +5,7 @@ module WeiXin.PublicPlatform.Conversation.Yesod where
 -- {{{1 imports
 import ClassyPrelude.Yesod hiding (Proxy, proxy)
 import qualified Control.Exception.Safe as ExcSafe
+import Control.Monad.Logger
 import Data.Proxy
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Text                  as T
@@ -24,21 +25,21 @@ import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.WS
 import WeiXin.PublicPlatform.Utils
 import WeiXin.PublicPlatform.Media
-
-import Yesod.Compat
 -- }}}1
 
 
-saveWxppTalkState :: forall m a r.
-    ( MonadIO m, ToJSON a, WxTalkerState r (ReaderT SqlBackend m) a) =>
-    (a -> Text)
-    -> WxppTalkStateId
-    -> a
-    -> WxTalkerMonad r (ReaderT SqlBackend m) ()
-saveWxppTalkState get_state_type state_id x = mkWxTalkerMonad $ \env -> runExceptT $ do
+saveWxppTalkState :: forall m a r. ( MonadLoggerIO m, ToJSON a, WxTalkerState r m a)
+                  => WxppDbRunner
+                  -> (a -> Text)
+                  -> WxppTalkStateId
+                  -> a
+                  -> WxTalkerMonad r m ()
+saveWxppTalkState db_runner get_state_type state_id x = mkWxTalkerMonad $ \env -> runExceptT $ do
     now <- liftIO getCurrentTime
     done <- ExceptT $ flip runWxTalkerMonad env $ wxTalkIfDone x
-    lift $ update state_id
+    log_func <- askLoggerIO
+    liftIO $ flip runLoggingT log_func $ runWxppDB db_runner $ do
+      update state_id
             [ WxppTalkStateTyp          =. get_state_type x
             , WxppTalkStateJson         =. (LB.toStrict $ A.encode x)
             , WxppTalkStateDone         =. done
@@ -46,23 +47,25 @@ saveWxppTalkState get_state_type state_id x = mkWxTalkerMonad $ \env -> runExcep
             ]
 
 
-abortCurrentWxppTalkState :: forall m r.  (MonadIO m, MonadLogger m)
-                          => r
+abortCurrentWxppTalkState :: forall m r.  (MonadLoggerIO m)
+                          => WxppDbRunner
+                          -> r
                           -> (Text -> Maybe (WxppTalkerAbortStateEntry r m))
                           -- ^ lookup WxppTalkerAbortStateEntry by state's type string
                           -> WxTalkAbortInitiator
                           -> WxppAppID
                           -> WxppOpenID
-                          -> ReaderT SqlBackend m (Maybe [WxppOutMsg])
+                          -> m (Maybe [WxppOutMsg])
 -- {{{1
-abortCurrentWxppTalkState common_env lookup_se initiator app_id open_id = do
-  m_rec <- loadWxppTalkStateCurrent app_id open_id
+abortCurrentWxppTalkState db_runner common_env lookup_se initiator app_id open_id = do
+  log_func <- askLoggerIO
+  m_rec <- liftIO $ flip runLoggingT log_func $ runWxppDB db_runner $ loadWxppTalkStateCurrent app_id open_id
 
   fmap join $ forM m_rec $ \ e_rec@(Entity rec_id rec) -> do
     if not $ wxppTalkStateAborted rec || wxppTalkStateDone rec
        then fmap Just $ do
             out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec
-            update rec_id [ WxppTalkStateAborted =. True ]
+            liftIO $ flip runLoggingT log_func $ runWxppDB db_runner $ update rec_id [ WxppTalkStateAborted =. True ]
             return out_msgs
 
        else return Nothing
@@ -75,7 +78,7 @@ wxppExecTalkAbortForRecord :: (MonadLogger m)
                            -- ^ lookup WxppTalkerAbortStateEntry by state's type string
                            -> WxTalkAbortInitiator
                            -> Entity WxppTalkState
-                           -> SqlPersistT m [WxppOutMsg]
+                           -> m [WxppOutMsg]
 wxppExecTalkAbortForRecord common_env lookup_se initiator e_rec@(Entity rec_id rec) = do
 -- {{{1
   case lookup_se typ_str of
@@ -136,21 +139,22 @@ newWxppTalkState' :: forall m a.
 newWxppTalkState' = newWxppTalkState getStateType'
 
 
-saveAnyWxppTalkState :: forall m r a.
-    ( MonadIO m, ToJSON a, HasStateType a, WxTalkerState r (ReaderT WxppDbBackend m) a) =>
-    WxppTalkStateId
-    -> a
-    -> WxTalkerMonad r (ReaderT WxppDbBackend m) ()
-saveAnyWxppTalkState = saveWxppTalkState getStateType'
+saveAnyWxppTalkState :: forall m r a. (MonadLoggerIO m, ToJSON a, HasStateType a, WxTalkerState r m a)
+                     => WxppDbRunner
+                     -> WxppTalkStateId
+                     -> a
+                     -> WxTalkerMonad r m ()
+saveAnyWxppTalkState db_runner = saveWxppTalkState db_runner getStateType'
 
-loadAnyWxppTalkState :: forall m a.
-    (MonadIO m, MonadLogger m, FromJSON a, HasStateType a) =>
-    Proxy a
-    -> WxppTalkStateId
-    -> ReaderT WxppDbBackend m (Either String (Maybe a))
-loadAnyWxppTalkState proxy state_id = runExceptT $ runMaybeT $ do
-    rec <- MaybeT $ lift $ get state_id
-    MaybeT $ ExceptT $ parseWxppTalkStateFromRecord proxy $ Entity state_id rec
+loadAnyWxppTalkState :: forall m a.  (MonadLoggerIO m, FromJSON a, HasStateType a)
+                     => WxppDbRunner
+                     -> Proxy a
+                     -> WxppTalkStateId
+                     -> m (Either String (Maybe a))
+loadAnyWxppTalkState db_runner proxy state_id = runExceptT $ runMaybeT $ do
+  log_func <- askLoggerIO
+  rec <- MaybeT $ liftIO $ flip runLoggingT log_func $ runWxppDB db_runner $ get state_id
+  MaybeT $ ExceptT $ parseWxppTalkStateFromRecord proxy $ Entity state_id rec
 
 parseWxppTalkStateFromRecord :: forall m a.
     ( MonadLogger m, HasStateType a, FromJSON a ) =>
@@ -205,14 +209,15 @@ loadWxppTalkStateCurrent app_id open_id = do
 
 
 -- | used with loopRunBgJob
-cleanUpTimedOutWxTalk :: (MonadResource m, MonadLogger m, HasWxppAppID r)
-                      => r
+cleanUpTimedOutWxTalk :: (MonadLoggerIO m, HasWxppAppID r)
+                      => WxppDbRunner
+                      -> r
                       -> [WxppTalkerAbortStateEntry r m]
                       -- ^ lookup WxppTalkerAbortStateEntry by state's type string
                       -> (NominalDiffTime, NominalDiffTime)
-                      -> (WxppAppID -> WxppOpenID -> [WxppOutMsg] -> ReaderT SqlBackend m ())
-                      -> ReaderT SqlBackend m ()
-cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
+                      -> (WxppAppID -> WxppOpenID -> [WxppOutMsg] -> m ())
+                      -> m ()
+cleanUpTimedOutWxTalk db_runner common_env entries ttls on_abort_talk = do
 -- {{{1
     let timeout_ttl = uncurry min ttls
         chk_ttl     = uncurry max ttls
@@ -222,36 +227,40 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
     -- 为保证下面的 SQL 不会从一个太大集合中查找
     let too_old = flip addUTCTime now $ negate $ chk_ttl
 
-    infos <- runConduit $
-              selectSource
-                [ WxppTalkStateDone       ==. False
-                , WxppTalkStateAborted    ==. False
-                , WxppTalkStateAppId      ==. app_id
-                , WxppTalkStateUpdatedTime <. dt
-                , WxppTalkStateUpdatedTime >. too_old
-                ]
-                []
-                .| CL.map (id &&& (wxppTalkStateOpenId . entityVal))
-                .| CL.consume
+    log_func <- askLoggerIO
+    m_new_records <- liftIO $ runResourceT $ flip runLoggingT log_func $ runWxppDB db_runner $ do
+      infos <- runConduit $
+                selectSource
+                  [ WxppTalkStateDone       ==. False
+                  , WxppTalkStateAborted    ==. False
+                  , WxppTalkStateAppId      ==. app_id
+                  , WxppTalkStateUpdatedTime <. dt
+                  , WxppTalkStateUpdatedTime >. too_old
+                  ]
+                  []
+                  .| CL.map (id &&& (wxppTalkStateOpenId . entityVal))
+                  .| CL.consume
 
-    -- 一次性用一个 SQL 更新
-    updateWhere
-        [ WxppTalkStateId <-. map (entityKey . fst) infos ]
-        [ WxppTalkStateAborted =. True ]
+      -- 一次性用一个 SQL 更新
+      updateWhere
+          [ WxppTalkStateId <-. map (entityKey . fst) infos ]
+          [ WxppTalkStateAborted =. True ]
 
-    -- 然后通告用户
-    forM_ infos $ \(e_rec@(Entity rec_id _), open_id) -> do
-        m_new <- selectFirst
-                     [ WxppTalkStateAppId     ==. app_id
-                     , WxppTalkStateOpenId    ==. open_id
-                     , WxppTalkStateId        >. rec_id
-                     ]
-                     []
+      -- 然后通告用户
+      forM infos $ \(e_rec@(Entity rec_id _), open_id) -> do
+          m_new <- selectFirst
+                       [ WxppTalkStateAppId     ==. app_id
+                       , WxppTalkStateOpenId    ==. open_id
+                       , WxppTalkStateId        >. rec_id
+                       ]
+                       []
+          return (e_rec, open_id, m_new)
 
-        -- 仅当那个用户没有更新的会话已建立时才发通告給用户
-        when (isNothing m_new) $ do
-          out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se WxTalkAbortBySys e_rec
-          on_abort_talk app_id open_id out_msgs
+    forM_ m_new_records $ \ (e_rec, open_id, m_new) -> do
+      -- 仅当那个用户没有更新的会话已建立时才发通告給用户
+      when (isNothing m_new) $ do
+        out_msgs <- wxppExecTalkAbortForRecord common_env lookup_se WxTalkAbortBySys e_rec
+        on_abort_talk app_id open_id out_msgs
 
     where
         app_id = getWxppAppID common_env
@@ -264,10 +273,10 @@ cleanUpTimedOutWxTalk common_env entries ttls on_abort_talk = do
 -- 由于这个对象可以构造其它需求稍低一些的 WxppTalkerStateEntry WxppTalkerFreshStateEntry WxppTalkerAbortStateEntry
 data WxppTalkerFullStateEntry r0 m = forall s r.
   (Eq s, ToJSON s, FromJSON s, HasStateType s
-  , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
-  , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
-  , WxTalkerAbortAction (r0, r) (ReaderT WxppDbBackend m) s
-  , WxTalkerFreshState (r0, r) (ReaderT WxppDbBackend m) s
+  , WxTalkerState (r0, r) m s
+  , WxTalkerDoneAction (r0, r) m s
+  , WxTalkerAbortAction (r0, r) m s
+  , WxTalkerFreshState (r0, r) m s
   )
   => WxppTalkerFullStateEntry (Proxy s) r
 
@@ -276,8 +285,8 @@ data WxppTalkerFullStateEntry r0 m = forall s r.
 -- r0 是 WxppTalkHandlerGeneral 提供的全局环境
 data WxppTalkerStateEntry r0 m = forall s r.
                             (Eq s, ToJSON s, FromJSON s, HasStateType s
-                            , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
-                            , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
+                            , WxTalkerState (r0, r) m s
+                            , WxTalkerDoneAction (r0, r) m s
                             ) =>
                             WxppTalkerStateEntry (Proxy s) r
 
@@ -293,7 +302,7 @@ wxppTalkerStateEntryFromFull (WxppTalkerFullStateEntry p x) = WxppTalkerStateEnt
 data WxppTalkHandlerGeneral r m = WxppTalkHandlerGeneral
   { wxppTalkDbRunner      :: WxppDbRunner -- ^ to run db functions
   , wxppTalkDbReadOnlyEnv :: r            -- ^ read only data/environment
-  , wxppTalkDStateEntry   :: [WxppTalkerStateEntry r m]
+  , wxppTalkDStateEntry   :: [WxppTalkerStateEntry r m ]
   }
 
 instance JsonConfigable (WxppTalkHandlerGeneral r m) where
@@ -306,31 +315,33 @@ instance JsonConfigable (WxppTalkHandlerGeneral r m) where
 
 type instance WxppInMsgProcessResult (WxppTalkHandlerGeneral r m) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, RunSqlMonad m) =>
+instance (WxppApiMonad env m, MonadLoggerIO m) =>
     IsWxppInMsgProcessor m (WxppTalkHandlerGeneral r m)
     where
-    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache app_info _bs ime =
+    processInMsg (WxppTalkHandlerGeneral db_runner env entries) _cache app_info _bs ime = do
+      log_func <- askLoggerIO
       runExceptT $ do
-        mapExceptT (runWxppDB db_runner) $ do
-            let open_id = wxppInFromUserName ime
-            m_state_rec <- lift $ loadWxppTalkStateCurrent app_id open_id
-            case m_state_rec of
-                Nothing -> return []
-                Just e_state_rec@(Entity state_id _) -> do
-                    let mk :: WxppTalkerStateEntry r m
-                            -> MaybeT (ExceptT String (ReaderT WxppDbBackend m)) WxppInMsgHandlerResult
-                        mk (WxppTalkerStateEntry state_proxy rx) = MaybeT $ ExceptT $ processInMsgByWxTalk
-                                            state_proxy
-                                            (env, rx)
-                                            e_state_rec
-                                            ime
-                    m_result <- runMaybeT $ asum $ map mk entries
-                    case m_result of
-                        Nothing -> do
-                            $logWarnS wxppLogSource $ "no handler could handle talk state: state_id="
-                                        <> toPathPiece state_id
-                            return []
-                        Just x -> return x
+        m_state_rec <- mapExceptT (liftIO . flip runLoggingT log_func . runWxppDB db_runner) $ do
+            lift $ loadWxppTalkStateCurrent app_id open_id
+
+        case m_state_rec of
+            Nothing -> return []
+            Just e_state_rec@(Entity state_id _) -> do
+                let mk :: WxppTalkerStateEntry r m -> MaybeT (ExceptT String m) WxppInMsgHandlerResult
+                    mk (WxppTalkerStateEntry state_proxy rx) = MaybeT $ ExceptT $
+                                    processInMsgByWxTalk
+                                        db_runner
+                                        state_proxy
+                                        (env, rx)
+                                        e_state_rec
+                                        ime
+                m_result <- runMaybeT $ asum $ map mk entries
+                case m_result of
+                    Nothing -> do
+                        $logWarnS wxppLogSource $ "no handler could handle talk state: state_id="
+                                    <> toPathPiece state_id
+                        return []
+                    Just x -> return x
 
                 {-
             m_state_info <- ExceptT $ loadWxppTalkStateCurrent open_id
@@ -345,6 +356,7 @@ instance (WxppApiMonad env m, RunSqlMonad m) =>
 
       where
         app_id = procAppIdInfoReceiverId app_info
+        open_id = wxppInFromUserName ime
 
 
 -- | 消息处理器：调用后会新建一个会话
@@ -372,11 +384,11 @@ type instance WxppInMsgProcessResult (WxppTalkInitiator r s) = WxppInMsgHandlerR
 instance
     ( HasStateType s, ToJSON s, FromJSON s, Eq s
     , HasWxppAppID r
-    , WxTalkerDoneAction (r, r2) (ReaderT WxppDbBackend m) s
-    , WxTalkerState (r, r2) (ReaderT WxppDbBackend m) s
-    , WxTalkerFreshState (r, r2) (ReaderT WxppDbBackend m) s
+    , WxTalkerDoneAction (r, r2) m s
+    , WxTalkerState (r, r2) m s
+    , WxTalkerFreshState (r, r2) m s
     , r2 ~ WxppTalkStateExtraEnv s
-    , MonadIO m, MonadLogger m, RunSqlMonad m
+    , MonadLoggerIO m
     ) =>
     IsWxppInMsgProcessor m (WxppTalkInitiator r s)
     where
@@ -384,26 +396,29 @@ instance
       runExceptT $ do
         let from_open_id = wxppInFromUserName ime
             app_id = getWxppAppID env
-        mapExceptT (runWxppDB db_runner) $ do
-            msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiate ime
-            case msgs_or_state of
-                Left msgs -> do
-                            -- cannot create conversation
-                            return $ map ((False,) . Just) $ msgs
 
-                Right (state :: s) -> do
-                    -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
-                    e_state <- lift $ newWxppTalkState' app_id from_open_id state
-                    ExceptT $ processJustInitedWxTalk
-                                (Proxy :: Proxy s) (env, extra_env) e_state
+        log_func <- askLoggerIO
+        msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $ wxTalkInitiate ime
+
+        case msgs_or_state of
+            Left msgs -> do
+                        -- cannot create conversation
+                        return $ map ((False,) . Just) $ msgs
+
+            Right (state :: s) -> do
+                -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
+                e_state <- liftIO . flip runLoggingT log_func . runWxppDB db_runner $ do
+                            newWxppTalkState' app_id from_open_id state
+                ExceptT $ processJustInitedWxTalk db_runner
+                            (Proxy :: Proxy s) (env, extra_env) e_state
 
 
 -- | 与 WxppTalkerStateEntry 的区别只是多了 WxTalkerFreshState 的要求
 data WxppTalkerFreshStateEntry r0 m = forall s r.
                                 (Eq s, ToJSON s, FromJSON s, HasStateType s
-                                , WxTalkerState (r0, r) (ReaderT WxppDbBackend m) s
-                                , WxTalkerDoneAction (r0, r) (ReaderT WxppDbBackend m) s
-                                , WxTalkerFreshState (r0, r) (ReaderT WxppDbBackend m) s
+                                , WxTalkerState (r0, r) m s
+                                , WxTalkerDoneAction (r0, r) m s
+                                , WxTalkerFreshState (r0, r) m s
                                 ) =>
                                 WxppTalkerFreshStateEntry (Proxy s) r
 
@@ -440,7 +455,7 @@ type instance WxppInMsgProcessResult (WxppTalkEvtKeyInitiator r m) = WxppInMsgHa
 
 instance
     ( HasWxppAppID r
-    , RunSqlMonad m, MonadIO m, MonadLogger m
+    , MonadIO m, MonadLoggerIO m
     ) =>
     IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
     where
@@ -457,6 +472,7 @@ instance
         where
             do_work st_type = do
                 let match_st_type (WxppTalkerFreshStateEntry px _) = getStateType px == st_type
+                log_func <- askLoggerIO
                 case find match_st_type entries of
                     Nothing -> do
                         $logWarnS wxppLogSource $
@@ -468,26 +484,28 @@ instance
                     Just (WxppTalkerFreshStateEntry st_px extra_env) -> do
                         let from_open_id = wxppInFromUserName ime
                             app_id = getWxppAppID env
-                        mapExceptT (runWxppDB db_runner) $ do
-                            msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $
-                                wxTalkInitiateBlank st_px from_open_id
-                            case msgs_or_state of
-                                Left msgs -> do
-                                            -- cannot create conversation
-                                            $logErrorS wxppLogSource $
-                                                "Couldn't create talk, providing error output messages: " <> tshow msgs
-                                            return $ map ((False,) . Just) $ msgs
 
-                                Right state -> do
-                                    -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
-                                    e_state <- lift $ newWxppTalkState' app_id from_open_id state
-                                    ExceptT $ processJustInitedWxTalk st_px (env, extra_env) e_state
+                        msgs_or_state <- flip runWxTalkerMonadE (env, extra_env) $
+                            wxTalkInitiateBlank st_px from_open_id
+
+                        case msgs_or_state of
+                            Left msgs -> do
+                                        -- cannot create conversation
+                                        $logErrorS wxppLogSource $
+                                            "Couldn't create talk, providing error output messages: " <> tshow msgs
+                                        return $ map ((False,) . Just) $ msgs
+
+                            Right state -> do
+                                -- state_id <- lift $ newWxppTalkState' app_id from_open_id state
+                                e_state <- liftIO $ flip runLoggingT log_func $ runWxppDB db_runner $
+                                  newWxppTalkState' app_id from_open_id state
+                                ExceptT $ processJustInitedWxTalk db_runner st_px (env, extra_env) e_state
 
 
 -- | 与 WxppTalkerStateEntry 的区别只是多了 WxTalkerFreshState 的要求
 data WxppTalkerAbortStateEntry r0 m = forall s r.
   (Eq s, ToJSON s, FromJSON s, HasStateType s
-  , WxTalkerAbortAction (r0, r) (ReaderT WxppDbBackend m) s
+  , WxTalkerAbortAction (r0, r) m s
   )
   => WxppTalkerAbortStateEntry (Proxy s) r
 
@@ -520,15 +538,15 @@ instance JsonConfigable (WxppTalkTerminator r m) where
 
 type instance WxppInMsgProcessResult (WxppTalkTerminator r m) = WxppInMsgHandlerResult
 
-instance (WxppApiMonad env m, RunSqlMonad m, ExcSafe.MonadCatch m) =>
+instance (WxppApiMonad env m, MonadLoggerIO m, ExcSafe.MonadCatch m) =>
   IsWxppInMsgProcessor m (WxppTalkTerminator r m) where
     processInMsg (WxppTalkTerminator msg_dirs db_runner common_env entries get_outmsg) cache app_info _bs ime =
 -- {{{1
       runExceptT $ do
         let from_open_id = wxppInFromUserName ime
 
-        m_out_msgs_abort <- mapExceptT (runWxppDB db_runner) $ do
-          lift $ abortCurrentWxppTalkState common_env (\ x -> find (match_entry x) entries) WxTalkAbortByUser app_id from_open_id
+        m_out_msgs_abort <-
+          lift $ abortCurrentWxppTalkState db_runner common_env (\ x -> find (match_entry x) entries) WxTalkAbortByUser app_id from_open_id
 
         liftM (fromMaybe []) $ forM m_out_msgs_abort $ \ out_msgs_abort -> do
           let get_atk = (tryWxppWsResultE "getting access token" $ liftIO $
@@ -547,15 +565,18 @@ instance (WxppApiMonad env m, RunSqlMonad m, ExcSafe.MonadCatch m) =>
 
 
 processInMsgByWxTalk :: (HasStateType s, Eq s, FromJSON s, ToJSON s
-                        , WxppApiMonad env m
-                        , WxTalkerState r (ReaderT WxppDbBackend m) s
-                        , WxTalkerDoneAction r (ReaderT WxppDbBackend m) s)  =>
-                        Proxy s
-                        -> r
-                        -> Entity WxppTalkState
-                        -> WxppInMsgEntity
-                        -> ReaderT WxppDbBackend m (Either String (Maybe WxppInMsgHandlerResult))
-processInMsgByWxTalk state_proxy env (Entity state_id state_rec) ime = do
+                        , MonadLoggerIO m
+                        -- , WxppApiMonad env m
+                        , WxTalkerState r m s
+                        , WxTalkerDoneAction r m s
+                        )
+                     => WxppDbRunner
+                     -> Proxy s
+                     -> r
+                     -> Entity WxppTalkState
+                     -> WxppInMsgEntity
+                     -> m (Either String (Maybe WxppInMsgHandlerResult))
+processInMsgByWxTalk db_runner state_proxy env (Entity state_id state_rec) ime = do
     let state_type = wxppTalkStateTyp state_rec
     if (state_type /= getStateType state_proxy)
        then return $ Right Nothing
@@ -563,7 +584,9 @@ processInMsgByWxTalk state_proxy env (Entity state_id state_rec) ime = do
             -- 处理会话时，状态未必会更新
             -- 更新时间，以表明这个会话不是 idle 的
             now <- liftIO getCurrentTime
-            update state_id [ WxppTalkStateUpdatedTime =. now ]
+            log_func <- askLoggerIO
+            liftIO $ flip runLoggingT log_func $ runWxppDB db_runner $
+              update state_id [ WxppTalkStateUpdatedTime =. now ]
 
             liftM (fmap Just) $
                 wxTalkerInputProcessInMsg
@@ -571,24 +594,24 @@ processInMsgByWxTalk state_proxy env (Entity state_id state_rec) ime = do
                     env
                     (Just ime)
     where
-        set_st _open_id = saveAnyWxppTalkState state_id
-        get_st _open_id = mkWxTalkerMonad $ \_ -> loadAnyWxppTalkState state_proxy state_id
+        set_st _open_id = saveAnyWxppTalkState db_runner state_id
+        get_st _open_id = mkWxTalkerMonad $ \_ -> loadAnyWxppTalkState db_runner state_proxy state_id
 
 
-processJustInitedWxTalk :: (MonadIO m, MonadLogger m
+processJustInitedWxTalk :: ( MonadLoggerIO m
                            , Eq s, FromJSON s, ToJSON s, HasStateType s
-                           , WxTalkerDoneAction r (ReaderT WxppDbBackend m) s
-                           , WxTalkerState r (ReaderT WxppDbBackend m) s
-                           ) =>
-                            Proxy s
-                            -> r
-                            -> WxppTalkStateId
-                            -> ReaderT SqlBackend m (Either String WxppInMsgHandlerResult)
-processJustInitedWxTalk state_proxy env state_id = runExceptT $ do
-    ExceptT $ wxTalkerInputProcessJustInited get_st set_st env
-    where
-        set_st = saveAnyWxppTalkState state_id
-        get_st = mkWxTalkerMonad $ \_ -> loadAnyWxppTalkState state_proxy state_id
+                           , WxTalkerDoneAction r m s
+                           , WxTalkerState r m s
+                           )
+                        => WxppDbRunner
+                        -> Proxy s
+                        -> r
+                        -> WxppTalkStateId
+                        -> m (Either String WxppInMsgHandlerResult)
+processJustInitedWxTalk db_runner state_proxy env state_id = runExceptT $ do
+  ExceptT $ wxTalkerInputProcessJustInited get_st set_st env
+  where set_st = saveAnyWxppTalkState db_runner state_id
+        get_st = mkWxTalkerMonad $ \_ -> loadAnyWxppTalkState db_runner state_proxy state_id
 
 
 

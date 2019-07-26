@@ -317,7 +317,12 @@ trackHandleInMsgSaveResult slow_threshold app_id map_mvar ime m_err = do
 -- | 下载多媒体文件，保存至数据库
 downloadSaveMediaToDB ::
     ( MonadLogger m
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+    -- , MonadIO m
     , RunSqlMonad m
+#else
+    , MonadIO m
+#endif
     , ExcSafe.MonadCatch m
 #if MIN_VERSION_persistent(2, 0, 0)
     , PersistUnique backend

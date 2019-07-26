@@ -234,8 +234,12 @@ asWxppWsResponseNormal' =
 
 -- | Like asWxppWsResponseNormal', but log responseBody when got exception
 asWxppWsResponseNormal'L :: ( FromJSON a, MonadLogger m
-                            , MaskExceptionMonad m
+#if MIN_VERSION_classy_prelude(1, 5, 0)
+                            -- , MonadIO m
+#else
                             , MonadIO m
+#endif
+                            , MaskExceptionMonad m
                             )
                          => Response LB.ByteString
                          -> m a

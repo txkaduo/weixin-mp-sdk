@@ -21,9 +21,6 @@ import qualified Data.Text                  as T
 import qualified Data.Set                   as Set
 import Control.Monad.Except                 (runExceptT, ExceptT(..), throwError, catchError, mapExceptT)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
-#if !MIN_VERSION_classy_prelude(1, 0, 0)
-import Control.Concurrent.Async             (async)
-#endif
 import Control.Concurrent                   (forkIO)
 import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
@@ -469,7 +466,13 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
 -- | 比较通用的处理从 oauth 重定向回来时的Handler的逻辑
 -- 如果用户通过授权，则返回 open id 及 oauth token 相关信息
-wxppHandlerOAuthReturnGetInfo :: (MonadHandler m, MonadLogger m, RenderMessage (HandlerSite m) FormMessage)
+wxppHandlerOAuthReturnGetInfo :: (MonadHandler m
+#if MIN_VERSION_yesod(1, 6, 0)
+                                 -- , MonadLogger m
+#else
+                                 , MonadLogger m
+#endif
+                                 , RenderMessage (HandlerSite m) FormMessage)
                               => SomeWxppApiBroker
                               -> WxppAppID
                               -> m (Maybe (WxppOpenID, OAuthTokenInfo))
