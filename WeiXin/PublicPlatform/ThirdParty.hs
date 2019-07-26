@@ -779,7 +779,7 @@ class WxppTpTokenReader a where
                                  -> IO (Maybe WxppTpAuthorizerTokens)
 
   -- | 取第三方平台相关的所有已保存的授权方令牌
-  wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, RunSqlMonad m)
+  wxppTpTokenSourceAuthorizerTokens :: (MonadResource m, RunSqlBaseMonad m)
                                     => a
                                     -> SourceC m ( WxppAppID   -- our app id: component app id
                                                 , WxppTpAuthorizerTokens

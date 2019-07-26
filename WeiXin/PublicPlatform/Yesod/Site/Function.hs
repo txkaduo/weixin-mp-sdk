@@ -319,7 +319,7 @@ downloadSaveMediaToDB ::
     ( MonadLogger m
 #if MIN_VERSION_classy_prelude(1, 5, 0)
     -- , MonadIO m
-    , RunSqlMonad m
+    , RunSqlBaseMonad m
 #else
     , MonadIO m
 #endif

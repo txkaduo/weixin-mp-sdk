@@ -51,7 +51,7 @@ type WxppDbBackend = PersistEntityBackend WxppInMsgRecord
 
 newtype WxppDbRunner = WxppDbRunner {
                                 runWxppDB ::
-                                    forall a m. (MonadIO m, RunSqlMonad m) =>
+                                    forall a m. (MonadIO m, RunSqlBaseMonad m) =>
                                         ReaderT WxppDbBackend m a -> m a
                                 }
 
