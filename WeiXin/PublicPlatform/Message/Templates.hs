@@ -58,7 +58,7 @@ data PostClassCommentTemplate = PostClassCommentTemplate
   }
 
 instance WxTemplate PostClassCommentTemplate where
-  templateShortId = WxppMsgTemplateShortID "OPENTM206165018"
+  templateShortId = "OPENTM206165018"
   templateTitle = "课后点评提醒"
   templateData PostClassCommentTemplate {..} =
     [ ("keyword1", TemplateVal pcctStudent Nothing)
@@ -74,7 +74,7 @@ data ReportTemplate = ReportTemplate
   }
 
 instance WxTemplate ReportTemplate where
-  templateShortId = WxppMsgTemplateShortID "OPENTM207508286"
+  templateShortId = "OPENTM207508286"
   templateTitle = "报告完成提醒"
   templateData ReportTemplate {..} =
     [ ("keyword1", TemplateVal rtType Nothing)
@@ -82,5 +82,25 @@ instance WxTemplate ReportTemplate where
     , ("keyword3", TemplateVal rtContent Nothing)
     ]
 
+data CourseTimeChangeTemplate = CourseTimeChangeTemplate
+  { ctcTimestamp  :: Text -- XXX: just use text so we do not need to care time zone here
+  , ctcFrom       :: Int
+  , ctcDelta      :: Int
+  , ctcTo         :: Int
+  }
+
+instance WxTemplate CourseTimeChangeTemplate where
+  templateShortId = "OPENTM400251068"
+  templateTitle = "课时变更通知"
+  templateData CourseTimeChangeTemplate {..} =
+    [ ("keyword1", fromString $ unpack ctcTimestamp)
+    , ("keyword2", fromString $ show ctcFrom <> "节")
+    , ("keyword3", fromString $ signed ctcDelta <> show ctcDelta <> "节")
+    , ("keyword4", fromString $ show ctcTo <> "节")
+    ]
+      where
+        signed x | x > 0 = "+"
+        signed x | x < 0 = "-"
+        signed _ = ""
 
 -- vim: set foldmethod=marker:
