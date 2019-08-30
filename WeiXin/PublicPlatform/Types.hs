@@ -1250,6 +1250,9 @@ instance SafeCopy WxppMsgTemplateShortID where
 instance FromJSON WxppMsgTemplateShortID where
   parseJSON = fmap WxppMsgTemplateShortID
                 . (parseJSON >=> nonEmptyJsonText "Weixin message template short id cannot be empty text")
+
+instance IsString WxppMsgTemplateShortID where
+  fromString = WxppMsgTemplateShortID . pack
 -- }}}1
 
 
