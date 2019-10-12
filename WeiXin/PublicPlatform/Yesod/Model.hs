@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 module WeiXin.PublicPlatform.Yesod.Model where
 
 -- {{{1
@@ -344,10 +345,17 @@ toWxppCachedUserInfoExt app_id created_time
 -- | Read history from WxppInMsgRecord table, generate WxppInMsgEntity
 wxppSourceInMsgEntityFromHistory :: ( MonadResource m
 #if MIN_VERSION_persistent(2, 5, 0)
-                                    , MonadReader backend m, HasPersistBackend backend, BaseBackend backend ~ SqlBackend
+                                    , MonadReader backend m, BaseBackend backend ~ SqlBackend
+#if MIN_VERSION_persistent(2, 10, 0)
+                                    , PersistQueryRead backend
+#else
+                                    , HasPersistBackend backend
+#endif
+
 #else
                                     , MonadReader env m, HasPersistBackend env SqlBackend
 #endif
+
                                     )
                                  => [Filter WxppInMsgRecord]
                                  -> [SelectOpt WxppInMsgRecord]
