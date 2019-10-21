@@ -720,7 +720,7 @@ getShowSimulatedQRCodeR = do
 
     let scene = fst ticket
     let input = C8.unpack $ LB.toStrict $ A.encode scene
-    bs <- encodeStringQRCodeJpeg 5 input
+    let bs = encodeStringQRCodeJpeg 5 input
     return $ toTypedContent (typeSvg, toContent bs)
 -- }}}1
 

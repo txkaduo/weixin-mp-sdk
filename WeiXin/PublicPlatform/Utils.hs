@@ -8,7 +8,8 @@ module  WeiXin.PublicPlatform.Utils
 
 import ClassyPrelude
 import qualified Control.Exception.Safe as ExcSafe
-import qualified Data.QRCode                as QR   -- haskell-qrencode
+import qualified Codec.QRCode.JuicyPixels   as QRJP   -- haskell-qrencode
+import qualified Codec.QRCode               as QRC
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString            as B
 import qualified Codec.Picture              as P -- from `JuicyPixel' package
@@ -20,8 +21,6 @@ import qualified Data.Aeson                 as A
 import qualified Data.Yaml                  as Y
 import qualified Data.HashMap.Strict        as HM
 
-import Data.Array                           (bounds,(!), array)
-import Data.List                            ((!!))
 import System.FilePath                      (hasExtension)
 import System.Directory                     (doesFileExist)
 import Network.Mime                         (MimeType, defaultMimeType)
@@ -254,52 +253,22 @@ unifyExcHandler =
 #endif
 
 
--- | 生成 JuicyPixels Image 对象
--- copied and modified from: https://gist.github.com/minoki/7d6a610fe03fd84122d5
-encodeStringQRCodeImage :: MonadIO m =>
-                           Int
-                           -> String
-                           -> m (P.Image P.Pixel8)
-encodeStringQRCodeImage pixelPerCell input = do
-    qrcode <- liftIO $ QR.encodeString input Nothing QR.QR_ECLEVEL_M QR.QR_MODE_EIGHT True
-    return $ renderQRCodeToImage pixelPerCell qrcode
+encodeStringQRCodeImage :: (QRC.ToText a)
+                        => Int
+                        -> a
+                        -> (P.Image P.Pixel8)
+encodeStringQRCodeImage pixelPerCell input =
+  QRJP.toImage 4 pixelPerCell $ fromMaybe (error "QRC.encodeTExt failed") $ QRC.encodeText (QRC.defaultQRCodeOptions QRC.M) QRC.Utf8WithoutECI input
 
 
--- XXX: Data.QRCode do not export QRCode, we cannot write type signature here.
--- renderQRCodeToImage :: (Bounded px, P.Pixel px) => Int -> QR.QRCode -> P.Image px
-renderQRCodeToImage pixelPerCell qrcode = image
-  where
-        matrix = QR.toMatrix qrcode
-        dim1 = length matrix
-        dim2 = fromMaybe 0 $ fmap length $ listToMaybe matrix
-        to_on_off x = if x /= 0 then minBound else maxBound
-        arr = array ((0, 0), (dim1-1, dim2-1)) $ do
-                    y <- [0..dim1-1]
-                    x <- [0..dim2-1]
-                    return $ ((y, x), to_on_off $ (matrix !! y) !! x)
-        ((y0,x0),(y1,x1)) = bounds arr
-        pixelAt x y = let x' = x `div` pixelPerCell
-                          y' = y `div` pixelPerCell
-                          i = y'+y0
-                          j = x'+x0
-                      in arr !(i,j)
-        image = P.generateImage pixelAt ((x1-x0+1)*pixelPerCell) ((y1-y0+1)*pixelPerCell)
-
-
-encodeStringQRCodeJpeg :: MonadIO m =>
-                        Int
-                        -> String
-                        -> m LB.ByteString
+encodeStringQRCodeJpeg :: (QRC.ToText a) => Int -> a -> LB.ByteString
 encodeStringQRCodeJpeg pixelPerCell input =
-    liftM (P.imageToJpg 100 . P.ImageY8) $ encodeStringQRCodeImage pixelPerCell input
+    P.imageToJpg 100 . P.ImageY8 $ encodeStringQRCodeImage pixelPerCell input
 
 
-encodeStringQRCodePng :: MonadIO m
-                      => Int
-                      -> String
-                      -> m LB.ByteString
+encodeStringQRCodePng :: (QRC.ToText a) => Int -> a -> LB.ByteString
 encodeStringQRCodePng pixelPerCell input =
-    liftM (P.imageToPng . P.ImageY8) $ encodeStringQRCodeImage pixelPerCell input
+    P.imageToPng . P.ImageY8 $ encodeStringQRCodeImage pixelPerCell input
 
 
 -- | 经常需要保存微信的文件内容及mime到本地

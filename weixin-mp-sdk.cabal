@@ -166,10 +166,11 @@ library
                      , blaze-html
                      , network
                      , StateVar
-                     , haskell-qrencode
                      , byteable
                      , semigroups
                      , JuicyPixels
+                     , qrcode-juicypixels
+                     , qrcode-core
                      , array
                      , th-lift
                      , case-insensitive
