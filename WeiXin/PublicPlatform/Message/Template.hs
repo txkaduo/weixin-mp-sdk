@@ -8,6 +8,7 @@ import           Data.Aeson (ToJSON(..), (.=), object)
 import           Data.Aeson.Extra as AE
 import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
 import           Data.Proxy
+import           Data.Default
 import           Network.Wreq hiding (Proxy)
 import qualified Network.Wreq.Session as WS
 
@@ -38,6 +39,8 @@ $(deriveJSON (defaultOptions { fieldLabelModifier = toLower . drop 8 }) ''Templa
 instance IsString TemplateVal where
   fromString = flip TemplateVal Nothing . fromString
 
+instance Default TemplateVal where
+  def = TemplateVal "" def
 
 data TemplateMsgSendPayload =
   TemplateMsgSendPayload

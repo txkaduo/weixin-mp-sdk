@@ -12,14 +12,9 @@ type MkPayload t = BaseTemplate -> t -> WxppOpenID -> TemplateMsgSendPayload
 class WxTemplate t where
   templateShortId :: WxppMsgTemplateShortID
   templateTitle :: Text
-  mkFirst :: Text -> TemplateVal
-  mkRemark :: Text -> TemplateVal
   templateData :: t -> [(Text, TemplateVal)]
   withTemplates :: forall m a. (Monad m, MonadLogger m) => Map WxppMsgTemplateShortID WxppMsgTemplateID -> (MkPayload t -> m a) -> m a
   mkPayload :: WxppMsgTemplateID -> MkPayload t
-
-  mkFirst = flip TemplateVal Nothing
-  mkRemark = flip TemplateVal Nothing
 
   withTemplates tpls f = do
     let short_id = templateShortId @t
@@ -36,20 +31,23 @@ class WxTemplate t where
               btUrl
               btMiniProgram
               ( templateData tpl
-              <> [ ("first", mkFirst @t btFirst)
-                , ("remark", mkRemark @t btRemark)
+              <> [ ("first", btFirst)
+                , ("remark", btRemark)
                 ]
               )
 
 data BaseTemplate = BaseTemplate
-  { btFirst :: Text
-  , btRemark :: Text
+  { btFirst :: TemplateVal
+  , btRemark :: TemplateVal
   , btUrl     :: Maybe UrlText
   , btMiniProgram :: Maybe MiniProgramLink
   }
 
 instance Default BaseTemplate where
-  def = BaseTemplate mempty mempty def def
+  def = BaseTemplate def def def def
+
+plainBaseTemplate :: Text -> Text -> BaseTemplate
+plainBaseTemplate f r = def { btFirst = TemplateVal f def, btRemark = TemplateVal r def }
 
 data PostClassCommentTemplate = PostClassCommentTemplate
   { pcctStudent :: Text
