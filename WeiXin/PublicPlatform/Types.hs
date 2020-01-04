@@ -124,7 +124,14 @@ newtype WeixinUserName = WeixinUserName { unWeixinUserName :: Text }
                                  )
 
 
+
+-- | 用户标签ID
+newtype WxppUserTagID = WxppUserTagID { unWxppUserTagID :: Int }
+  deriving (Show, Eq, Ord, ToJSON, FromJSON, PersistField, PersistFieldSql, NFData)
+
+
 -- | 用户分组的ID
+-- {-# DEPRECATED  WxppUserGroupID "use WxppUserTagID instead" #-}
 newtype WxppUserGroupID = WxppUserGroupID { unWxppUserGroupID :: Int }
   deriving (Show, Eq, Ord, ToJSON, FromJSON, NFData)
 
@@ -232,6 +239,11 @@ instance PathPiece WxppOpenID where
                                           else WxppOpenID <$> fromPathPiece t'
 -- }}}1
 
+class HasWxppOpenIDList a where
+  getWxppOpenIDList :: a -> [WxppOpenID]
+
+instance HasWxppOpenIDList [WxppOpenID] where
+  getWxppOpenIDList = id
 
 newtype WxppUnionID = WxppUnionID { unWxppUnionID :: Text }
                     deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary

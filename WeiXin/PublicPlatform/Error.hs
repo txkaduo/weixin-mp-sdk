@@ -21,6 +21,7 @@ data WxppError = WxppServerBusy
                 | WxppFriendshipRequired
                 | WxppApiCallQuotaExceeded
                 | WxppReplyIsTooLate
+                | WxppTooManyUserTagsCreated
                 | WxppNoMassSendQuota   -- ^ "has no masssend quota
                                         -- 不在文档里，但如果群发数量超限额就会出这个错
                 | WxppSystemError
@@ -42,6 +43,7 @@ wxppToErrorCode WxppSubscriberRequired      = 43004
 wxppToErrorCode WxppFriendshipRequired      = 43005
 wxppToErrorCode WxppApiCallQuotaExceeded    = 45009
 wxppToErrorCode WxppReplyIsTooLate          = 45015
+wxppToErrorCode WxppTooManyUserTagsCreated  = 45056
 wxppToErrorCode WxppNoMassSendQuota         = 45028
 wxppToErrorCode WxppSystemError             = 61450
 

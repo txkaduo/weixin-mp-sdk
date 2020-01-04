@@ -300,6 +300,7 @@ data GroupBasicInfo = GroupBasicInfo
                         Text
                         Int
 
+-- {{{1 instances
 instance FromJSON GroupBasicInfo where
     parseJSON = withObject "GroupBasicInfo" $ \o ->
                     GroupBasicInfo <$> o .: "id"
@@ -312,6 +313,7 @@ instance ToJSON GroupBasicInfo where
                                                     , "name"    .= name
                                                     , "count"   .= cnt
                                                     ]
+-- }}}1
 
 data ListGroupResult = ListGroupResult { unListGroupResult :: [GroupBasicInfo] }
 
@@ -320,7 +322,9 @@ instance FromJSON ListGroupResult where
                     ListGroupResult <$> o .: "groups"
 
 -- | 取所有分组的基本信息
+{-# DEPRECATED  wxppListUserGroups "use WxppUserTags instead" #-}
 wxppListUserGroups :: (WxppApiMonad env m) => AccessToken -> m [GroupBasicInfo]
+-- {{{1
 wxppListUserGroups (AccessToken { accessTokenData = atk }) = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
     let url = wxppUrlConfSecureApiBase url_conf <> "/groups/get"
@@ -329,6 +333,7 @@ wxppListUserGroups (AccessToken { accessTokenData = atk }) = do
     liftIO (WS.getWith opts sess url)
                 >>= asWxppWsResponseNormal'
                 >>= return . unListGroupResult
+-- }}}1
 
 
 data CreateGroupResult = CreateGroupResult WxppUserGroupID Text
@@ -340,7 +345,7 @@ instance FromJSON CreateGroupResult where
                                       <*> o2 .: "name"
 
 
--- | 取所有分组的基本信息
+{-# DEPRECATED  wxppCreateUserGroup "use wxppCreateUserTag instead" #-}
 wxppCreateUserGroup :: (WxppApiMonad env m)
                     => AccessToken
                     -> Text
@@ -362,6 +367,7 @@ wxppCreateUserGroup (AccessToken { accessTokenData = atk }) name = do
 
 
 -- | 删除一个用户分组
+{-# DEPRECATED  wxppDeleteUserGroup "use wxppDeleteUserTag instead" #-}
 wxppDeleteUserGroup :: (WxppApiMonad env m)
                     => AccessToken
                     -> WxppUserGroupID
@@ -376,6 +382,7 @@ wxppDeleteUserGroup (AccessToken { accessTokenData = atk }) grp_id = do
 
 
 -- | 修改分组名
+{-# DEPRECATED  wxppRenameUserGroup "use wxppRenameUserTag instead" #-}
 wxppRenameUserGroup :: (WxppApiMonad env m)
                     => AccessToken
                     -> WxppUserGroupID
@@ -397,6 +404,7 @@ instance FromJSON GetGroupResult where
                     GetGroupResult <$> o .: "groupid"
 
 -- | 查询用户所在分组
+{-# DEPRECATED  wxppGetGroupOfUser "use wxppGetTagsOfUser instead" #-}
 wxppGetGroupOfUser :: (WxppApiMonad env m)
                    => AccessToken
                    -> WxppOpenID
@@ -413,6 +421,7 @@ wxppGetGroupOfUser (AccessToken { accessTokenData = atk }) open_id = do
 
 
 -- | 移动用户至指定分组
+{-# DEPRECATED  wxppSetUserGroup "use wxppUserTagging instead" #-}
 wxppSetUserGroup :: (WxppApiMonad env m)
                  => AccessToken
                  -> WxppUserGroupID
@@ -428,6 +437,7 @@ wxppSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id = do
 
 
 -- | 批量移动用户至指定分组
+{-# DEPRECATED  wxppBatchSetUserGroup "use wxppUserTagging instead" #-}
 wxppBatchSetUserGroup :: (WxppApiMonad env m)
                       => AccessToken
                       -> WxppUserGroupID
@@ -440,3 +450,6 @@ wxppBatchSetUserGroup (AccessToken { accessTokenData = atk }) grp_id open_id_lis
 
     liftIO (WS.postWith opts sess url $ object [ "to_groupid" .= grp_id, "openid_list" .= open_id_list ])
             >>= asWxppWsResponseVoid
+
+
+-- vim: set foldmethod=marker:

@@ -52,12 +52,22 @@ data ManageCmd = QueryAutoReplyRules
                 | SearchDurableNewsByTitle
                     Bool    -- ^ edit if true, show otherwise
                     Text
+
+                | ListTags
+                | CreateTag Text
+                | DeleteTag WxppUserTagID
+                | RenameTag WxppUserTagID Text
+                | TagsOfUser WxppOpenID
+                | TagUsers WxppUserTagID [WxppOpenID]
+                | UntagUsers WxppUserTagID [WxppOpenID]
+
                 | ListGroup
                 | CreateGroup Text
                 | DeleteGroup WxppUserGroupID
                 | RenameGroup WxppUserGroupID Text
                 | GroupOfUser WxppOpenID
                 | SetUserGroup WxppUserGroupID [WxppOpenID]
+
                 | GetPropagateMsgStatus PropagateMsgID
                 | PropagateDurableNews WxppDurableMediaID
                 deriving (Show, Eq, Ord)
@@ -111,6 +121,45 @@ manageCmdParser = subparser $
     <> command "count-durable-media"
         (info (helper <*> pure CountDurable)
             (progDesc "统计永久素材数量"))
+
+    <> command "list-tags"
+        (info (helper <*> pure ListTags)
+            (progDesc "列出所有用户标签"))
+    <> command "new-tag"
+        (info (helper <*> (CreateTag <$> (fmap fromString $ argument str (metavar "NAME"))))
+            (progDesc "新建用户标签"))
+    <> command "del-tag"
+        (info (helper <*> (DeleteTag <$> (fmap WxppUserTagID $ argument auto (metavar "GROUP_ID"))))
+            (progDesc "删除用户标签"))
+    <> command "rename-tag"
+        (info (helper <*> (RenameTag
+                            <$> (fmap WxppUserTagID $ argument auto (metavar "GROUP_ID"))
+                            <*> (fmap fromString $ argument str (metavar "NEW_NAME"))
+                        )
+                )
+            (progDesc "修改用户标签名"))
+    <> command "user-tags"
+        (info (helper <*> (TagsOfUser
+                            <$> (fmap (WxppOpenID . fromString) $ argument str (metavar "USER_OPEN_ID"))
+                        )
+                )
+            (progDesc "取用户所在标签"))
+    <> command "tag-users"
+        (info (helper <*> (TagUsers
+                            <$> (fmap WxppUserTagID $ argument auto (metavar "GROUP_ID"))
+                            <*> (some $ fmap (WxppOpenID . fromString) $ argument str (metavar "USER_OPEN_ID"))
+                            )
+                )
+            (progDesc "给用户打标签"))
+
+    <> command "untag-users"
+        (info (helper <*> (UntagUsers
+                            <$> (fmap WxppUserTagID $ argument auto (metavar "GROUP_ID"))
+                            <*> (some $ fmap (WxppOpenID . fromString) $ argument str (metavar "USER_OPEN_ID"))
+                            )
+                )
+            (progDesc "删除用户身上的标签"))
+
     <> command "list-groups"
         (info (helper <*> pure ListGroup)
             (progDesc "列出所有用户分组"))
@@ -140,6 +189,7 @@ manageCmdParser = subparser $
                             )
                 )
             (progDesc "移动用户至指定分组"))
+
     <> command "get-propagate-msg-status"
         (info (helper <*> ( GetPropagateMsgStatus
                                 <$> (fmap PropagateMsgID $ argument auto (metavar "MSG_ID"))
@@ -290,6 +340,41 @@ start opts api_env = do
             atk <- get_atk
             result <- flip runReaderT api_env $ wxppCountDurableMedia atk
             liftIO $ B.putStr $ Y.encode result
+
+        ListTags -> do
+            atk <- get_atk
+            result <- flip runReaderT api_env $ wxppListUserTags atk
+            liftIO $ B.putStr $ Y.encode result
+
+        CreateTag name -> do
+            atk <- get_atk
+            tag_id <- flip runReaderT api_env $ wxppCreateUserTag atk name
+            liftIO $ putStrLn $ "tag created, id is " <> (fromString $ show $ unWxppUserTagID tag_id)
+
+        DeleteTag tag_id -> do
+            atk <- get_atk
+            flip runReaderT api_env $ wxppDeleteUserTag atk tag_id
+
+        RenameTag tag_id name -> do
+            atk <- get_atk
+            flip runReaderT api_env $ wxppRenameUserTag atk tag_id name
+
+        TagsOfUser open_id -> do
+            atk <- get_atk
+            tag_id <- flip runReaderT api_env $ wxppGetTagsOfUser atk open_id
+            liftIO $ putStrLn $ "user's tag id are: " <> intercalate "," (map (fromString . show . unWxppUserTagID) tag_id)
+
+        TagUsers tag_id open_id_list -> do
+            atk <- get_atk
+            case open_id_list of
+                []          -> return ()
+                _           -> flip runReaderT api_env $ wxppTagUsers atk tag_id open_id_list
+
+        UntagUsers tag_id open_id_list -> do
+            atk <- get_atk
+            case open_id_list of
+                []          -> return ()
+                _           -> flip runReaderT api_env $ wxppUntagUsers atk tag_id open_id_list
 
         ListGroup -> do
             atk <- get_atk
@@ -486,3 +571,5 @@ main = execParser opts >>= start'
                         ])
                     <> header "wxpp-manage - 微信公众平台管理查询小工具"
                     )
+
+-- vim: set foldmethod=marker:

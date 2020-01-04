@@ -18,6 +18,7 @@ module WeiXin.PublicPlatform
     , module WeiXin.PublicPlatform.CS
     , module WeiXin.PublicPlatform.QRCode
     , module WeiXin.PublicPlatform.EndUser
+    , module WeiXin.PublicPlatform.EndUser.Tag
     , module WeiXin.PublicPlatform.Propagate
     , module WeiXin.PublicPlatform.Yesod.Utils
     , module WeiXin.PublicPlatform.Yesod.Site
@@ -60,6 +61,7 @@ import WeiXin.PublicPlatform.Menu
 import WeiXin.PublicPlatform.CS
 import WeiXin.PublicPlatform.QRCode
 import WeiXin.PublicPlatform.EndUser
+import WeiXin.PublicPlatform.EndUser.Tag
 import WeiXin.PublicPlatform.Propagate
 import WeiXin.PublicPlatform.Yesod.Utils
 import WeiXin.PublicPlatform.Yesod.Site
