@@ -69,7 +69,7 @@ data ManageCmd = QueryAutoReplyRules
                 | SetUserGroup WxppUserGroupID [WxppOpenID]
 
                 | GetPropagateMsgStatus PropagateMsgID
-                | PropagateDurableNews WxppDurableMediaID
+                | PropagateDurableNews WxppDurableMediaID Bool
                 deriving (Show, Eq, Ord)
 
 
@@ -200,6 +200,7 @@ manageCmdParser = subparser $
         (info (helper <*> ( PropagateDurableNews
                                 <$> (fmap (WxppDurableMediaID . fromString) $
                                         argument str (metavar "MEDIA_ID"))
+                                <*> switch (long "send-ignore-reprint")
                             )
             )
             (progDesc "群发永久图文素材"))
@@ -457,10 +458,10 @@ start opts api_env = do
             PropagateMsgStatus status <- flip runReaderT api_env $ wxppGetPropagateMsgStatus atk msg_id
             putStrLn status
 
-        PropagateDurableNews media_id -> do
+        PropagateDurableNews media_id send_ignore_reprint -> do
             atk <- get_atk
             msg_id <- flip runReaderT api_env $
-                        wxppPropagateMsg atk Nothing (WxppPropagateMsgNews $ fromWxppDurableMediaID media_id)
+                        wxppPropagateMsg atk Nothing (WxppPropagateMsgNews (fromWxppDurableMediaID media_id) send_ignore_reprint)
             putStrLn $ fromString $ show msg_id
 
 editNewsDurable :: (WxppApiMonad env m) =>

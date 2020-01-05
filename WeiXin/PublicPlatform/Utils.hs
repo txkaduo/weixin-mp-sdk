@@ -315,3 +315,7 @@ nonEmptyJsonText msg t = do
   if null t
      then fail msg
      else return t
+
+boolToInt :: Bool -> Int
+boolToInt False = 0
+boolToInt True  = 1
