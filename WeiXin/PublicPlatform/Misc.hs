@@ -468,3 +468,11 @@ contentTypeOfAudioFormat :: Text -> Maybe MimeType
 contentTypeOfAudioFormat "amr"   = Just "audio/amr"
 contentTypeOfAudioFormat "speex" = Just "audio/x-speex"
 contentTypeOfAudioFormat _       = Nothing
+
+
+guessEitherOpenIdOrName :: Text -> Either WxppOpenID WeixinUserName
+guessEitherOpenIdOrName t =
+  if length t > 24
+     then Left $ WxppOpenID t
+     else Right $ WeixinUserName t
+
