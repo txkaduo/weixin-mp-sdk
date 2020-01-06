@@ -150,10 +150,11 @@ newtype WxppKfAccount = WxppKfAccount { unWxppKfAccount :: Text }
 
 -- | 为区分临时素材和永久素材，这个值专指 临时素材
 newtype WxppBriefMediaID = WxppBriefMediaID { unWxppBriefMediaID :: Text }
-                        deriving (Show, Eq, Ord, Typeable, Generic, Binary
+                        deriving (Show, Read, Eq, Ord, Typeable, Generic, Binary
                                  , NFData
                                  , PersistField, PersistFieldSql
                                  , ToJSON
+                                 , PathPiece
                                  , ToMessage, ToMarkup)
 
 -- {{{1 instance
