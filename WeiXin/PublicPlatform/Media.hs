@@ -258,6 +258,17 @@ wxppUploadImageGetUrlBS atk mime filename bs = do
         partBS "media" bs & partFileName .~ Just filename
                             & partContentType .~ Just mime
 
+wxppUploadImageGetUrlLBS :: (WxppApiMonad env m)
+                         => AccessToken
+                         -> MimeType
+                         -> FilePath
+                         -> LB.ByteString
+                         -> m UrlText
+wxppUploadImageGetUrlLBS atk mime filename lbs = do
+    wxppUploadImageGetUrlInternal atk $
+        partLBS "media" lbs & partFileName .~ Just filename
+                            & partContentType .~ Just mime
+
 
 -- | 从 WxppOutMsgL 计算出 WxppOutMsg
 -- 工作包括：
