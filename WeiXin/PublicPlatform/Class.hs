@@ -387,6 +387,9 @@ class HasWxppAppID a where
 instance HasWxppAppID WxppAppID where
     getWxppAppID = id
 
+instance HasWxppAppID AccessToken where
+    getWxppAppID = accessTokenApp
+
 instance HasWxppAppID WxppAppOpenID where
   getWxppAppID (WxppAppOpenID app_id _) = app_id
 
