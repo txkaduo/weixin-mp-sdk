@@ -1449,6 +1449,12 @@ instance NFData EndUserQueryResult
 
 $(deriveSafeCopy 0 'base ''EndUserQueryResult)
 
+
+endUserQueryResultSubscribed :: EndUserQueryResult -> Bool
+endUserQueryResultSubscribed (EndUserQueryResult {}) = True
+endUserQueryResultSubscribed _                       = False
+
+
 endUserQueryResultOpenID :: EndUserQueryResult -> WxppOpenID
 endUserQueryResultOpenID (EndUserQueryResultNotSubscribed open_id)      = open_id
 endUserQueryResultOpenID (EndUserQueryResult open_id _ _ _ _ _ _ _ _ _) = open_id
