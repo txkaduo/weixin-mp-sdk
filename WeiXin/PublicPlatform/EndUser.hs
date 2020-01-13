@@ -67,25 +67,35 @@ wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id
 wxppBatchQueryEndUserInfo :: (WxppApiMonad env m)
                           => AccessToken
                           -> [WxppOpenID]
-                          -- ^ CAUTION: must be less than wxppBatchQueryEndUserInfoMaxNum
+                          -- ^ can be more than wxppBatchQueryEndUserInfoMaxNum
                           -> m (Map WxppOpenID EndUserQueryResult)
-wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids = do
-  if null open_ids
-     then return mempty
-     else do
-          (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
-          let url = wxppUrlConfSecureApiBase url_conf <> "/user/info/batchget"
-              opts = defaults & param "access_token" .~ [ atk ]
-                              & param "lang" .~ [ "zh_CN" :: Text ]
+-- {{{1
+wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids0 = do
+  (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
+  let url = wxppUrlConfSecureApiBase url_conf <> "/user/info/batchget"
+      opts = defaults & param "access_token" .~ [ atk ]
+                      & param "lang" .~ [ "zh_CN" :: Text ]
 
-          liftIO (WS.postWith opts sess url $ object [ "user_list" .= map to_jv open_ids ])
-            >>= asWxppWsResponseNormal'
-            >>= return . AE.getSingObject (Proxy :: Proxy "user_info_list")
-            >>= return . mapFromList . map (getWxppOpenID &&& id)
+  let one_batch open_ids = do
+        if null open_ids
+           then return mempty
+           else do
+                liftIO (WS.postWith opts sess url $ object [ "user_list" .= map to_jv open_ids ])
+                  >>= asWxppWsResponseNormal'
+                  >>= return . AE.getSingObject (Proxy :: Proxy "user_info_list")
+                  >>= return . mapFromList . map (getWxppOpenID &&& id)
 
+  let split_open_ids open_ids =
+        if null open_ids
+           then []
+           else let (lst1, lst2) = splitAt wxppBatchQueryEndUserInfoMaxNum open_ids
+                 in lst1 : split_open_ids lst2
+
+  fmap mconcat $ mapM one_batch (split_open_ids open_ids0)
   where to_jv open_id = object [ "lang" .= asText "zh_CN"
                                , "openid" .= open_id
                                ]
+-- }}}1
 
 
 wxppBatchQueryEndUserInfoMaxNum :: Int
