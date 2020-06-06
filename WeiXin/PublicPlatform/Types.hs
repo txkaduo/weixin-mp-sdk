@@ -35,7 +35,7 @@ import Database.Persist                     (PersistValue)
 import Yesod.Core                           (PathPiece(..))
 import Text.Read                            (Read(..))
 import Data.Proxy                           (Proxy(..))
-import Text.Shakespeare.I18N                (ToMessage(..))
+import Text.Shakespeare.I18N                (ToMessage(..), Lang)
 import Text.Blaze.Html                      (ToMarkup(..))
 import Language.Haskell.TH.Lift             (deriveLift)
 import Web.HttpApiData                      (ToHttpApiData, FromHttpApiData)
@@ -56,6 +56,16 @@ import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 import WeiXin.PublicPlatform.Utils
 -- }}}1
+
+
+wxppZhCnLang :: Lang
+wxppZhCnLang = "zh_CN"
+
+wxppZhTwLang :: Lang
+wxppZhTwLang = "zh_TW"
+
+wxppEnLang :: Lang
+wxppEnLang = "en"
 
 
 class ToEnumEither a where
