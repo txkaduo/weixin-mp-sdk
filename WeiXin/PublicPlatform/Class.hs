@@ -322,6 +322,19 @@ wxppGetAnyUserInfoCached cache app_id open_id lang = do
       return (info, t)
 
 
+-- | Lookup SNS or subscribers user info, by union id
+wxppGetAnyUserInfoCachedByUid :: (MonadIO m, WxppCacheTemp c)
+                              => c
+                              -> WxppUnionID
+                              -> Lang
+                              -> m (Maybe (WxUserInfo, UTCTime))
+wxppGetAnyUserInfoCachedByUid cache union_id lang = do
+  app_open_id_list <- liftIO $ wxppCacheLookupAllOpenIdByUid cache union_id
+  let f_list = flip map app_open_id_list $ \ (WxppAppOpenID app_id open_id) ->
+                  MaybeT $ wxppGetAnyUserInfoCached cache app_id open_id lang
+  runMaybeT $ asum f_list
+
+
 data SomeWxppCacheClient = forall a. (WxppCacheTokenReader a, WxppCacheTemp a) => SomeWxppCacheClient a
 
 instance WxppCacheTemp SomeWxppCacheClient where
