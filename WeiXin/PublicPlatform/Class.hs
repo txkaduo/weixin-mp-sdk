@@ -330,9 +330,10 @@ wxppGetAnyUserInfoCachedByUid :: (MonadIO m, WxppCacheTemp c)
                               -> m (Maybe (WxUserInfo, UTCTime))
 wxppGetAnyUserInfoCachedByUid cache union_id lang = do
   app_open_id_list <- liftIO $ wxppCacheLookupAllOpenIdByUid cache union_id
-  let f_list = flip map app_open_id_list $ \ (WxppAppOpenID app_id open_id) ->
-                  MaybeT $ wxppGetAnyUserInfoCached cache app_id open_id lang
-  runMaybeT $ asum f_list
+  info_list <- liftIO $ fmap catMaybes $
+              forConcurrently app_open_id_list $ \ (WxppAppOpenID app_id open_id) ->
+                  wxppGetAnyUserInfoCached cache app_id open_id lang
+  return $ listToMaybe $ ClassyPrelude.sortWith (Down . snd) info_list
 
 
 data SomeWxppCacheClient = forall a. (WxppCacheTokenReader a, WxppCacheTemp a) => SomeWxppCacheClient a
