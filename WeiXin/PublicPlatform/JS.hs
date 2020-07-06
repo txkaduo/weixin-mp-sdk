@@ -2,6 +2,11 @@ module WeiXin.PublicPlatform.JS where
 
 -- {{{1 imports
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import           Control.Monad.Reader   (asks)
+#endif
 import qualified Crypto.Hash.SHA1           as SHA1
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Base16     as B16
@@ -14,7 +19,6 @@ import Data.Time                            (NominalDiffTime, addUTCTime)
 import Data.Time.Clock.POSIX                (getPOSIXTime)
 import Text.Julius                          (julius, JavascriptUrl)
 import Control.Monad.Logger
-import Control.Monad.Reader                 (asks)
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS

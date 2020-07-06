@@ -2,6 +2,13 @@ module Main where
 
 -- {{{1
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+import System.IO                            (SeekMode(..))
+#endif
+import System.IO                            (openTempFile, readLn)
+
 #if !MIN_VERSION_optparse_applicative(0, 13, 0)
     hiding ((<>))
 #endif
@@ -17,7 +24,6 @@ import qualified Data.Text.IO               as T
 import qualified Data.Map.Lazy              as LM
 import Network.Mime                         (defaultMimeMap, MimeType)
 import qualified Network.Wreq.Session       as WS
-import System.IO                            (openTempFile, readLn, SeekMode(..))
 import System.Directory                     (getTemporaryDirectory, removeFile)
 import System.Process                       (callProcess)
 import System.Environment                   (lookupEnv)

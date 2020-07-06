@@ -23,18 +23,20 @@ module WeiXin.PublicPlatform.EndUser
 
 -- {{{1 imports
 import ClassyPrelude hiding ((\\))
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import Control.Monad.Reader                 (asks)
+#endif
 import Network.Wreq hiding (Proxy)
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
-import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Maybe            (runMaybeT, MaybeT(..))
 import Data.Aeson
-import qualified Data.Aeson.Extra           as AE
 import qualified Data.Conduit.List          as CL
 import Data.Time                            (diffUTCTime, NominalDiffTime)
 import Data.List                            ((\\))
-import Data.Proxy
 
 import Data.Conduit
 
@@ -63,6 +65,13 @@ wxppQueryEndUserInfo (AccessToken { accessTokenData = atk }) (WxppOpenID open_id
                 >>= asWxppWsResponseNormal'
 
 
+newtype RespBatchQueryEndUserInfo = RespBatchQueryEndUserInfo { unRespBatchQueryEndUserInfo :: [EndUserQueryResult] }
+
+instance FromJSON RespBatchQueryEndUserInfo where
+  parseJSON = withObject "EndUserQueryResult" $ \ o -> do
+    RespBatchQueryEndUserInfo <$> o .: "user_info_list"
+
+
 -- | 调用服务器接口，批量查询用户基础信息
 wxppBatchQueryEndUserInfo :: (WxppApiMonad env m)
                           => AccessToken
@@ -82,7 +91,7 @@ wxppBatchQueryEndUserInfo (AccessToken { accessTokenData = atk }) open_ids0 = do
            else do
                 liftIO (WS.postWith opts sess url $ object [ "user_list" .= map to_jv open_ids ])
                   >>= asWxppWsResponseNormal'
-                  >>= return . AE.getSingObject (Proxy :: Proxy "user_info_list")
+                  >>= return . unRespBatchQueryEndUserInfo
                   >>= return . mapFromList . map (getWxppOpenID &&& id)
 
   let split_open_ids open_ids =

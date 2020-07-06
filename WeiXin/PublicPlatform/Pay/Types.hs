@@ -4,7 +4,12 @@ module WeiXin.PublicPlatform.Pay.Types where
 -- {{{1 imports
 import           ClassyPrelude
 
-import           Control.DeepSeq        (NFData)
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import Control.DeepSeq                      (NFData)
+#endif
+
 import           Data.Binary            (Binary)
 import           Data.Aeson             (FromJSON(..), ToJSON(..), object, (.=), withObject, (.:))
 import           Data.Default           (Default(..))

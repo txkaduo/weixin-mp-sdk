@@ -5,6 +5,11 @@ module WeiXin.PublicPlatform.Security
 
 -- {{{1 imports
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+import Control.Monad.Reader                 (asks)
+#endif
 import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
@@ -22,11 +27,9 @@ import qualified Data.ByteString.Char8      as C8
 import Data.Time                            (addUTCTime)
 import Data.Aeson                           ( FromJSON(..)
                                             , withObject, (.:))
-import Crypto.Cipher                        ( makeIV, IV, cbcEncrypt
-                                            , cbcDecrypt, cipherInit)
+import Crypto.Cipher.Types                  ( makeIV, IV, cbcEncrypt, cbcDecrypt, cipherInit)
 import Crypto.Cipher.AES                    (AES)
 import Control.Monad.Logger
-import Control.Monad.Reader                 (asks)
 import Control.Monad.Trans.Except           (runExceptT, ExceptT(..))
 import System.Random                        (randomIO)
 import Data.Byteable                        (toBytes)

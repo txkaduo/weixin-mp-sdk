@@ -120,7 +120,6 @@ library
                      , persistent-tx-utils >= 0.1
                      , text
                      , aeson
-                     , aeson-extra
                      , aeson-pretty
                      , bytestring
                      , cryptohash
@@ -138,7 +137,7 @@ library
                      , mtl
                      , async
                      , time
-                     , cryptocipher
+                     , crypto-cipher-types
                      , cipher-aes
                      , byteable
                      , random
@@ -154,7 +153,6 @@ library
                      , scientific
                      , yaml >= 0.8.11
                      , filepath
-                     , cryptohash
                      , containers
                      , resourcet
                      , regex-tdfa
@@ -259,7 +257,8 @@ test-suite test
                      , weixin-mp-sdk
                      , classy-prelude
                      , bytestring
-                     , cryptocipher
+                     , crypto-cipher-types
+                     , crypto-aes
                      , base64-bytestring
                      , data-default
                      , xml-conduit

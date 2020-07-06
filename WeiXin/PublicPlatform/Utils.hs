@@ -7,6 +7,11 @@ module  WeiXin.PublicPlatform.Utils
   ) where
 
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+#endif
+
 import qualified Control.Exception.Safe as ExcSafe
 import qualified Codec.QRCode.JuicyPixels   as QRJP   -- haskell-qrencode
 import qualified Codec.QRCode               as QRC

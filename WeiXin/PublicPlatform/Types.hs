@@ -10,7 +10,12 @@ module WeiXin.PublicPlatform.Types
 
 -- {{{1
 import ClassyPrelude hiding (try, optional)
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
 import Control.DeepSeq                      (NFData)
+#endif
+
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
@@ -25,7 +30,7 @@ import Data.Byteable                        (toBytes)
 import Data.Char                            (isSpace, isAscii, isAlphaNum)
 import Data.Default                         (Default(..))
 import Data.Monoid                          (Endo(..))
-import Crypto.Cipher                        (makeKey, Key)
+import Crypto.Cipher.Types                  (makeKey, Key)
 import Crypto.Cipher.AES                    (AES)
 import Data.Time                            (addUTCTime, NominalDiffTime)
 import Data.Scientific                      (toBoundedInteger)
@@ -342,14 +347,14 @@ instance SimpleEncode WxppScene where
     simpleEncode (WxppSceneStr (WxppStrSceneID x)) = "qrscene_" ++ T.unpack x
 
 instance SimpleStringRep WxppScene where
-    simpleParser = try parse_as_int Text.Parsec.<|> parse_as_str
+    simpleParser = Text.Parsec.try parse_as_int Text.Parsec.<|> parse_as_str
         where
             parse_as_int = do
-                _ <- optional $ string "qrscene_"
+                _ <- Text.Parsec.optional $ string "qrscene_"
                 WxppSceneInt . WxppIntSceneID <$> simpleParser
 
             parse_as_str = do
-                _ <- optional $ string "qrscene_"
+                _ <- Text.Parsec.optional $ string "qrscene_"
                 WxppSceneStr . WxppStrSceneID . fromString <$> many1 anyChar
 -- }}}1
 
@@ -642,8 +647,8 @@ instance SimpleEncode GroupSendStatus where
 
 instance SimpleStringRep GroupSendStatus where
     simpleParser = choice
-                    [ try $ string "send success" >> return GroupSendSuccess
-                    , try $ string "send fail" >> return GroupSendFail
+                    [ Text.Parsec.try $ string "send success" >> return GroupSendSuccess
+                    , Text.Parsec.try $ string "send fail" >> return GroupSendFail
                     , parse_err
                     ]
         where
@@ -1555,7 +1560,7 @@ parseSexJson = go
                 Nothing -> fail $ "unknown sex: " <> show x
 
 
-parseSexInt :: Monad m => Int -> m (Maybe Gender)
+parseSexInt :: MonadFail m => Int -> m (Maybe Gender)
 parseSexInt 0 = return Nothing
 parseSexInt 1 = return $ Just Male
 parseSexInt 2 = return $ Just Female
@@ -1636,7 +1641,7 @@ instance SimpleEncode OAuthScope where
     simpleEncode (AS_Unknown s)     = T.unpack s
 
 instance SimpleStringRep OAuthScope where
-    simpleParser = try p Text.Parsec.<|> parse_unknown
+    simpleParser = Text.Parsec.try p Text.Parsec.<|> parse_unknown
         where
             p = makeSimpleParserByTable
                     [ ("snsapi_base", AS_SnsApiBase)

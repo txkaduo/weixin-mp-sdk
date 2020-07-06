@@ -10,14 +10,16 @@ module WeiXin.PublicPlatform.EndUser.Tag
 
 -- {{{1 imports
 import ClassyPrelude hiding ((\\))
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import Control.Monad.Reader                 (asks)
+#endif
 import Network.Wreq hiding (Proxy)
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
-import Control.Monad.Reader                 (asks)
 import Data.Aeson
-import qualified Data.Aeson.Extra           as AE
-import Data.Proxy
 
 import Data.Conduit
 
@@ -229,6 +231,12 @@ wxppUntagUsers (AccessToken { accessTokenData = atk }) tag_id open_ids = do
 -- }}}1
 
 
+newtype RespGetTagsOfUser = RespGetTagsOfUser { unRespGetTagsOfUser :: [WxppUserTagID] }
+
+instance FromJSON RespGetTagsOfUser where
+  parseJSON = withObject "RespGetTagsOfUser" $ \ o -> do
+    RespGetTagsOfUser <$> o .: "tagid_list"
+
 -- | 获取用户身上的标签列表
 wxppGetTagsOfUser :: (WxppApiMonad env m)
                   => AccessToken
@@ -242,7 +250,7 @@ wxppGetTagsOfUser (AccessToken { accessTokenData = atk }) open_id = do
 
     liftIO (WS.postWith opts sess url $ object [ "openid" .= open_id ])
             >>= asWxppWsResponseNormal'
-            >>= return . AE.getSingObject (Proxy :: Proxy "tagid_list")
+            >>= return . unRespGetTagsOfUser
 -- }}}1
 
 

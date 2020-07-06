@@ -6,6 +6,11 @@ module WeiXin.PublicPlatform.Misc where
 
 -- {{{1 imports
 import ClassyPrelude hiding (try)
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import Control.DeepSeq                      (($!!))
+#endif
 import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.Map.Strict            as Map
 import qualified Data.HashMap.Strict        as HM
@@ -15,7 +20,6 @@ import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString            as B
 import qualified Data.ByteString.Lazy       as LB
-import Control.DeepSeq                      (($!!))
 import Control.Monad.Except                 (runExceptT, ExceptT(..), withExceptT)
 #if !MIN_VERSION_classy_prelude(1, 0, 0)
 import Control.Monad.Trans.Control          (MonadBaseControl)

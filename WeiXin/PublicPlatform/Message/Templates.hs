@@ -2,6 +2,10 @@
 module WeiXin.PublicPlatform.Message.Templates where
 
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+#endif
 import Control.Monad.Logger
 import Data.Default
 import WeiXin.PublicPlatform.Message.Template
@@ -13,7 +17,7 @@ class WxTemplate t where
   templateShortId :: WxppMsgTemplateShortID
   templateTitle :: Text
   templateData :: t -> [(Text, TemplateVal)]
-  withTemplates :: forall m a. (Monad m, MonadLogger m) => Map WxppMsgTemplateShortID WxppMsgTemplateID -> (MkPayload t -> m a) -> m a
+  withTemplates :: forall m a. (MonadFail m, MonadLogger m) => Map WxppMsgTemplateShortID WxppMsgTemplateID -> (MkPayload t -> m a) -> m a
   mkPayload :: WxppMsgTemplateID -> MkPayload t
 
   withTemplates tpls f = do

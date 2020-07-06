@@ -10,6 +10,11 @@ module WeiXin.PublicPlatform.Yesod.Site.Function
 
 -- {{{1 imports
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import Control.DeepSeq                      (($!!))
+#endif
 import Yesod
 import Control.Lens
 import qualified Control.Exception.Safe as ExcSafe
@@ -17,7 +22,6 @@ import Network.Wreq
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
-import Control.DeepSeq                      (($!!))
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Conduit.List          as CL
 import qualified Data.Map.Strict            as Map

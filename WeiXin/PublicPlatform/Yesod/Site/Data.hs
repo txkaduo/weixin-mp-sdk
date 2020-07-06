@@ -6,6 +6,10 @@ module WeiXin.PublicPlatform.Yesod.Site.Data where
 
 -- {{{1 imports
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+#endif
 import qualified Data.ByteString.Lazy as LB
 import Yesod
 import Control.Monad.Logger

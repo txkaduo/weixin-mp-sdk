@@ -7,11 +7,15 @@ module WeiXin.PublicPlatform.InMsgHandler where
 
 -- {{{1 imports
 import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+import Control.Monad (MonadFail(..))
+#else
+import Control.DeepSeq                      (($!!))
+#endif
 import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq hiding (Proxy)
 import Control.Lens hiding ((<.>), op)
 import Data.Proxy
-import Control.DeepSeq                      (($!!))
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
@@ -1256,7 +1260,7 @@ parseForwardData ctor obj =
                     <$> obj .:? "user-info-cache-ttl" .!= (3600 * 2))
 
 
-parsePosixRE :: Monad m => String -> m Regex
+parsePosixRE :: MonadFail m => String -> m Regex
 parsePosixRE r = do
     case compile blankCompOpt blankExecOpt r of
         Left err -> fail $ "Failed to compile RE: " <> err

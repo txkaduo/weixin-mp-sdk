@@ -4,10 +4,8 @@ module WeiXin.PublicPlatform.Message.Template where
 -- {{{1 imports
 import           ClassyPrelude hiding (Element)
 import           Control.Lens hiding ((.=))
-import           Data.Aeson (ToJSON(..), (.=), object)
-import           Data.Aeson.Extra as AE
+import           Data.Aeson (ToJSON(..), (.=), object, FromJSON(..), withObject, (.:))
 import           Data.Aeson.TH (deriveJSON, fieldLabelModifier, defaultOptions)
-import           Data.Proxy
 import           Data.Default
 import           Network.Wreq hiding (Proxy)
 import qualified Network.Wreq.Session as WS
@@ -64,6 +62,13 @@ instance ToJSON TemplateMsgSendPayload where
 -- }}}1
 
 
+newtype RespGetTemplateID = RespGetTemplateID { unRespGetTemplateID :: WxppMsgTemplateID }
+
+instance FromJSON RespGetTemplateID where
+  parseJSON = withObject "RespGetTemplateID" $ \ o -> do
+    RespGetTemplateID <$> o .: "template_id"
+
+
 -- | 从企业模板库中选择一个模板消息short id加到自己可以使用的模板集合中，得到一个 WxppMsgTemplateID
 wxppGetTemplateIDByShort :: (WxppApiMonad env m)
                     => AccessToken
@@ -77,9 +82,15 @@ wxppGetTemplateIDByShort (AccessToken { accessTokenData = atk }) short_id = do
 
   liftIO (WS.postWith opts sess url $ object [ "template_id_short" .= short_id ])
               >>= asWxppWsResponseNormal'
-              >>= return . AE.getSingObject (Proxy :: Proxy "template_id")
+              >>= return . unRespGetTemplateID
 -- }}}1
 
+
+newtype RespSendTemplateMsg = RespSendTemplateMsg { unRespSendTemplateMsg :: WxppTemplSendMsgID }
+
+instance FromJSON RespSendTemplateMsg where
+  parseJSON = withObject "RespSendTemplateMsg" $ \ o -> do
+    RespSendTemplateMsg <$> o .: "msgid"
 
 -- | 发送模板消息
 wxppSendTemplateMsg :: (WxppApiMonad env m)
@@ -94,7 +105,7 @@ wxppSendTemplateMsg (AccessToken { accessTokenData = atk }) payload = do
 
   liftIO (WS.postWith opts sess url $ toJSON payload)
               >>= asWxppWsResponseNormal'
-              >>= return . AE.getSingObject (Proxy :: Proxy "msgid")
+              >>= return . unRespSendTemplateMsg
 -- }}}1
 
 

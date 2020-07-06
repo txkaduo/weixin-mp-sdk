@@ -1,12 +1,16 @@
 module WeiXin.PublicPlatform.Pay.Function where
 
-import ClassyPrelude
-
 -- {{{1 imports
+import ClassyPrelude
+#if MIN_VERSION_base(4, 13, 0)
+-- import Control.Monad (MonadFail(..))
+#else
+import           Control.Monad.Reader   (asks)
+import           Data.Time.Format       (parseTimeM)
+#endif
 import           Control.Lens           hiding ((.=))
 import           Control.Monad.Except   hiding (forM_)
 import           Control.Monad.Logger
-import           Control.Monad.Reader   (asks)
 import           Control.Monad.Trans.Maybe
 import qualified Crypto.Hash.MD5        as MD5
 import qualified Data.ByteString.Base16 as B16
@@ -18,7 +22,6 @@ import           Data.Aeson             (object, (.=), encode, ToJSON(..))
 import qualified Data.Text.Lazy         as LT
 import           Data.Time              (LocalTime, hoursToTimeZone,
                                          localTimeToUTC, FormatTime)
-import           Data.Time.Format       (parseTimeM)
 import           Network.Wreq           (responseBody)
 import qualified Network.Wreq.Session   as WS
 import           Text.XML               (Document (..), Element (..), Name (..),
