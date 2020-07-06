@@ -11,7 +11,7 @@ module WeiXin.PublicPlatform.Yesod.Site
 -- {{{1 imports
 import ClassyPrelude
 #if MIN_VERSION_base(4, 13, 0)
-import Control.Monad (MonadFail(..))
+--import Control.Monad (MonadFail(..))
 #else
 #endif
 import Yesod
@@ -518,7 +518,7 @@ wxppHandlerOAuthReturnGetInfo broker app_id = do
 
 -- | 测试是否已经过微信用户授权，是则执行执行指定的函数
 -- 否则重定向至微信授权页面，待用户授权成功后再重定向回到当前页面
-wxppOAuthHandler :: (MonadFail m, MonadHandler m, WxppCacheTemp c)
+wxppOAuthHandler :: (ExcSafe.MonadThrow m, MonadHandler m, WxppCacheTemp c)
                 => c
                 -> (Route MaybeWxppSub -> [(Text, Text)] -> m Text)
                 -> Maybe WxppAppID
@@ -939,7 +939,7 @@ initWxppUserDbCacheOfApp api_env get_atk = do
 
 -- | 若当前会话未经过微信登录，则调用 yesodComeBackWithWxLogin
 --   否则从会话中取已登录的微信用户信息
-yesodMakeSureInWxLoggedIn :: ( MonadHandler m, MonadLoggerIO m, MonadFail m
+yesodMakeSureInWxLoggedIn :: ( MonadHandler m, MonadLoggerIO m, ExcSafe.MonadThrow m
                              , RenderMessage (HandlerSite m) FormMessage
                              , HasWxppUrlConfig e, HasWreqSession e
                              , WxppCacheTemp c
@@ -971,7 +971,7 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
-yesodComeBackWithWxLogin :: ( MonadHandler m, MonadLoggerIO m, MonadFail m
+yesodComeBackWithWxLogin :: ( MonadHandler m, MonadLoggerIO m, ExcSafe.MonadThrow m
                             , RenderMessage (HandlerSite m) FormMessage
                             , HasWxppUrlConfig e, HasWreqSession e
                             , WxppCacheTemp c
@@ -1026,7 +1026,7 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
-yesodComeBackWithWxLogin' :: ( MonadHandler m, MonadLoggerIO m, MonadFail m
+yesodComeBackWithWxLogin' :: ( MonadHandler m, MonadLoggerIO m, ExcSafe.MonadThrow m
                             , RenderMessage (HandlerSite m) FormMessage
                             , HasWxppUrlConfig e, HasWreqSession e
                             , WxppCacheTemp c
