@@ -13,7 +13,9 @@ import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens
 import Control.Monad.Logger
+#if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Reader                 (asks)
+#endif
 import Network.Mime                         (MimeType, defaultMimeLookup)
 import qualified Data.ByteString.Lazy       as LB
 import Data.Yaml                            (ParseException)

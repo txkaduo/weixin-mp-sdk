@@ -12,7 +12,9 @@ import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Data.Aeson
 import Control.Monad.Logger
+#if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Reader                 (asks)
+#endif
 import Data.SafeCopy
 -- import Data.Acid                            (query)
 import qualified Data.ByteString.Lazy       as LB

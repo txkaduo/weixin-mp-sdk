@@ -10,7 +10,9 @@ import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens hiding ((.=))
 import Control.Monad.Logger
+#if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Reader                 (asks)
+#endif
 import Data.Aeson
 import Control.Monad.Trans.Except
 import System.FilePath                      (takeDirectory, normalise)

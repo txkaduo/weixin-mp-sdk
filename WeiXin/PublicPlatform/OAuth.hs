@@ -28,7 +28,9 @@ import ClassyPrelude
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
 import Control.Lens
+#if !MIN_VERSION_base(4, 13, 0)
 import Control.Monad.Reader                 (asks)
+#endif
 import Network.URI                          ( parseAbsoluteURI, uriQuery, uriFragment
                                             , uriToString
                                             )

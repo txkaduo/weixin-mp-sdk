@@ -10,11 +10,13 @@ module WeiXin.PublicPlatform.ThirdParty
 -- {{{1 imports
 import           ClassyPrelude
 import           Control.Arrow         (left)
-import           Control.DeepSeq       (NFData)
 import           Control.Lens          hiding ((.=))
 import           Control.Monad.Logger
 import           Control.Monad.Except
-import           Control.Monad.Reader  (asks)
+#if !MIN_VERSION_base(4, 13, 0)
+import Control.Monad.Reader                 (asks)
+import           Control.DeepSeq       (NFData)
+#endif
 import           Data.Aeson            as A
 import           Data.Aeson.Types      as A
 import           Data.Int              (Int8)
