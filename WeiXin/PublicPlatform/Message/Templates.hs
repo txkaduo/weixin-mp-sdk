@@ -3,9 +3,10 @@ module WeiXin.PublicPlatform.Message.Templates where
 
 import ClassyPrelude
 #if MIN_VERSION_base(4, 13, 0)
-import Control.Monad (MonadFail(..))
+-- import Control.Monad (MonadFail(..))
 #else
 #endif
+import Control.Exception.Safe (MonadThrow, throwM)
 import Control.Monad.Logger
 import Data.Default
 import WeiXin.PublicPlatform.Message.Template
@@ -17,7 +18,7 @@ class WxTemplate t where
   templateShortId :: WxppMsgTemplateShortID
   templateTitle :: Text
   templateData :: t -> [(Text, TemplateVal)]
-  withTemplates :: forall m a. (MonadFail m, MonadLogger m) => Map WxppMsgTemplateShortID WxppMsgTemplateID -> (MkPayload t -> m a) -> m a
+  withTemplates :: forall m a. (MonadThrow m, MonadLogger m) => Map WxppMsgTemplateShortID WxppMsgTemplateID -> (MkPayload t -> m a) -> m a
   mkPayload :: WxppMsgTemplateID -> MkPayload t
 
   withTemplates tpls f = do
@@ -25,7 +26,7 @@ class WxTemplate t where
     case lookup short_id tpls of
       Nothing -> do
         $logError $ "template id not found by short id: " <> tshow short_id
-        fail "no template id"
+        throwM $ userError "no template id"
       Just tpl_id -> f $ mkPayload tpl_id
 
   mkPayload tpl_id (BaseTemplate{..}) tpl user_id =
