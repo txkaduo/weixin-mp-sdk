@@ -1560,7 +1560,13 @@ parseSexJson = go
                 Nothing -> fail $ "unknown sex: " <> show x
 
 
-parseSexInt :: MonadFail m => Int -> m (Maybe Gender)
+parseSexInt ::
+#if MIN_VERSION_base(4, 13, 0)
+            MonadFail m
+#else
+            Monad m
+#endif
+              => Int -> m (Maybe Gender)
 parseSexInt 0 = return Nothing
 parseSexInt 1 = return $ Just Male
 parseSexInt 2 = return $ Just Female

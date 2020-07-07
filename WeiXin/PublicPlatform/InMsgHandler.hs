@@ -1260,7 +1260,13 @@ parseForwardData ctor obj =
                     <$> obj .:? "user-info-cache-ttl" .!= (3600 * 2))
 
 
-parsePosixRE :: MonadFail m => String -> m Regex
+parsePosixRE ::
+#if MIN_VERSION_base(4, 13, 0)
+            MonadFail m
+#else
+            Monad m
+#endif
+            => String -> m Regex
 parsePosixRE r = do
     case compile blankCompOpt blankExecOpt r of
         Left err -> fail $ "Failed to compile RE: " <> err
