@@ -36,16 +36,14 @@ import WeiXin.PublicPlatform.Utils
 -- | 生成直接下载临时素材的URL，可用于从第三方平台直接下载
 -- CAUTION: URL 包含 access token 敏感信息，不要交给不可信的第三方
 wxppDownloadMediaUrl :: WxppUrlConfig
-                     -> Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
                      -> AccessToken
                      -> WxppBriefMediaID
                      -> UrlText
 -- {{{1
-wxppDownloadMediaUrl url_conf if_ssl (AccessToken { accessTokenData = atk }) mid =
+wxppDownloadMediaUrl url_conf (AccessToken { accessTokenData = atk }) mid =
     UrlText $ fromString $ url0 <> "?" <> qs
     where
-        url0 = (if if_ssl then wxppUrlConfSecureApiBase else wxppUrlConfNonSecureApiBase) url_conf
-                <> "/media/get"
+        url0 = wxppUrlConfSecureApiBase url_conf <> "/media/get"
         vars =  [ ("access_token", T.unpack atk)
                 , ("media_id", T.unpack (unWxppBriefMediaID mid))
                 ]
@@ -64,15 +62,13 @@ instance FromJSON DownloadMediaJsResult where
 
 -- | 下载一个多媒体文件
 wxppDownloadMedia :: ( WxppApiMonad env m, ExcSafe.MonadCatch m )
-                  => Bool    -- ^ 文档说下载视频时不能用 https，但这个信息只有调用者才知道
-                  -> AccessToken
+                  => AccessToken
                   -> WxppBriefMediaID
                   -> m (Response LB.ByteString)
 -- {{{1
-wxppDownloadMedia if_ssl (AccessToken { accessTokenData = atk }) mid = do
+wxppDownloadMedia (AccessToken { accessTokenData = atk }) mid = do
     (sess, url_conf) <- asks (getWreqSession &&& getWxppUrlConfig)
-    let url = (if if_ssl then wxppUrlConfSecureApiBase else wxppUrlConfNonSecureApiBase) url_conf
-                <> "/media/get"
+    let url = wxppUrlConfSecureApiBase url_conf <> "/media/get"
         opts = defaults & param "access_token" .~ [ atk ]
                         & param "media_id" .~ [ unWxppBriefMediaID mid ]
 

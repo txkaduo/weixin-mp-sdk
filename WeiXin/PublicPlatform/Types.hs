@@ -81,7 +81,6 @@ class ToEnumEither a where
 
 data WxppUrlConfig = WxppUrlConfig
   { wxppUrlConfSecureApiBase    :: String
-  , wxppUrlConfNonSecureApiBase :: String
   , wxppUrlConfSnsApiBase       :: String
   , wxppUrlConfFileApiBase      :: String
   , wxppUrlConfUserPayApiBase   :: String
@@ -98,7 +97,6 @@ data WxppUrlConfig = WxppUrlConfig
 instance Default WxppUrlConfig where
   def = WxppUrlConfig
     { wxppUrlConfSecureApiBase    = "https://api.weixin.qq.com/cgi-bin"
-    , wxppUrlConfNonSecureApiBase = "http://api.weixin.qq.com/cgi-bin"
     , wxppUrlConfSnsApiBase       = "https://api.weixin.qq.com/sns"
     , wxppUrlConfFileApiBase      = "https://file.api.weixin.qq.com/cgi-bin"
     , wxppUrlConfUserPayApiBase   = "https://api.mch.weixin.qq.com/pay"
@@ -111,7 +109,6 @@ instance FromJSON WxppUrlConfig where
   parseJSON = withObject "WxppUrlConfig" $ \o -> do
     fmap (($ def) . appEndo . mconcat) $ sequenceA
       [ o .:? "secure-base"     >>= return . maybe mempty (Endo . upd_wxppUrlConfSecureBase) . chk_empty
-      , o .:? "non-secure-base" >>= return . maybe mempty (Endo . upd_wxppUrlConfNonSecureBase) . chk_empty
       , o .:? "sns-base"        >>= return . maybe mempty (Endo . upd_wxppUrlConfSnsApiBase) . chk_empty
       , o .:? "file-base"       >>= return . maybe mempty (Endo . upd_wxppUrlConfFileApiBase) . chk_empty
       , o .:? "user-pay-base"   >>= return . maybe mempty (Endo . upd_wxppUrlConfUserPayApiBase) . chk_empty
@@ -122,7 +119,6 @@ instance FromJSON WxppUrlConfig where
         null_to_empty s                  = if null s then Nothing else Just s
         chk_empty                        = join . fmap null_to_empty
         upd_wxppUrlConfSecureBase x c    = c { wxppUrlConfSecureApiBase = x }
-        upd_wxppUrlConfNonSecureBase x c = c { wxppUrlConfNonSecureApiBase = x }
         upd_wxppUrlConfSnsApiBase x c    = c { wxppUrlConfSnsApiBase = x }
         upd_wxppUrlConfFileApiBase x c   = c { wxppUrlConfFileApiBase = x }
         upd_wxppUrlConfUserPayApiBase x c = c { wxppUrlConfUserPayApiBase = x }

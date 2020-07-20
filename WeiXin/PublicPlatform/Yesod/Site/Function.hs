@@ -337,7 +337,6 @@ downloadSaveMediaToDB ::
 #endif
     ) =>
     WxppApiEnv
-    -> Bool
     -> AccessToken
     -> WxppInMsgRecordId
     -> WxppBriefMediaID
@@ -346,8 +345,8 @@ downloadSaveMediaToDB ::
 #else
     -> m ()
 #endif
-downloadSaveMediaToDB api_env if_ssl atk msg_id media_id = do
-    err_or_rb <- tryWxppWsResult $ flip runReaderT api_env $ wxppDownloadMedia if_ssl atk media_id
+downloadSaveMediaToDB api_env atk msg_id media_id = do
+    err_or_rb <- tryWxppWsResult $ flip runReaderT api_env $ wxppDownloadMedia atk media_id
     case err_or_rb of
         Left err -> do
                     $(logErrorS) wxppLogSource $ "Failed to download media '" <> unWxppBriefMediaID media_id
