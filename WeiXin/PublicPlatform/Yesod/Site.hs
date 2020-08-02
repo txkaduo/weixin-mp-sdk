@@ -30,6 +30,7 @@ import Network.URI                          ( parseURI, uriQuery, uriToString )
 import Network.HTTP                         ( urlEncode )
 import Yesod.Default.Util                   ( widgetFileReload )
 import Data.Time                            ( addUTCTime )
+import Web.Cookie                           (SetCookie(..))
 
 import Yesod.Helpers.Handler                ( httpErrorRetryWithValidParams
                                             , reqPathPieceParamPostGet
@@ -296,19 +297,20 @@ realHandlerMsg foundation app_info = do
 
 -- | 生成随机字串作为 oauth 的state参数之用
 -- 这是按官方文档的思路，用于防 csrf
--- 所生成的随机字串会放在 sessionKeyWxppOAuthState 会话变量里
+-- 所生成的随机字串会放在 cookieNameWxppOAuthState cookie 里
+-- CAUTION: 不要使用会话变量，因为会话可能因为超时而突然变成另一个新会话
 wxppOAuthMakeRandomState :: (MonadHandler m)
                          => WxppAppID
                          -> m Text
 -- {{{1
 wxppOAuthMakeRandomState app_id = do
-    m_oauth_random_st <- lookupSession (sessionKeyWxppOAuthState app_id)
+    m_oauth_random_st <- lookupCookie (cookieNameWxppOAuthState app_id)
     case m_oauth_random_st of
         Just x | not (null x) -> do
             return x
         _   -> do
             random_state <- fmap pack $ randomString 32 (['0'..'9'] <> ['a'..'z'] <> ['A'..'Z'])
-            setSession (sessionKeyWxppOAuthState app_id) random_state
+            setCookie (def { setCookieName = encodeUtf8 (cookieNameWxppOAuthState app_id), setCookieValue = encodeUtf8 random_state })
             return random_state
 -- }}}1
 
@@ -340,8 +342,8 @@ wxppOAuthLoginRedirectUrl url_render m_comp_app_id app_id scope user_st return_u
 sessionKeyWxppUser :: WxppAppID -> Text
 sessionKeyWxppUser app_id = "wx|" <> unWxppAppID app_id
 
-sessionKeyWxppOAuthState :: WxppAppID -> Text
-sessionKeyWxppOAuthState app_id = "wx-oauth-st|" <> unWxppAppID app_id
+cookieNameWxppOAuthState :: WxppAppID -> Text
+cookieNameWxppOAuthState app_id = "wx-oauth-st|" <> unWxppAppID app_id
 
 sessionKeyWxppUnionId :: Text
 sessionKeyWxppUnionId = "wx-union-id"
@@ -388,7 +390,7 @@ getOAuthCallbackR = withWxppSubHandler $ \sub -> do
 
     oauth_state <- liftM (fromMaybe "") $ lookupGetParam "state"
     let (expected_st, state') = T.breakOn ":" oauth_state
-    m_expected_state <- lookupSession (sessionKeyWxppOAuthState app_id)
+    m_expected_state <- lookupCookie (cookieNameWxppOAuthState app_id)
     unless (m_expected_state == Just expected_st) $ do
         $logErrorS wxppLogSource $
             "OAuth state check failed, got: " <> oauth_state
@@ -1065,7 +1067,7 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
                      $logErrorS wxppLogSource $ "OAuth state param is empty."
                      invalidArgs ["state"]
 
-        m_expected_state <- lift $ lookupSession (sessionKeyWxppOAuthState app_id)
+        m_expected_state <- lift $ lookupCookie (cookieNameWxppOAuthState app_id)
         unless (m_expected_state == Just state) $ do
           $logErrorS wxppLogSource $
                         "OAuth state check failed, got: " <> tshow state

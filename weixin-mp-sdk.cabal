@@ -147,6 +147,7 @@ library
                      , xml-conduit
                      , xml-hamlet
                      , wai
+                     , cookie
                      , conduit
                      , conduit-extra
                      , conduit-combinators
