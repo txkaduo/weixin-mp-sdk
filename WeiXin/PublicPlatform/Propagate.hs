@@ -241,7 +241,7 @@ wxppPropagateNewVideoID (AccessToken { accessTokenData = atk }) media_id title d
 
     CreateVideoMediaIDResult _typ v_media_id _created_at
         <- liftIO (WS.postWith opts sess url $ object
-                    [ "type" .= ("video" :: Text) -- ^ FIXME: 这个字段文档不见，不知道是否多余
+                    [ "type" .= ("video" :: Text) -- FIXME: 这个字段文档不见，不知道是否多余
                     , "media_id" .= media_id
                     , "title" .= title
                     , "description" .= desc
