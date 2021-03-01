@@ -6,12 +6,14 @@
 module WeiXin.PublicPlatform.Yesod.Model where
 
 -- {{{1
-import ClassyPrelude.Yesod
+import ClassyPrelude hiding (delete)
+import Yesod
+import Conduit
+import Database.Persist.Sql
 import qualified Data.Conduit.List          as CL
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
 import Database.Persist.Quasi
-import Database.Persist.Sql                 (Migration)
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 

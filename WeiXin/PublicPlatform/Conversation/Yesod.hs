@@ -3,7 +3,10 @@
 module WeiXin.PublicPlatform.Conversation.Yesod where
 
 -- {{{1 imports
-import ClassyPrelude.Yesod hiding (Proxy, proxy)
+import ClassyPrelude
+import Yesod
+import Conduit
+import Database.Persist.Sql
 import qualified Control.Exception.Safe as ExcSafe
 import Control.Monad.Logger
 import Data.Proxy

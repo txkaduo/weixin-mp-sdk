@@ -1,10 +1,12 @@
 module WeiXin.PublicPlatform.Yesod.Utils where
 
 -- {{{1 imports
-import           ClassyPrelude.Yesod hiding (requestHeaders)
+import           ClassyPrelude
+import           Yesod
 import qualified Data.ByteString     as B
 import           Data.Char           (chr, isDigit)
 import           Network.Wai         (requestHeaders)
+import           Network.HTTP.Types (hUserAgent)
 
 import           Yesod.Helpers.JSend
 

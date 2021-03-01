@@ -973,7 +973,8 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
-yesodComeBackWithWxLogin :: ( MonadHandler m, MonadLoggerIO m, ExcSafe.MonadThrow m
+yesodComeBackWithWxLogin :: ( MonadHandler m, MonadLoggerIO m
+                            , ExcSafe.MonadThrow m
                             , RenderMessage (HandlerSite m) FormMessage
                             , HasWxppUrlConfig e, HasWreqSession e
                             , WxppCacheTemp c
@@ -1028,11 +1029,12 @@ yesodComeBackWithWxLogin wx_api_env cache get_secret fix_return_url scope app_id
 -- | 调用微信 oauth 取 open id　再继续处理下一步逻辑
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
-yesodComeBackWithWxLogin' :: ( MonadHandler m, MonadLoggerIO m, ExcSafe.MonadThrow m
-                            , RenderMessage (HandlerSite m) FormMessage
-                            , HasWxppUrlConfig e, HasWreqSession e
-                            , WxppCacheTemp c
-                            )
+yesodComeBackWithWxLogin' :: ( MonadHandler m, MonadLoggerIO m
+                             -- , ExcSafe.MonadThrow m
+                             , RenderMessage (HandlerSite m) FormMessage
+                             , HasWxppUrlConfig e, HasWreqSession e
+                             , WxppCacheTemp c
+                             )
                           => e
                           -> c
                           -> (WxppAppID -> OAuthCode -> m (Either String (Maybe OAuthAccessTokenResult)))

@@ -1,6 +1,6 @@
 module WeiXin.PublicPlatform.Conversation.TextParser where
 
-import ClassyPrelude.Yesod hiding ((<|>), try, FilePath, (</>), Proxy)
+import ClassyPrelude hiding ((<|>), try, FilePath, (</>))
 import qualified Data.Text                  as T
 import Data.Char
 import Text.Read                            (reads)

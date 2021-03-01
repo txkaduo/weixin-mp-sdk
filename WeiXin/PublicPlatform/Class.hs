@@ -199,11 +199,6 @@ instance HasWxppApiBroker SomeWxppApiBroker where
   getWxppApiBroker = id
 
 
-class HasAccessTokenIO a where
-    wxppGetAccessTokenIO :: a -> IO (Maybe (AccessToken, UTCTime))
-    default wxppGetAccessTokenIO :: HasAccessToken a => a -> IO (Maybe (AccessToken, UTCTime))
-    wxppGetAccessTokenIO = return . Just . wxppGetAccessToken
-
 class HasAccessTokenIO a => HasAccessToken a where
     wxppGetAccessToken :: a -> (AccessToken, UTCTime)
 
@@ -218,6 +213,11 @@ instance HasAccessTokenIO (AccessToken, UTCTime)
 instance HasAccessTokenIO (IO (Maybe (AccessToken, UTCTime))) where
     wxppGetAccessTokenIO = id
 
+
+class HasAccessTokenIO a where
+    wxppGetAccessTokenIO :: a -> IO (Maybe (AccessToken, UTCTime))
+    default wxppGetAccessTokenIO :: HasAccessToken a => a -> IO (Maybe (AccessToken, UTCTime))
+    wxppGetAccessTokenIO = return . Just . wxppGetAccessToken
 
 wxppGetAccessTokenIOMay :: HasAccessTokenIO a
                         => a

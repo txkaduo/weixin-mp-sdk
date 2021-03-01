@@ -1,6 +1,7 @@
 module WeiXin.PublicPlatform.Yesod.Types where
 
-import ClassyPrelude.Yesod hiding (Request)
+import ClassyPrelude
+import Yesod hiding (Request)
 
 import Network.Wai                          (Request)
 import Data.Bits                            ((.&.))

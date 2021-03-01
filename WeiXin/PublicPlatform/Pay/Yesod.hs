@@ -2,7 +2,10 @@
 module WeiXin.PublicPlatform.Pay.Yesod where
 
 -- {{{1 imports
-import ClassyPrelude.Yesod
+import ClassyPrelude
+import Yesod
+import Conduit
+import Data.Default (Default(..))
 
 import           Control.Monad.Except
 import           Control.Monad.Logger
