@@ -941,7 +941,8 @@ initWxppUserDbCacheOfApp api_env get_atk = do
 
 -- | 若当前会话未经过微信登录，则调用 yesodComeBackWithWxLogin
 --   否则从会话中取已登录的微信用户信息
-yesodMakeSureInWxLoggedIn :: ( MonadHandler m, MonadLoggerIO m, ExcSafe.MonadThrow m
+yesodMakeSureInWxLoggedIn :: ( MonadHandler m, MonadLoggerIO m
+                             -- , ExcSafe.MonadThrow m
                              , RenderMessage (HandlerSite m) FormMessage
                              , HasWxppUrlConfig e, HasWreqSession e
                              , WxppCacheTemp c
@@ -974,7 +975,7 @@ yesodMakeSureInWxLoggedIn wx_api_env cache get_secret fix_return_url scope app_i
 -- 注意：这里使用当前页面作为微信返回地址，因此query string参数不要与微信的冲突
 --       不适用于第三方平台(因 wxppOAuthRequestAuthOutsideWx 不能处理第三方平台的情况)
 yesodComeBackWithWxLogin :: ( MonadHandler m, MonadLoggerIO m
-                            , ExcSafe.MonadThrow m
+                            -- , ExcSafe.MonadThrow m
                             , RenderMessage (HandlerSite m) FormMessage
                             , HasWxppUrlConfig e, HasWreqSession e
                             , WxppCacheTemp c
@@ -1071,7 +1072,7 @@ yesodComeBackWithWxLogin' wx_api_env cache get_oauth_atk fix_return_url scope ap
 
         m_expected_state <- lift $ lookupCookie (cookieNameWxppOAuthState app_id)
         unless (m_expected_state == Just state) $ do
-          $logErrorS wxppLogSource $
+          $logDebugS wxppLogSource $
                         "OAuth state check failed, got: " <> tshow state
                         <> ", expect: " <> tshow m_expected_state
                         <> ", app_id: " <> unWxppAppID app_id
