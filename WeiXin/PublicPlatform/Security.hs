@@ -192,7 +192,7 @@ wxppMakeNonce :: MonadIO m
                 -> m Nonce
 wxppMakeNonce salt_len = liftIO $ do
     let gen_len = salt_len  -- long enough
-    liftM (Nonce . fromString . C8.unpack . take salt_len . B64L.encode . B.pack) $
+    liftM (Nonce . T.take salt_len . B64L.encodeBase64 . B.pack) $
         replicateM gen_len randomIO
 
 -- | 加密明文的入口: base64-encoded
@@ -202,7 +202,7 @@ wxppEncryptB64 :: MonadIO m =>
     -> ByteString       -- ^ message
     -> m (Either String (ByteString, ByteString))
 wxppEncryptB64 app_id ak msg = runExceptT $ do
-    liftM (B64.encode *** id) $ ExceptT $ wxppEncrypt app_id ak msg
+    liftM (first B64.encodeBase64') $ ExceptT $ wxppEncrypt app_id ak msg
 
 -- | 加密明文的入口: 文本到文本格式
 wxppEncryptText :: MonadIO m =>

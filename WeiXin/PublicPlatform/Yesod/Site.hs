@@ -14,6 +14,7 @@ import ClassyPrelude
 --import Control.Monad (MonadFail(..))
 #else
 #endif
+import Control.Arrow
 import Yesod
 import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.ByteString.Lazy       as LB
@@ -99,7 +100,7 @@ checkSignature foundation sign_param msg = do
     let token = getWxppToken foundation
 
         check_sign (tt, nn, sign) =
-            if B16.encode sign0 == encodeUtf8 ( T.toLower sign )
+            if B16.encodeBase16 sign0 == T.toLower sign
                 then Right ()
                 else Left $ "invalid signature"
             where
@@ -696,7 +697,7 @@ postCreateQrCodePersistR = checkWaiReqThen $ \foundation -> do
             let qrcode_base_url = render_url $ to_parent ShowSimulatedQRCodeR
 
             let fake_ticket = (scene, qrcode_base_url)
-            return $ toJSON $ C8.unpack $ B64L.encode $ LB.toStrict $ A.encode fake_ticket
+            return $ toJSON $ B64L.encodeBase64 $ LB.toStrict $ A.encode fake_ticket
 
         else do
             atk <- getAccessTokenSubHandler' foundation
@@ -713,7 +714,7 @@ getShowSimulatedQRCodeR = do
     ticket_s <- lookupGetParam "ticket"
                 >>= maybe (httpErrorRetryWithValidParams ("missing ticket" :: Text)) return
 
-    (ticket :: FakeQRTicket) <- case B64L.decode (C8.pack $ T.unpack ticket_s) of
+    (ticket :: FakeQRTicket) <- case B64L.decodeBase64 (C8.pack $ T.unpack ticket_s) of
         Left _ -> httpErrorRetryWithValidParams ("invalid ticket" :: Text)
         Right bs -> case decodeEither' bs of
                         Left err -> do
@@ -766,8 +767,9 @@ postTpEventNoticeR = do
 
       lift $ checkSignature foundation "msg_signature" encrypted_xml_t
 
-      decrypted_xml0 <- either throwError (return . fromStrict)
-                              (B64.decode (encodeUtf8 encrypted_xml_t) >>= wxppDecrypt my_app_id enc_key)
+      decrypted_xml0 <- either throwError (return . fromStrict) $ do
+                          left T.unpack (B64.decodeBase64 (encodeUtf8 encrypted_xml_t))
+                            >>= wxppDecrypt my_app_id enc_key
 
       let err_or_parsed = parse_xml_lbs decrypted_xml0 >>= wxppTpDiagramFromCursor . fromDocument
       uts_or_notice <- case err_or_parsed of

@@ -5,7 +5,6 @@ import Control.Arrow (left)
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base64     as B64
 import qualified Data.ByteString.Base16     as B16
-import qualified Data.ByteString.Char8      as C8
 import qualified Data.Text                  as T
 import qualified Data.Text.Lazy             as LT
 
@@ -56,7 +55,7 @@ wxppDecryptByteStringDocumentE :: WxppAppID
 wxppDecryptByteStringDocumentE app_id ak doc = do
   wxppEncryptedTextInDocumentE doc >>= decrypt
   where
-    decrypt t = (B64.decode $ encodeUtf8 t)
+    decrypt t = left T.unpack (B64.decodeBase64 $ encodeUtf8 t)
                         >>= wxppDecrypt app_id ak
 
 -- | call wxppInMsgEntityFromDocumentE with each of the AesKey
@@ -92,7 +91,7 @@ wxppInMsgEntityFromDocumentE app_id ak doc = do
     where
         get_ele_s = getElementContent cursor
         cursor = fromDocument doc
-        decrypt t = (B64.decode $ encodeUtf8 t)
+        decrypt t = left T.unpack (B64.decodeBase64 $ encodeUtf8 t)
                             >>= wxppDecrypt app_id ak
 
 -- | call wxppInMsgEntityFromDocumentE with each of the AesKey
@@ -145,7 +144,7 @@ wxppInMsgEntityFromDocumentA app_id ak doc = do
                 Right ndoc  -> wxppInMsgEntityFromDocument ndoc
     where
         cursor = fromDocument doc
-        decrypt t = (B64.decode $ encodeUtf8 t)
+        decrypt t = left T.unpack (B64.decodeBase64 $ encodeUtf8 t)
                             >>= wxppDecrypt app_id ak
 
 wxppInMsgEntityFromDocument :: Document -> Either String WxppInMsgEntity
@@ -354,7 +353,7 @@ wxppOutMsgEntityToDocumentE app_id app_token ak me = runExceptT $ do
     let root = Element "xml" mempty root_nodes
         root_nodes = [xml|
 <Encrypt>#{encrypted_xml}
-<MsgSignature>#{fromString $ C8.unpack $ B16.encode $ sign}
+<MsgSignature>#{B16.encodeBase16 $ sign}
 <TimeStamp>#{unTimeStampS ts}
 <Nonce>#{unNounce nonce}
 |]

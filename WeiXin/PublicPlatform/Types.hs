@@ -15,13 +15,13 @@ import Control.Monad (MonadFail(..))
 #else
 import Control.DeepSeq                      (NFData)
 #endif
+import Control.Arrow
 
 import Data.SafeCopy
 import Data.Aeson                           as A
 import qualified Data.Text                  as T
 import Data.Aeson.Types                     (Parser, Pair, typeMismatch)
 import qualified Data.ByteString.Base64     as B64
-import qualified Data.ByteString.Char8      as C8
 -- import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
 import Data.Binary                          (Binary)
@@ -402,7 +402,7 @@ newtype AesKey = AesKey { unAesKey :: Key AES }
 
 -- {{{1 instances and functions
 instance Show AesKey where
-    show (AesKey k) = "AesKey:" <> (C8.unpack $ B64.encode $ toBytes k)
+    show (AesKey k) = "AesKey:" <> (T.unpack $ B64.encodeBase64 $ toBytes k)
 
 instance PersistField AesKey where
     toPersistValue      = toPersistValue . toBytes . unAesKey
@@ -414,14 +414,14 @@ instance PersistFieldSql AesKey where
     sqlType _ = sqlType (Proxy :: Proxy ByteString)
 
 instance ToMessage AesKey where
-    toMessage (AesKey k) = T.filter (/= '=') $ decodeUtf8 $ B64.encode $ toBytes k
+    toMessage (AesKey k) = T.filter (/= '=') $ B64.encodeBase64 $ toBytes k
 
 instance ToMarkup AesKey where
     toMarkup = toMarkup . toMessage
     preEscapedToMarkup = preEscapedToMarkup . toMessage
 
 decodeBase64Encoded :: Text -> Either String ByteString
-decodeBase64Encoded = B64.decode . encodeUtf8
+decodeBase64Encoded = left T.unpack . B64.decodeBase64 . encodeUtf8
 
 decodeBase64AesKey :: Text -> Either String AesKey
 decodeBase64AesKey t = fmap AesKey $ do

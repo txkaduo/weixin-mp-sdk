@@ -8,7 +8,6 @@ import ClassyPrelude
 import           Control.Monad.Reader   (asks)
 #endif
 import qualified Crypto.Hash.SHA1           as SHA1
-import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Base16     as B16
 import qualified Data.Text                  as T
 import Network.Wreq
@@ -142,7 +141,7 @@ wxppJsApiConfigJsVal app_id ticket debug url api_list = do
     , "appId" .= app_id -- 必填，公众号的唯一标识
     , "timestamp" .= ptime -- 必填，生成签名的时间戳
     , "nonceStr" .= nonce -- 必填，生成签名的随机串
-    , "signature" .= T.toLower (fromString $ C8.unpack $ B16.encode sign) -- 必填，签名，见附录1
+    , "signature" .= T.toLower (B16.encodeBase16 sign) -- 必填，签名，见附录1
     , "jsApiList" .= api_list --  必填，需要使用的JS接口列表，所有JS接口列表见附录2
     ]
 -- }}}1

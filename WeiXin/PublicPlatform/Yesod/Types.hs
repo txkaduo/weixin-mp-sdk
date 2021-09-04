@@ -1,18 +1,16 @@
 module WeiXin.PublicPlatform.Yesod.Types where
 
 import ClassyPrelude
-import Yesod hiding (Request)
 
-import Network.Wai                          (Request)
+import qualified Network.Wai                as Wai
 import Data.Bits                            ((.&.))
 import Network.Socket                       (SockAddr(..))
-import Network.Wai                          (remoteHost)
 
 
 -- | 判断 WAI 请求是否来自可信的来源
 -- 有若干 web 接口是打算暴露给同伴使用的
 -- 这个函数负责检查这些请求是否可以执行
-type RequestAuthChecker = Request -> IO Bool
+type RequestAuthChecker = Wai.Request -> IO Bool
 
 alwaysDenyRequestAuthChecker :: RequestAuthChecker
 alwaysDenyRequestAuthChecker _ = return False
@@ -23,7 +21,7 @@ alwaysAllowRequestAuthChecker :: RequestAuthChecker
 alwaysAllowRequestAuthChecker _ = return True
 
 loopbackOnlyRequestAuthChecker :: RequestAuthChecker
-loopbackOnlyRequestAuthChecker req = return $ isLoopbackSockAddr $ remoteHost req
+loopbackOnlyRequestAuthChecker req = return $ isLoopbackSockAddr $ Wai.remoteHost req
 
 isLoopbackSockAddr :: SockAddr -> Bool
 isLoopbackSockAddr addr =

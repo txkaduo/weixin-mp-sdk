@@ -62,7 +62,7 @@ aesKeyField :: forall m. (Monad m, RenderMessage (HandlerSite m) FormMessage) =>
 aesKeyField = checkMMap conv conv_back textField
     where
         conv t = return $ either (Left . T.pack) Right $ decodeBase64AesKey t
-        conv_back = fromString . C8.unpack . B64.encode . toBytes . unAesKey
+        conv_back = B64.encodeBase64 . toBytes . unAesKey
 
 
 -- | 从字典中找出形如 "wxpp~xxxx" 的字段，每个那样的字段解释出一个 WxppAppConfig/WxppAppConf

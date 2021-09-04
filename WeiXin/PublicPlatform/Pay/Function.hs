@@ -14,7 +14,6 @@ import           Control.Monad.Logger
 import           Control.Monad.Trans.Maybe
 import qualified Crypto.Hash.MD5        as MD5
 import qualified Data.ByteString.Base16 as B16
-import qualified Data.ByteString.Char8  as C8
 import qualified Data.ByteString.Lazy   as LB
 import           Data.Default           (def)
 import           Data.Monoid            (Endo (..))
@@ -111,8 +110,8 @@ wxPaySignInternal :: WxPayAppKey
                   -> WxPaySignature
 -- {{{1
 wxPaySignInternal (WxPayAppKey ak) params_all =
-  WxPaySignature $ toUpper $ fromString $
-    C8.unpack $ B16.encode $ MD5.hash $ encodeUtf8 str_to_sign
+  WxPaySignature $ toUpper $
+    B16.encodeBase16 $ MD5.hash $ encodeUtf8 str_to_sign
   where
     mks k v     = mconcat [ k, "=", v ]
     str_to_sign = intercalate "&" $

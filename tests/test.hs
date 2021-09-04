@@ -3,11 +3,10 @@
 module Main where
 
 import ClassyPrelude
-import Crypto.Cipher                        (makeKey)
+import Crypto.Cipher.Types                  (makeKey)
 import System.Exit
 import           Control.Monad.Logger
 import qualified Data.ByteString.Base64     as B64
-import qualified Data.ByteString.Char8      as C8
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.ByteString.Base16     as B16
 import Data.Default                         (def)
@@ -31,10 +30,10 @@ import WeiXin.PublicPlatform
 
 testLikeJava :: IO ()
 testLikeJava = do
-    aes_bs <- case B64.decode $ encodingAesKey <> "=" of
+    aes_bs <- case B64.decodeBase64 $ encodingAesKey <> "=" of
                     Left err -> do
                         putStrLn $ "failed to decode encodingAesKey: "
-                                    <> fromString err
+                                    <> err
                         exitFailure
                     Right bs -> return bs
     aes_key <- case makeKey aes_bs of
@@ -50,7 +49,7 @@ testLikeJava = do
                                 <> fromString err
                     exitFailure
         Right encrypted -> do
-            let real_afterAesEncrypt = fromString $ C8.unpack $ B64.encode encrypted
+            let real_afterAesEncrypt = B64.encodeBase64 encrypted
             when (real_afterAesEncrypt /= afterAesEncrypt) $ do
                 putStrLn $ "wxppEncryptText returns unexpected result"
                 putStrLn real_afterAesEncrypt
@@ -66,13 +65,13 @@ testLikeJava = do
                 Right msg_bs -> do
                     when (msg_bs /= encodeUtf8 replyMsg) $ do
                         putStrLn $ "wxppDecrypt returns unexpected result"
-                        putStrLn $ fromString $ C8.unpack $ B64.encode msg_bs
+                        putStrLn $ B64.encodeBase64 msg_bs
                         exitFailure
 
-    case B64.decode afterAesEncrypt2 of
+    case B64.decodeBase64 afterAesEncrypt2 of
         Left err -> do
                     putStrLn $ "failed to base64-decode afterAesEncrypt2: "
-                                <> fromString err
+                                <> err
                     exitFailure
         Right bs -> do
             let dec_res = wxppDecrypt appId aes_key bs
@@ -144,13 +143,13 @@ testJsApiTicket = do
                     (UrlText "http://mp.weixin.qq.com?params=value")
                     1414587457
                     (Nonce "Wm3WZYTPz0wzccnW")
-        sign_str = C8.unpack (B16.encode sign)
+        sign_str = B16.encodeBase16 sign
     if sign_str /= "0f9de62fce790f9a083d5c99e95740ceb90c27ed"
         then do
-            putStrLn $ "wrong js signature: " <> fromString sign_str
+            putStrLn $ "wrong js signature: " <> sign_str
             exitFailure
         else
-            putStrLn $ "js signature OK: " <> fromString sign_str
+            putStrLn $ "js signature OK: " <> sign_str
 
 testWxPaySign :: IO ()
 testWxPaySign = do
@@ -404,8 +403,10 @@ main = do
                                                 (WxppBriefMediaID "xxx-media-id")
                                                 Nothing
                                                 Nothing
-                                                True
                                                 "<h1>xxx</h1>"
+                                                Nothing
+                                                Nothing
+                                                Nothing
                                                 Nothing
     showJson $ PropagateFilter Nothing
 

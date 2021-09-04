@@ -122,8 +122,8 @@ library
                      , aeson-pretty
                      , bytestring
                      , cryptohash
-                     , base64-bytestring
-                     , base16-bytestring
+                     , base64
+                     , base16
                      , wreq
                      , mime-types
                      , lens
@@ -258,14 +258,14 @@ test-suite test
                      , classy-prelude
                      , bytestring
                      , crypto-cipher-types
-                     , crypto-aes
-                     , base64-bytestring
+                     , cipher-aes
+                     , base64
                      , data-default
                      , xml-conduit
                      , text
                      , aeson
                      , yesod-helpers
-                     , base16-bytestring
+                     , base16
                      , time
                      , monad-logger
 
