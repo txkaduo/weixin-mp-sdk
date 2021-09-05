@@ -15,7 +15,6 @@ import Control.Monad (MonadFail(..))
 #else
 import Control.DeepSeq                      (NFData)
 #endif
-import Control.Arrow
 
 import Data.SafeCopy
 import Data.Aeson                           as A
@@ -420,8 +419,21 @@ instance ToMarkup AesKey where
     toMarkup = toMarkup . toMessage
     preEscapedToMarkup = preEscapedToMarkup . toMessage
 
+
+-- | CAUTION: 微信页面提供的 AES Key 字串并不是标准的 base64 编码，即使加上一个 padding 的 =
+-- 问题出在最后一个字符上
+-- base64-bytestring 接受这种输入并正常 decode，但 'base64' 提供的函数则会拒绝.
+-- 解决方案有二:
+-- * 人工把页面提供的字串修正（只需修正最后一个字符），但这很容易忘记做而出错
+-- * 使用宽容版本的 decode，等于放弃部分检查
+-- 这里使用了第二个方案
 decodeBase64Encoded :: Text -> Either String ByteString
-decodeBase64Encoded = left T.unpack . B64.decodeBase64 . encodeUtf8
+decodeBase64Encoded t = do
+  let bs = B64.decodeBase64Lenient . encodeUtf8 $ t
+  when (length bs /= 32) $ do
+    Left $ "Invalid AES Key length: " <> show (length bs)
+  pure bs
+
 
 decodeBase64AesKey :: Text -> Either String AesKey
 decodeBase64AesKey t = fmap AesKey $ do
