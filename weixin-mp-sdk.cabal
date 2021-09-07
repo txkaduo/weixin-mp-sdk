@@ -111,7 +111,7 @@ library
                      , template-haskell
                      , classy-prelude >= 0.12.7
                      , yesod
-                     , persistent >= 2.0 && < 2.12
+                     , persistent >= 2.0 && < 2.14
                      , yesod-core
                      , yesod-form
                      , shakespeare

@@ -14,6 +14,9 @@ import qualified Data.Conduit.List          as CL
 import qualified Data.ByteString.Lazy       as LB
 import qualified Data.Set                   as Set
 import Database.Persist.Quasi
+#if MIN_VERSION_persistent(2, 13, 0)
+import Database.Persist.Quasi.Internal
+#endif
 import Control.Monad.Trans.Maybe            (MaybeT(..))
 import Crypto.Hash.TX.Utils                 (SHA256Hash(..))
 
@@ -27,7 +30,9 @@ import Yesod.Compat
 
 
 wxppSubModelsDefBasic ::
-#if MIN_VERSION_persistent(2, 0, 0)
+#if MIN_VERSION_persistent(2, 13, 0)
+    [UnboundEntityDef]
+#elif MIN_VERSION_persistent(2, 0, 0)
     [EntityDef]
 #else
     [EntityDef SqlType]
@@ -38,7 +43,9 @@ share [mkPersist sqlSettings, mkMigrate "migrateAllWxppSubModelsBasic"]
                     $(persistFileWith lowerCaseSettings "models")
 
 wxppSubModelsDefCache ::
-#if MIN_VERSION_persistent(2, 0, 0)
+#if MIN_VERSION_persistent(2, 13, 0)
+    [UnboundEntityDef]
+#elif MIN_VERSION_persistent(2, 0, 0)
     [EntityDef]
 #else
     [EntityDef SqlType]
