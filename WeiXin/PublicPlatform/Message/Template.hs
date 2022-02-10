@@ -25,7 +25,7 @@ data MiniProgramLink =
 $(deriveJSON (defaultOptions { fieldLabelModifier = toLower . drop 12 }) ''MiniProgramLink)
 
 
-data TemplateVal = 
+data TemplateVal =
   TemplateVal
     { templValValue :: Text
     , templValColor :: Maybe Text
@@ -53,12 +53,20 @@ data TemplateMsgSendPayload =
 -- {{{1 instances
 instance ToJSON TemplateMsgSendPayload where
   toJSON x = object
-    [ "touser" .= templMsgSendToUser x
+    [ "touser"      .= templMsgSendToUser x
     , "template_id" .= templMsgSendTemplateID x
-    , "url" .= templMsgSendUrl x
+    , "url"         .= templMsgSendUrl x
     , "miniprogram" .= templMsgSendMiniProgram x
-    , "data" .= object (map (uncurry (.=)) (templMsgSendData x))
+    , "data"        .= object (map (uncurry (.=)) (templMsgSendData x))
     ]
+
+instance FromJSON TemplateMsgSendPayload where
+  parseJSON = withObject "TemplateMsgSendPayload" $ \ o -> do
+                TemplateMsgSendPayload <$> o .: "touser"
+                                       <*> o .: "template_id"
+                                       <*> o .: "url"
+                                       <*> o .: "miniprogram"
+                                       <*> fmap (mapToList . asMap) (o .: "data")
 -- }}}1
 
 
