@@ -1,4 +1,5 @@
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 module WeiXin.PublicPlatform.Class
     ( module WeiXin.PublicPlatform.Class
     , module WeiXin.PublicPlatform.Types
