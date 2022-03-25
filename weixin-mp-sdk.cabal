@@ -83,6 +83,7 @@ library
                        WeiXin.PublicPlatform.Pay.Yesod
                        WeiXin.PublicPlatform.Pay.BankCode
                        WeiXin.PublicPlatform.ThirdParty
+                       WeiXin.PublicPlatform.ThirdParty.Types
                        WeiXin.PublicPlatform.About
                        WeiXin.PublicPlatform
                        WeiXin.PublicPlatform.MiniProgram
