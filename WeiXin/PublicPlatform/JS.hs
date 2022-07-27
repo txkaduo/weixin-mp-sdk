@@ -73,7 +73,7 @@ wxppJsApiSignatureIO :: MonadIO m
                         -> m (ByteString, (Int64, Nonce))
 -- {{{1
 wxppJsApiSignatureIO ticket url = liftIO $ do
-    nonce <- wxppMakeNonce 16   
+    nonce <- wxppMakeNonce 16
     ptime <- getPOSIXTime
     let ptime' = round ptime
     let sign = wxppJsApiSignature ticket url ptime' nonce
@@ -137,7 +137,7 @@ wxppJsApiConfigJsVal :: MonadIO m
 wxppJsApiConfigJsVal app_id ticket debug url api_list = do
   (sign, (ptime, Nonce nonce)) <- wxppJsApiSignatureIO ticket url
   return $ object
-    [ "debug" .= debug --  开启调试模式,调用的所有api的返回值会在客户端alert出来，若要查看传入的参数，可以在pc端打开，参数信息会通过log打出，仅在pc端时才会打印。 
+    [ "debug" .= debug --  开启调试模式,调用的所有api的返回值会在客户端alert出来，若要查看传入的参数，可以在pc端打开，参数信息会通过log打出，仅在pc端时才会打印。
     , "appId" .= app_id -- 必填，公众号的唯一标识
     , "timestamp" .= ptime -- 必填，生成签名的时间戳
     , "nonceStr" .= nonce -- 必填，生成签名的随机串
@@ -215,6 +215,19 @@ wxppJsApiListAll =
     , "openCard"
     ]
 -- }}}1
+
+
+-- | 传播类菜单项列表
+wxppJsSDKMenuItemsForSharing :: [Text]
+wxppJsSDKMenuItemsForSharing =
+  [ "menuItem:share:appMessage"
+  , "menuItem:share:timeline"
+  , "menuItem:share:qq"
+  , "menuItem:share:weiboApp"
+  , "menuItem:favorite"
+  , "menuItem:share:facebook"
+  , "menuItem:share:QZone"
+  ]
 
 
 -- vim: set foldmethod=marker:
