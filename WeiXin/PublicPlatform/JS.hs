@@ -231,4 +231,19 @@ wxppJsSDKMenuItemsForSharing =
   ]
 
 
+-- | 保护类菜单项列表
+wxppJsSDKMenuItemsProtective :: [Text]
+wxppJsSDKMenuItemsProtective =
+  [ "menuItem:editTag"
+  , "menuItem:delete"
+  , "menuItem:copyUrl"
+  , "menuItem:originPage"
+  , "menuItem:readMode"
+  , "menuItem:openWithQQBrowser"
+  , "menuItem:openWithSafari"
+  , "menuItem:share:email"
+  , "menuItem:share:brand"
+  ]
+
+
 -- vim: set foldmethod=marker:
