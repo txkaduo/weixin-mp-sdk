@@ -173,7 +173,8 @@ wxppAcquireAndSaveJsApiTicket cache app_id = do
 
 
 wxppJsSDKUrl :: UrlText
-wxppJsSDKUrl = UrlText $ "https://res.wx.qq.com/open/js/jweixin-1.2.0.js"
+wxppJsSDKUrl = UrlText $ "https://res.wx.qq.com/open/js/jweixin-1.6.0.js"
+
 
 wxppJsApiListAll :: [Text]
 -- }}}1
