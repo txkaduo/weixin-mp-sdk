@@ -179,8 +179,8 @@ wxppJsSDKUrl = UrlText $ "https://res.wx.qq.com/open/js/jweixin-1.6.0.js"
 wxppJsApiListAll :: [Text]
 -- }}}1
 wxppJsApiListAll =
-    [ "onMenuShareTimeline"
-    , "onMenuShareAppMessage"
+    [ "updateAppMessageShareData"
+    , "updateTimelineShareData"
     , "onMenuShareQQ"
     , "onMenuShareWeibo"
     , "onMenuShareQZone"
