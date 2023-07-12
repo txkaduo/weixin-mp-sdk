@@ -105,6 +105,7 @@ library
                        RankNTypes
                        DeriveGeneric
                        DataKinds
+                       TypeOperators
                        CPP
 
 
@@ -112,7 +113,7 @@ library
                      , template-haskell
                      , classy-prelude >= 0.12.7
                      , yesod
-                     , persistent >= 2.0 && < 2.14
+                     , persistent >= 2.0 && < 2.15
                      , yesod-core
                      , yesod-form
                      , shakespeare

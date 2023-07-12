@@ -16,6 +16,7 @@ import qualified Control.Exception.Safe as ExcSafe
 import Network.Wreq hiding (Proxy)
 import Control.Lens hiding ((<.>), op)
 import Data.Proxy
+import Data.Kind (Type)
 import Control.Monad.Logger
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
@@ -26,6 +27,7 @@ import Data.List.NonEmpty                   as LNE (NonEmpty, head)
 import Data.Aeson
 import Data.Aeson.Types                     (Parser)
 import Data.Yaml                            (decodeFileEither, parseEither, ParseException(..))
+import qualified Data.Yaml                  as Y
 import Data.Time                            (NominalDiffTime)
 
 import Text.Regex.TDFA                      (blankExecOpt, blankCompOpt, Regex)
@@ -97,7 +99,7 @@ isNameOfInMsgHandler' :: forall h. JsonConfigable h => h -> Text -> Bool
 isNameOfInMsgHandler' _ = isNameOfInMsgHandler (Proxy :: Proxy h)
 
 -- | 预处理收到的消息的结果
-type family WxppInMsgProcessResult h :: *
+type family WxppInMsgProcessResult h :: Type
 
 
 -- | 对收到的消息作出某种处理
@@ -240,7 +242,7 @@ readWxppInMsgHandlers ::
     -> IO (Either YamlFileParseException [SomeWxppInMsgHandler m])
 readWxppInMsgHandlers tmps data_dirs fp = runExceptT $ do
     (ExceptT $ runDelayedYamlLoaderL_IOE data_dirs $ mkDelayedYamlLoader fp)
-        >>= either (throwE . YamlFileParseException fp . AesonException) return
+        >>= either (throwE . YamlFileParseException fp . Y.AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
 
 
@@ -252,7 +254,7 @@ readWxppInMsgHandlersCached :: (CachedYamlInfoState s)
                             -> IO (Either YamlFileParseException [SomeWxppInMsgHandler m])
 readWxppInMsgHandlersCached st tmps data_dirs fp = runExceptT $ do
     ExceptT (runDelayedCachedYamlLoaderL_IOE st data_dirs $ mkDelayedCachedYamlLoader fp)
-        >>= either (throwE . YamlFileParseException fp . AesonException) return
+        >>= either (throwE . YamlFileParseException fp . Y.AesonException) return
                 . parseEither (parseWxppInMsgProcessors tmps)
 
 
@@ -283,7 +285,7 @@ readWxppInMsgProcMiddlewares ::
     -> IO (Either ParseException [SomeWxppInMsgProcMiddleware m])
 readWxppInMsgProcMiddlewares tmps fp = runExceptT $ do
     (ExceptT $ decodeFileEither fp)
-        >>= either (throwE . AesonException) return
+        >>= either (throwE . Y.AesonException) return
                 . parseEither (parseWxppInMsgProcMiddlewares tmps)
 
 
@@ -505,7 +507,7 @@ class MenuItemEventKey a => MenuItemEventKeyHandle m a where
 
 -- | Handler: 处理点击菜单项目的事件通知，比较通用的版本
 -- 真正的逻辑都在 MenuItemEventKey class 里
-data WxppInMsgMenuItemClickGeneral (m :: * -> *) a = WxppInMsgMenuItemClickGeneral
+data WxppInMsgMenuItemClickGeneral (m :: Type -> Type) a = WxppInMsgMenuItemClickGeneral
                                                         (MenuItemEventKeyHandleEnv m a)
 
 instance MenuItemEventKey a => JsonConfigable (WxppInMsgMenuItemClickGeneral m a) where
@@ -806,7 +808,7 @@ instance JsonConfigable (WxppInMsgDispatchHandler m) where
 
 type instance WxppInMsgProcessResult (WxppInMsgDispatchHandler m) = WxppInMsgHandlerResult
 
-instance (Monad m, MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHandler m)
+instance (MonadLogger m) => IsWxppInMsgProcessor m (WxppInMsgDispatchHandler m)
     where
       processInMsg (WxppInMsgDispatchHandler table) cache app_info bs ime =
         go table
@@ -857,7 +859,7 @@ instance JsonConfigable WxppMatchedKeywordArticles where
 
 type instance WxppInMsgProcessResult WxppMatchedKeywordArticles = WxppInMsgHandlerResult
 
-instance (Monad m, Functor m, MonadIO m) => IsWxppInMsgProcessor m WxppMatchedKeywordArticles
+instance (MonadIO m) => IsWxppInMsgProcessor m WxppMatchedKeywordArticles
     where
       processInMsg (WxppMatchedKeywordArticles msg_dirs is_primary map_file) _cache _app_info _bs ime = runExceptT $ do
         let in_msg = wxppInMessage ime

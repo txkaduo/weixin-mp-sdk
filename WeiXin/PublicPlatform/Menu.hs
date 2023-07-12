@@ -187,10 +187,13 @@ wxppWatchMenuYaml get_atk block_until_exit data_dirs fname = do
         fp = fmap (</> fname) data_dirs
 
         watch_cfg = FN.defaultConfig
+#if MIN_VERSION_fsnotify(0, 4, 0)
+#else
                         { FN.confDebounce = FN.Debounce (fromIntegral (1 :: Int)) }
                         -- 把时间相近(1秒内)的事件合并
                         -- 很多对文件操作的工具保存时都可能由多个文件系统操作完成
                         -- 比如 vim
+#endif
 
         handle_evt fp' evt = do
             case evt of
@@ -317,10 +320,13 @@ wxppWatchMenuYamlOnSignal block_until_exit fname get_atk get_data_dirs get_event
         -- fp = fmap (</> fname) data_dirs
 
         watch_cfg = FN.defaultConfig
+#if MIN_VERSION_fsnotify(0, 4, 0)
+#else
                         { FN.confDebounce = FN.Debounce (fromIntegral (1 :: Int)) }
                         -- 把时间相近(1秒内)的事件合并
                         -- 很多对文件操作的工具保存时都可能由多个文件系统操作完成
                         -- 比如 vim
+#endif
 
         handle_evt get_atk' fp' evt = do
             case evt of

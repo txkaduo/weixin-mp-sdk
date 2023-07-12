@@ -458,7 +458,7 @@ type instance WxppInMsgProcessResult (WxppTalkEvtKeyInitiator r m) = WxppInMsgHa
 
 instance
     ( HasWxppAppID r
-    , MonadIO m, MonadLoggerIO m
+    , MonadLoggerIO m
     ) =>
     IsWxppInMsgProcessor m (WxppTalkEvtKeyInitiator r m)
     where

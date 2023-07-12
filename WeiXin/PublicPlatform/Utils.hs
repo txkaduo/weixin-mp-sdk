@@ -23,6 +23,7 @@ import qualified Data.Text                  as T
 import qualified Data.Serialize             as S
 import qualified Data.StateVar              as SV
 import qualified Data.Aeson                 as A
+import qualified Data.Aeson.Key             as A
 import qualified Data.Yaml                  as Y
 import qualified Data.HashMap.Strict        as HM
 
@@ -85,15 +86,38 @@ setExtIfNotExist def_ext fp =
        then fp
        else fp <.> def_ext
 
+
+#if MIN_VERSION_aeson(2, 0, 0)
+type AesonKey = Key
+#else
+type AesonKey = Text
+#endif
+
+aesonKeyToText :: AesonKey -> Text
+#if MIN_VERSION_aeson(2, 0, 0)
+aesonKeyToText = A.toText
+#else
+aesonKeyToText = id
+#endif
+
+aesonKeyFromText :: Text -> AesonKey
+#if MIN_VERSION_aeson(2, 0, 0)
+aesonKeyFromText = A.fromText
+#else
+aesonKeyFromText = id
+#endif
+
+
 -- | 从一个字典对象中解释出某种值
 -- 这个字典里约定两个字段
 -- 一个是直接可以解释出所需的值的字段，即值直接内嵌在当前字典中
 -- 另一个是指示出一个文件路径的字段，此路径用于真正延迟加载的情况
 -- 如果不指定第一个字段，那么就认为当前的字典可以解释出所需的值
-parseDelayedYamlLoader :: FromJSON a =>
-  Maybe Text
-  -> Text
-  -> Object -> Parser (DelayedYamlLoader a)
+parseDelayedYamlLoader :: FromJSON a
+                       => Maybe AesonKey
+                       -> AesonKey
+                       -> Object
+                       -> Parser (DelayedYamlLoader a)
 parseDelayedYamlLoader m_direct_field indirect_field obj =
     case m_direct_field of
         Nothing ->

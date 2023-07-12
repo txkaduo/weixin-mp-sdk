@@ -1,5 +1,6 @@
 module WeiXin.PublicPlatform.CS where
 
+-- {{{1 imports
 import ClassyPrelude
 import Network.Wreq
 import qualified Network.Wreq.Session       as WS
@@ -11,7 +12,12 @@ import Data.Aeson
 
 import WeiXin.PublicPlatform.Class
 import WeiXin.PublicPlatform.WS
-import qualified Data.HashMap.Strict        as HM
+#if MIN_VERSION_aeson(2, 0, 0)
+import qualified Data.Aeson.KeyMap          as KM
+#else
+import qualified Data.HashMap.Strict        as KM
+#endif
+-- }}}1
 
 
 -- | 使用客服接口发送消息给指定用户
@@ -34,8 +40,8 @@ wxppCsSendOutMsg2 (AccessToken { accessTokenData = atk }) m_kf_account to_open_i
         mk_out_obj = do
             Object hm <- obj_for_out_msg out_msg
             return $ Object $
-                HM.insert "touser" (toJSON $ unWxppOpenID $ to_open_id) $
-                    maybe id (\kf_account -> HM.insert "customservice"
+                KM.insert "touser" (toJSON $ unWxppOpenID $ to_open_id) $
+                    maybe id (\kf_account -> KM.insert "customservice"
                                                 (object [ "kf_account" .= unWxppKfAccount kf_account ])
                             ) m_kf_account $
                         hm

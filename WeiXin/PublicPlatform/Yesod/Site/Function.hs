@@ -72,7 +72,7 @@ instance (MonadIO m, MonadLogger m)
         return $ Right []
 
 
-instance (MonadIO m, MonadLoggerIO m)
+instance (MonadLoggerIO m)
   => IsWxppInMsgProcMiddleware m (StoreInMsgToDB m) where
     preProcInMsg (StoreInMsgToDB db_runner media_downloader) _cache app_info bs ime = runMaybeT $ do
         now <- liftIO getCurrentTime
@@ -153,11 +153,7 @@ instance (MonadIO m , MonadLogger m) => IsWxppInMsgProcessor m CacheAppOpenIdToU
         return []
 
 
-instance (WxppApiMonad env m
-    , ExcSafe.MonadCatch m
-    , Functor m
-    ) => IsWxppInMsgProcMiddleware m CacheAppOpenIdToUnionId where
-
+instance (WxppApiMonad env m , ExcSafe.MonadCatch m) => IsWxppInMsgProcMiddleware m CacheAppOpenIdToUnionId where
     preProcInMsg (CacheAppOpenIdToUnionId db_runner) cache app_info bs ime = do
         let m_subs_or_unsubs = case wxppInMessage ime of
                         (WxppInMsgEvent WxppEvtSubscribe)               -> Just True
@@ -370,7 +366,7 @@ downloadSaveMediaToDB api_env atk msg_id media_id = do
 
 
 -- | 找出最近一段时间内有消息发給系统的用户
-wxppUserLatestActiveTime :: (MonadIO m, MonadResource m) =>
+wxppUserLatestActiveTime :: (MonadResource m) =>
     UTCTime         -- ^ 只检查过去一段时间内的消息历史
     -> WxppAppID
     -> SourceC (ReaderT WxppDbBackend m) (WxppOpenID, UTCTime)

@@ -218,11 +218,6 @@ data WxPayTradeType = WxPayTradeJsApi
                     deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- {{{1 instances
-$(derivePersistFieldS "WxPayTradeType")
-$(derivePathPieceS "WxPayTradeType")
-$(deriveJsonS "WxPayTradeType")
-$(deriveSimpleStringRepEnumBounded "WxPayTradeType")
-
 instance SimpleEncode WxPayTradeType where
   simpleEncode mtype =
       case mtype of
@@ -230,6 +225,12 @@ instance SimpleEncode WxPayTradeType where
           WxPayTradeNative   -> "NATIVE"
           WxPayTradeApp      -> "APP"
           WxPayTradeMicroPay -> "MICROPAY"
+
+
+$(deriveSimpleStringRepEnumBounded "WxPayTradeType")
+$(derivePersistFieldS "WxPayTradeType")
+$(derivePathPieceS "WxPayTradeType")
+$(deriveJsonS "WxPayTradeType")
 -- }}}1
 
 
@@ -247,14 +248,14 @@ data WxPayResultCode = WxPaySuccess
                      deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- {{{1 instances
-$(derivePersistFieldS "WxPayResultCode")
-$(derivePathPieceS "WxPayResultCode")
-$(deriveJsonS "WxPayResultCode")
-$(deriveSimpleStringRepEnumBounded "WxPayResultCode")
-
 instance SimpleEncode WxPayResultCode where
   simpleEncode WxPaySuccess = "SUCCESS"
   simpleEncode WxPayFail    = "FAIL"
+
+$(deriveSimpleStringRepEnumBounded "WxPayResultCode")
+$(derivePersistFieldS "WxPayResultCode")
+$(derivePathPieceS "WxPayResultCode")
+$(deriveJsonS "WxPayResultCode")
 -- }}}1
 
 
@@ -351,11 +352,6 @@ data WxUserPayStatus = WxUserPaySuccess
                      deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- {{{1 instances
-$(derivePersistFieldS "WxUserPayStatus")
-$(derivePathPieceS "WxUserPayStatus")
-$(deriveJsonS "WxUserPayStatus")
-$(deriveSimpleStringRepEnumBounded "WxUserPayStatus")
-
 instance SimpleEncode WxUserPayStatus where
   simpleEncode WxUserPaySuccess    = "success"
   simpleEncode WxUserPayRefund     = "refund"
@@ -364,6 +360,11 @@ instance SimpleEncode WxUserPayStatus where
   simpleEncode WxUserPayRevoked    = "revoked"
   simpleEncode WxUserPayUserPaying = "paying"
   simpleEncode WxUserPayPayError   = "error"
+
+$(deriveSimpleStringRepEnumBounded "WxUserPayStatus")
+$(derivePersistFieldS "WxUserPayStatus")
+$(derivePathPieceS "WxUserPayStatus")
+$(deriveJsonS "WxUserPayStatus")
 -- }}}1
 
 -- | 企业支付转账状态
@@ -452,16 +453,16 @@ data WxPayRefundStatus = WxPayRefundSuccess
                        deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- {{{1 instances
-$(derivePersistFieldS "WxPayRefundStatus")
-$(derivePathPieceS "WxPayRefundStatus")
-$(deriveJsonS "WxPayRefundStatus")
-$(deriveSimpleStringRepEnumBounded "WxPayRefundStatus")
-
 instance SimpleEncode WxPayRefundStatus where
   simpleEncode WxPayRefundSuccess    = "success"
   simpleEncode WxPayRefundFail       = "fail"
   simpleEncode WxPayRefundProcessing = "processing"
   simpleEncode WxPayRefundChange     = "change"
+
+$(deriveSimpleStringRepEnumBounded "WxPayRefundStatus")
+$(derivePersistFieldS "WxPayRefundStatus")
+$(derivePathPieceS "WxPayRefundStatus")
+$(deriveJsonS "WxPayRefundStatus")
 -- }}}1
 
 
@@ -470,14 +471,14 @@ data WxPayRefundAccount = WxPayRefundAccountUnsettledFunds
                        deriving (Show, Eq, Ord, Enum, Bounded)
 
 -- {{{1 instances
-$(derivePersistFieldS "WxPayRefundAccount")
-$(derivePathPieceS "WxPayRefundAccount")
-$(deriveJsonS "WxPayRefundAccount")
-$(deriveSimpleStringRepEnumBounded "WxPayRefundAccount")
-
 instance SimpleEncode WxPayRefundAccount where
   simpleEncode WxPayRefundAccountUnsettledFunds = "unseltted"
   simpleEncode WxPayRefundAccountRechargeFunds  = "recharge"
+
+$(deriveSimpleStringRepEnumBounded "WxPayRefundAccount")
+$(derivePersistFieldS "WxPayRefundAccount")
+$(derivePathPieceS "WxPayRefundAccount")
+$(deriveJsonS "WxPayRefundAccount")
 -- }}}1
 
 

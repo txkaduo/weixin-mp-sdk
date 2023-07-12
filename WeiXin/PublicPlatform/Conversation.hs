@@ -4,6 +4,7 @@ module WeiXin.PublicPlatform.Conversation where
 -- {{{1 import
 import ClassyPrelude
 import Data.Proxy
+import Data.Kind (Type)
 
 import Control.Monad.State.Strict hiding (mapM_)
 import Control.Monad.Except hiding (mapM_)
@@ -431,7 +432,7 @@ instance HasStateType NullTalkerState where
 
 
 -- | 用于个别有对环境有更多要求的会话
-type family WxppTalkStateExtraEnv s :: *
+type family WxppTalkStateExtraEnv s :: Type
 
 
 wxTalkGetAccessToken :: (MonadIO m, HasAccessTokenIO r, HasWxppAppID r)

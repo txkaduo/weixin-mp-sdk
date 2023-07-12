@@ -297,11 +297,10 @@ wxppPropagateMsg (AccessToken { accessTokenData = atk }) m_tag_id p_msg = do
     let url = wxppUrlConfSecureApiBase url_conf <> "/message/mass/sendall"
         opts = defaults & param "access_token" .~ [ atk ]
     let post_v = object $
-                    [
-                    "msgtype"   .= wxppPropagateMsgTypeS p_msg
+                    [ "msgtype"   .= wxppPropagateMsgTypeS p_msg
                     , "filter"  .= PropagateFilter m_tag_id
                     ]
-                      <> [ wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg) ]
+                      <> [ aesonKeyFromText (wxppPropagateMsgTypeS p_msg) .= object (wxppPropagateMsgJsonData p_msg) ]
                       <> wxppPropagateMsgJsonDataTop p_msg
 
     (_, PropagateCallResult msg_id) <-
@@ -327,11 +326,10 @@ wxppPropagateMsgToOpenIDs (AccessToken { accessTokenData = atk }) open_ids p_msg
     let url = wxppUrlConfSecureApiBase url_conf <> "/message/mass/send"
         opts = defaults & param "access_token" .~ [ atk ]
     let post_v = object $
-                    [
-                    "msgtype"   .= wxppPropagateMsgTypeS p_msg
+                    [ "msgtype"   .= wxppPropagateMsgTypeS p_msg
                     , "touser"  .= toList open_ids
                     ]
-                      <> [ wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg) ]
+                      <> [ aesonKeyFromText (wxppPropagateMsgTypeS p_msg) .= object (wxppPropagateMsgJsonData p_msg) ]
                       <> wxppPropagateMsgJsonDataTop p_msg
 
     (_, PropagateCallResult msg_id) <-
@@ -357,9 +355,8 @@ wxppPreviewPropagateMsg (AccessToken { accessTokenData = atk }) openid_or_name p
                     Right name  -> "towxname" .= name
 
     let post_v = object $ to_spec :
-                    [
-                    "msgtype" .= wxppPropagateMsgTypeS p_msg
-                    , wxppPropagateMsgTypeS p_msg .= object (wxppPropagateMsgJsonData p_msg)
+                    [ "msgtype" .= wxppPropagateMsgTypeS p_msg
+                    , aesonKeyFromText (wxppPropagateMsgTypeS p_msg) .= object (wxppPropagateMsgJsonData p_msg)
                     ]
                       <> wxppPropagateMsgJsonDataTop p_msg
 

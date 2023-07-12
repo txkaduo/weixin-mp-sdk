@@ -17,7 +17,7 @@ import Control.DeepSeq                      (NFData)
 #endif
 
 import Data.SafeCopy
-import Data.Aeson                           as A
+import Data.Aeson                           as A hiding (Key)
 import qualified Data.Text                  as T
 import Data.Aeson.Types                     (Parser, Pair, typeMismatch)
 import qualified Data.ByteString.Base64     as B64
@@ -54,7 +54,11 @@ import Text.Parsec.TX.Utils                 ( SimpleEncode(..), SimpleStringRep(
                                             )
 import Yesod.Helpers.Parsec                 ( derivePathPieceS )
 import Text.Parsec
-import qualified Data.HashMap.Strict        as HM
+#if MIN_VERSION_aeson(2, 0, 0)
+import qualified Data.Aeson.KeyMap          as KM
+#else
+import qualified Data.HashMap.Strict        as KM
+#endif
 import Data.List.NonEmpty                   (NonEmpty(..), nonEmpty)
 
 
@@ -1117,11 +1121,11 @@ data WxppOutMsgL = WxppOutMsgTextL Text
 
 type WxppOutMsgLoader = DelayedYamlLoader WxppOutMsgL
 
-parseMediaIDOrPath :: Text -> Object -> Parser WxppMediaIdOrPath
+parseMediaIDOrPath :: AesonKey -> Object -> Parser WxppMediaIdOrPath
 parseMediaIDOrPath key_prefix o = (Left . WxppMediaID <$> o .: (key_prefix <> "media_id"))
                             ClassyPrelude.<|> (Right <$> o .: (key_prefix <> "path"))
 
-parseMediaIDOrPathOpt :: Text -> Object -> Parser (Maybe WxppMediaIdOrPath)
+parseMediaIDOrPathOpt :: AesonKey -> Object -> Parser (Maybe WxppMediaIdOrPath)
 parseMediaIDOrPathOpt key_prefix o = (fmap (Left . WxppMediaID) <$> o .:? (key_prefix <> "media_id"))
                             ClassyPrelude.<|> (fmap Right <$> o .:? (key_prefix <> "path"))
 
@@ -1160,7 +1164,7 @@ instance FromJSON WxppOutMsgL where
 
           parse_article_obj = parseDelayedYamlLoader Nothing "file"
 
-          parse_article (A.String t)  = parse_article_obj $ HM.fromList [ "file" .= t ]
+          parse_article (A.String t)  = parse_article_obj $ KM.fromList [ "file" .= t ]
           parse_article v             = withObject "WxppArticleLoader" parse_article_obj v
 -- }}}1
 
@@ -1238,11 +1242,6 @@ data WxppMediaType = WxppMediaTypeImage
 instance NFData WxppMediaType
 deriveSafeCopy 0 'base ''WxppMediaType
 
-$(derivePersistFieldS "WxppMediaType")
-$(derivePathPieceS "WxppMediaType")
-$(deriveJsonS "WxppMediaType")
-$(deriveSimpleStringRepEnumBounded "WxppMediaType")
-
 instance SimpleEncode WxppMediaType where
     simpleEncode mtype =
         case mtype of
@@ -1250,6 +1249,11 @@ instance SimpleEncode WxppMediaType where
             WxppMediaTypeVoice -> "voice"
             WxppMediaTypeVideo -> "video"
             WxppMediaTypeThumb -> "thumb"
+
+$(deriveSimpleStringRepEnumBounded "WxppMediaType")
+$(derivePersistFieldS "WxppMediaType")
+$(derivePathPieceS "WxppMediaType")
+$(deriveJsonS "WxppMediaType")
 -- }}}1
 
 
@@ -1642,9 +1646,6 @@ data OAuthScope = AS_SnsApiBase
 
 -- {{{1 instances
 instance NFData OAuthScope
-$(derivePersistFieldS "OAuthScope")
-$(derivePathPieceS "OAuthScope")
-$(deriveSafeCopy 0 'base ''OAuthScope)
 
 instance SimpleEncode OAuthScope where
     -- Encode values will be used in wxppAuthPageUrl
@@ -1665,6 +1666,10 @@ instance SimpleStringRep OAuthScope where
 
             parse_unknown = fmap (AS_Unknown . fromString) $
                                 many1 $ satisfy $ not . isSpace
+
+$(derivePersistFieldS "OAuthScope")
+$(derivePathPieceS "OAuthScope")
+$(deriveSafeCopy 0 'base ''OAuthScope)
 -- }}}1
 
 
@@ -1895,16 +1900,16 @@ data WxAppKind = WxAppKindPublisher   -- ^ 订阅号
 -- {{{1 instances
 instance NFData WxAppKind
 
-$(derivePersistFieldS "WxAppKind")
-$(derivePathPieceS "WxAppKind")
-$(deriveJsonS "WxAppKind")
-$(deriveSimpleStringRepEnumBounded "WxAppKind")
-
 instance SimpleEncode WxAppKind where
   simpleEncode WxAppKindPublisher  = "publisher"
   simpleEncode WxAppKindServer     = "server"
   simpleEncode WxAppKindWeb        = "web"
   simpleEncode WxAppKindThirdParty = "third-party"
+
+$(deriveSimpleStringRepEnumBounded "WxAppKind")
+$(derivePersistFieldS "WxAppKind")
+$(derivePathPieceS "WxAppKind")
+$(deriveJsonS "WxAppKind")
 -- }}}1
 
 -- | 哪种app可以做oauth接口调用

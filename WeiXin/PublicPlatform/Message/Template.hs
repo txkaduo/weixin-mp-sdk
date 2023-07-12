@@ -12,6 +12,7 @@ import qualified Network.Wreq.Session as WS
 
 import           WeiXin.PublicPlatform.Types
 import           WeiXin.PublicPlatform.WS
+import           WeiXin.PublicPlatform.Utils
 -- }}}1
 
 
@@ -57,7 +58,7 @@ instance ToJSON TemplateMsgSendPayload where
     , "template_id" .= templMsgSendTemplateID x
     , "url"         .= templMsgSendUrl x
     , "miniprogram" .= templMsgSendMiniProgram x
-    , "data"        .= object (map (uncurry (.=)) (templMsgSendData x))
+    , "data"        .= object (map (uncurry (.=)) (map (first aesonKeyFromText) $ templMsgSendData x))
     ]
 
 instance FromJSON TemplateMsgSendPayload where

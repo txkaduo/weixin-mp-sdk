@@ -13,7 +13,13 @@ import Control.DeepSeq                      (($!!))
 #endif
 import qualified Control.Exception.Safe as ExcSafe
 import qualified Data.Map.Strict            as Map
-import qualified Data.HashMap.Strict        as HM
+
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap          as KM
+#else
+import qualified Data.HashMap.Strict        as KM
+#endif
+
 import qualified Data.Text                  as T
 import qualified Data.StateVar              as SV
 import qualified Data.ByteString.Base64     as B64
@@ -44,7 +50,7 @@ import WeiXin.PublicPlatform.InMsgHandler
 import WeiXin.PublicPlatform.Yesod.Site.Data
 import WeiXin.PublicPlatform.Yesod.Site.Function
 import WeiXin.PublicPlatform.Yesod.Model
-import WeiXin.PublicPlatform.Utils          (CachedYamlInfoState)
+import WeiXin.PublicPlatform.Utils          (CachedYamlInfoState, aesonKeyToText)
 import WeiXin.PublicPlatform.ThirdParty
 
 import Data.Aeson
@@ -71,8 +77,8 @@ parseMultiWxppAppConfig :: (HasWxppAppID cf, FromJSON cf)
                         -> Parser (Map WxppAppID cf)
 parseMultiWxppAppConfig obj = do
     liftM (Map.fromList . catMaybes) $
-        forM (HM.toList obj) $ \(k, v) -> do
-            if T.isPrefixOf "wxpp~" k
+        forM (KM.toList obj) $ \(k, v) -> do
+            if T.isPrefixOf "wxpp~" (aesonKeyToText k)
                 then Just . (getWxppAppID &&& id) <$> parseJSON v
                 else return Nothing
 
@@ -84,8 +90,8 @@ parseMultiWxppAppConfig2 :: (FromJSON cf)
                          -> Parser (Map Text cf)
 parseMultiWxppAppConfig2 obj = do
     liftM (Map.fromList . catMaybes) $
-        forM (HM.toList obj) $ \(k, v) -> do
-            case T.stripPrefix "wxpp~" k of
+        forM (KM.toList obj) $ \(k, v) -> do
+            case T.stripPrefix "wxpp~" (aesonKeyToText k) of
                 Nothing     -> return Nothing
                 Just cname  -> Just . (cname, ) <$> parseJSON v
 
