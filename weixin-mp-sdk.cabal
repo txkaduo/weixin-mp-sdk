@@ -34,11 +34,11 @@ Flag network-uri
 
 Flag cloud
     Description:   Support For Cloud Haskell
-    Default:       True
+    Default:       False
 
 Flag acid-state
     Description:   Build with acid-state
-    Default: True
+    Default: False
 
 library
   exposed-modules:     WeiXin.PublicPlatform.Error
