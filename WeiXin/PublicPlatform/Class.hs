@@ -177,6 +177,10 @@ instance WxppCacheAppRegistry SomeWxppCacheAppRegistry where
     wxppCacheRegistryEnable (SomeWxppCacheAppRegistry x)  = wxppCacheRegistryEnable x
 
 
+class HasWxppCacheAppRegistry a where
+  getWxppCacheAppRegistry :: a -> SomeWxppCacheAppRegistry
+
+
 -- | 有些接口调用需要用到 Secret，但又不想各个程序都配置一份secret
 -- 可以由一个代理服务程序，代替其它程序去调用这种需要 Secret 的接口
 class WxppApiBroker a where
@@ -546,3 +550,14 @@ instance WxppCacheAppRegistry FakeWxppCache where
     wxppCacheRegistryDisable _ _ = return ()
 
     wxppCacheRegistryEnable _ _ = return ()
+
+
+class HasWxAuthAppId a where
+  getInsideWxAuthAppId :: a -> WxppAppID
+  getOutsideWxAuthAppId :: a -> WxppAppID
+
+class HasWxPayAppId a where
+  getWxPayAppId :: a -> WxppAppID
+
+class CanValidateWxSafeUrl a where
+  validateWxSafeUrl :: a -> Text -> Bool
